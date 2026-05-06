@@ -1,0 +1,238 @@
+@media (max-width: 640px) {
+  .parent-welcome {
+    --parent-page-gap: 12px;
+    --parent-showcase-gap: 12px;
+
+    height: auto;
+    min-height: 100svh;
+    overflow-y: auto;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(124, 60, 255, 0.16), transparent 34%),
+      radial-gradient(circle at 92% 12%, rgba(255, 204, 246, 0.72), transparent 36%),
+      linear-gradient(145deg, #edf4ff 0%, #f7f1ff 48%, #fff2fb 100%);
+  }
+
+  .parent-welcome::before {
+    inset: 80px -34% auto -34%;
+    height: 340px;
+    background-size: 32px 32px;
+  }
+
+  .parent-splash {
+    min-height: calc(100svh - (var(--parent-page-gap) * 2));
+    gap: 14px;
+    border-radius: 28px;
+  }
+
+  .parent-splash__mark {
+    width: 92px;
+    height: 92px;
+    border-radius: 28px;
+  }
+
+  .parent-splash h1 {
+    font-size: 48px;
+  }
+
+  .parent-welcome__content {
+    height: auto;
+    min-height: calc(100svh - (var(--parent-page-gap) * 2));
+    grid-template-rows: auto auto auto;
+    gap: 14px;
+  }
+
+  .parent-welcome__nav {
+    min-height: 0;
+    padding: 12px;
+    gap: 10px;
+    border-radius: 24px;
+  }
+
+  .parent-welcome__brand {
+    min-width: 0;
+    gap: 9px;
+    font-size: 20px;
+  }
+
+  .parent-welcome__brand-icon {
+    width: 42px;
+    height: 42px;
+    display: block;
+  }
+
+  .parent-welcome__header-actions {
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .parent-welcome__solid,
+  .parent-welcome__ghost {
+    width: 42px;
+    min-height: 42px;
+    padding: 0;
+    border-radius: 15px;
+  }
+
+  .parent-welcome__solid span,
+  .parent-welcome__ghost span {
+    width: 1px;
+    height: 1px;
+    position: absolute;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .parent-welcome__solid svg,
+  .parent-welcome__ghost svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .parent-welcome__hero {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .parent-welcome__eyebrow {
+    margin-bottom: 12px;
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  .parent-welcome h1 {
+    max-width: 100%;
+    font-size: 40px;
+    line-height: 1.05;
+  }
+
+  .parent-welcome__intro {
+    max-width: 100%;
+    margin-top: 14px;
+    font-size: 15px;
+    line-height: 1.55;
+  }
+
+  .parent-welcome__showcase {
+    min-height: 244px;
+    padding: var(--parent-showcase-gap);
+    border-radius: 26px;
+  }
+
+  .parent-welcome__phone-card {
+    width: min(292px, 100%);
+    min-height: 214px;
+    padding: 15px;
+    border-radius: 26px;
+  }
+
+  .parent-welcome__phone-icon {
+    width: 40px;
+    height: 40px;
+    display: block;
+  }
+
+  .parent-welcome__bubble,
+  .parent-welcome__status-pill {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+  }
+
+  .parent-welcome__status-pill {
+    margin-top: 20px;
+  }
+
+  .parent-welcome__cards {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .parent-welcome__card {
+    min-height: 0;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: 12px;
+    row-gap: 5px;
+    align-items: start;
+    border-radius: 20px;
+  }
+
+  .parent-welcome__card-icon {
+    width: 40px;
+    height: 40px;
+    grid-row: 1 / span 2;
+    border-radius: 14px;
+  }
+
+  .parent-welcome__card h2 {
+    margin: 1px 0 0;
+    font-size: 16px;
+  }
+
+  .parent-welcome__card p {
+    font-size: 13px;
+    line-height: 1.42;
+  }
+
+  .parent-welcome__modal-backdrop {
+    padding: 12px;
+    align-items: center;
+  }
+
+  .parent-welcome__modal {
+    max-height: calc(100svh - 24px);
+    padding: 24px;
+    border-radius: 28px;
+  }
+
+  .parent-welcome__modal-close {
+    top: 14px;
+    right: 14px;
+  }
+
+  .parent-welcome__modal h2 {
+    margin-right: 42px;
+    font-size: 26px;
+  }
+
+  .parent-welcome__form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .parent-welcome__form input {
+    min-height: 46px;
+    border-radius: 15px;
+  }
+
+  .parent-welcome__form > button {
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 380px) {
+  .parent-welcome {
+    --parent-page-gap: 10px;
+  }
+
+  .parent-welcome__brand {
+    font-size: 18px;
+  }
+
+  .parent-welcome__solid,
+  .parent-welcome__ghost {
+    width: 40px;
+    min-height: 40px;
+  }
+
+  .parent-welcome h1 {
+    font-size: 36px;
+  }
+
+  .parent-welcome__phone-card {
+    width: min(292px, 100%);
+  }
+}

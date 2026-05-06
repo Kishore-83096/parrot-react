@@ -1,0 +1,93 @@
+@media (min-width: 761px) and (max-width: 1100px) {
+  .parent-navigation {
+    --parent-page-gap: 16px;
+  }
+
+  .parent-navigation__modal {
+    width: min(700px, 100%);
+    padding: 24px;
+  }
+
+  .parent-navigation__modal-content {
+    max-height: calc(min(760px, 100svh - 32px) - 48px);
+    padding-right: 6px;
+  }
+
+  .parent-navigation__modal h1 {
+    font-size: 28px;
+  }
+
+  .parent-navigation__modal-title-row {
+    gap: 12px;
+  }
+
+  .parent-navigation__profile-groups {
+    gap: 12px;
+  }
+
+  .parent-navigation__table {
+    border-spacing: 0 8px;
+  }
+
+  .parent-navigation__table-row th,
+  .parent-navigation__table-row td {
+    padding: 11px 12px;
+  }
+
+  .parent-navigation__table-row th {
+    width: 140px;
+  }
+
+  .parent-navigation__table-row td {
+    font-size: 13px;
+  }
+
+  .parent-navigation__table-media {
+    gap: 10px;
+  }
+
+  .parent-navigation__table-media img,
+  .parent-navigation__table-media-mark {
+    width: 68px;
+    height: 68px;
+    border-radius: 22px;
+  }
+
+  .parent-navigation__table-media-actions .parent-navigation__profile-picture-icon {
+    width: 44px;
+    min-height: 44px;
+  }
+
+  .parent-navigation__notice {
+    right: 18px;
+    bottom: 18px;
+    width: min(400px, calc(100vw - 32px));
+  }
+}
+
+@media (min-width: 761px) and (max-width: 920px) {
+  .parent-navigation__modal-title-row {
+    align-items: flex-start;
+  }
+
+  .parent-navigation__modal-title-actions {
+    align-self: flex-start;
+  }
+
+  .parent-navigation__settings-tabs {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .parent-navigation__form--profile {
+    grid-template-columns: 1fr;
+  }
+
+  .parent-navigation__profile-edit-card {
+    grid-template-columns: 1fr;
+  }
+
+  .parent-navigation__profile-edit-card .parent-navigation__table-media--edit {
+    flex-direction: row;
+    align-items: center;
+  }
+}
