@@ -11,6 +11,7 @@ import {
   getStoredParentUser,
   updateParentProfile,
 } from "../../api.js";
+import { clearMessengerSession } from "../../../messenger/api.js";
 import MessengerInboxListener from "../../../messenger/MessengerInboxListener.jsx";
 import ParrotIcon from "../../components/ParrotIcon.jsx";
 import ContactsPage from "./ContactsPage.jsx";
@@ -206,7 +207,8 @@ function NavigationPage() {
 
   const handleLogout = () => {
     clearParentSession();
-    navigate("/");
+    clearMessengerSession();
+    navigate("/", { replace: true });
   };
 
   const closeModal = () => {
@@ -409,7 +411,9 @@ function NavigationPage() {
         onLogout={handleLogout}
       />
 
-      <MessengerInboxListener />
+      <MessengerInboxListener
+        key={user.user_id || user.id || user.account_number || user.username}
+      />
 
       <ContactsPage showNotice={showNotice} />
 

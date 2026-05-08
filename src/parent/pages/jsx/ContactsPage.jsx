@@ -10,7 +10,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   blockParentContact,
@@ -31,6 +31,25 @@ const addContactInitialForm = {
   account_number: "",
   alias_name: "",
 };
+
+const NAVIGATION_HISTORY_STATE_KEY = "__parrotNavigationView";
+
+function getNavigationHistoryPath() {
+  const { pathname, search, hash } = window.location;
+
+  return `${pathname}${search}${hash}`;
+}
+
+function normalizeNavigationHistoryState(state = {}) {
+  return {
+    activeSectionTab:
+      state.activeSectionTab === "contacts" ? "contacts" : "chats",
+    contactsTab: state.contactsTab === "add" ? "add" : "list",
+    compactView: state.compactView === "detail" ? "detail" : "list",
+    selectedRoomId: state.selectedRoomId ? String(state.selectedRoomId) : "",
+    selectedContactAccountNumber: state.selectedContactAccountNumber || "",
+  };
+}
 
 function getContactName(contact) {
   return contact.alias_name || "Saved contact";
@@ -196,6 +215,16 @@ function findRoomByAccountNumber(rooms, accountNumber) {
   );
 }
 
+function findRoomById(rooms, roomId) {
+  if (!roomId) {
+    return null;
+  }
+
+  return (
+    rooms.find((room) => Number(room.id) === Number(roomId)) || null
+  );
+}
+
 function mergeRoomById(rooms, nextRoom) {
   if (!nextRoom?.id) {
     return rooms;
@@ -215,7 +244,7 @@ function mergeRoomById(rooms, nextRoom) {
 function ContactsPage({ showNotice }) {
   const [contacts, setContacts] = useState([]);
   const [contactsMessage, setContactsMessage] = useState("");
-  const [activeSectionTab, setActiveSectionTab] = useState("contacts");
+  const [activeSectionTab, setActiveSectionTab] = useState("chats");
   const [contactsTab, setContactsTab] = useState("list");
   const [compactView, setCompactView] = useState("list");
   const [addContactForm, setAddContactForm] = useState(addContactInitialForm);
@@ -238,6 +267,11 @@ function ContactsPage({ showNotice }) {
   const [isUpdatingAlias, setIsUpdatingAlias] = useState(false);
   const [isUpdatingBlock, setIsUpdatingBlock] = useState(false);
   const [isDeletingContact, setIsDeletingContact] = useState(false);
+  const navigationHistoryPathRef = useRef("");
+  const messengerRoomsRef = useRef([]);
+  const selectedContactDetailRef = useRef(null);
+  const selectedContactRoomRef = useRef(null);
+  const selectedRoomRef = useRef(null);
   const isChatDetailActive =
     activeSectionTab === "chats" && compactView === "detail";
   const isContactDetailActive =
@@ -259,6 +293,63 @@ function ContactsPage({ showNotice }) {
     activeSectionTab === "chats" ? selectedRoom : selectedContactRoom;
   const activeConversationAccountNumber =
     activeConversationContact?.account_number || "";
+
+  const getCurrentNavigationHistoryState = (overrides = {}) =>
+    normalizeNavigationHistoryState({
+      activeSectionTab,
+      contactsTab,
+      compactView,
+      selectedRoomId: selectedRoom?.id || "",
+      selectedContactAccountNumber,
+      ...overrides,
+    });
+
+  const writeNavigationHistoryState = (mode, overrides = {}) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const historyPath =
+      navigationHistoryPathRef.current || getNavigationHistoryPath();
+    navigationHistoryPathRef.current = historyPath;
+
+    const nextHistoryState = {
+      ...(window.history.state || {}),
+      [NAVIGATION_HISTORY_STATE_KEY]:
+        getCurrentNavigationHistoryState(overrides),
+    };
+
+    if (mode === "replace") {
+      window.history.replaceState(nextHistoryState, "", historyPath);
+      return;
+    }
+
+    window.history.pushState(nextHistoryState, "", historyPath);
+  };
+
+  const pushNavigationHistoryState = (overrides = {}) => {
+    writeNavigationHistoryState("push", overrides);
+  };
+
+  const replaceNavigationHistoryState = (overrides = {}) => {
+    writeNavigationHistoryState("replace", overrides);
+  };
+
+  useEffect(() => {
+    messengerRoomsRef.current = messengerRooms;
+  }, [messengerRooms]);
+
+  useEffect(() => {
+    selectedContactDetailRef.current = selectedContactDetail;
+  }, [selectedContactDetail]);
+
+  useEffect(() => {
+    selectedContactRoomRef.current = selectedContactRoom;
+  }, [selectedContactRoom]);
+
+  useEffect(() => {
+    selectedRoomRef.current = selectedRoom;
+  }, [selectedRoom]);
 
   useEffect(() => {
     let isMounted = true;
@@ -294,17 +385,36 @@ function ContactsPage({ showNotice }) {
   }, []);
 
   const openContactsSection = () => {
+    pushNavigationHistoryState({
+      activeSectionTab: "contacts",
+      contactsTab: "list",
+      compactView: "list",
+      selectedRoomId: "",
+    });
     setActiveSectionTab("contacts");
+    setContactsTab("list");
     setCompactView("list");
   };
 
   const openChatsSection = () => {
+    pushNavigationHistoryState({
+      activeSectionTab: "chats",
+      contactsTab: "list",
+      compactView: "list",
+      selectedRoomId: selectedRoom?.id || "",
+    });
     setActiveSectionTab("chats");
     setContactsTab("list");
     setCompactView("list");
   };
 
   const openAddContactTab = () => {
+    pushNavigationHistoryState({
+      activeSectionTab: "contacts",
+      contactsTab: "add",
+      compactView: "list",
+      selectedRoomId: "",
+    });
     setContactsTab("add");
     setCompactView("list");
     setContactsMessage("");
@@ -312,12 +422,22 @@ function ContactsPage({ showNotice }) {
   };
 
   const openContactListTab = () => {
+    replaceNavigationHistoryState({
+      activeSectionTab: "contacts",
+      contactsTab: "list",
+      compactView: "list",
+      selectedRoomId: "",
+    });
     setContactsTab("list");
     setCompactView("list");
     setAddContactMessage("");
   };
 
   const showContactList = () => {
+    replaceNavigationHistoryState({
+      compactView: "list",
+      selectedRoomId: activeSectionTab === "chats" ? selectedRoom?.id || "" : "",
+    });
     setCompactView("list");
   };
 
@@ -360,10 +480,97 @@ function ContactsPage({ showNotice }) {
     }
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    navigationHistoryPathRef.current = getNavigationHistoryPath();
+    replaceNavigationHistoryState();
+
+    const handlePopState = (event) => {
+      const nextNavigationState =
+        event.state?.[NAVIGATION_HISTORY_STATE_KEY];
+
+      if (!nextNavigationState) {
+        return;
+      }
+
+      const normalizedState =
+        normalizeNavigationHistoryState(nextNavigationState);
+      const candidateRooms = [
+        selectedRoomRef.current,
+        selectedContactRoomRef.current,
+        ...messengerRoomsRef.current,
+      ].filter(Boolean);
+      const nextRoom = findRoomById(
+        candidateRooms,
+        normalizedState.selectedRoomId,
+      );
+
+      setActiveSectionTab(normalizedState.activeSectionTab);
+      setContactsTab(normalizedState.contactsTab);
+      setCompactView(normalizedState.compactView);
+      setSelectedContactAccountNumber(
+        normalizedState.selectedContactAccountNumber,
+      );
+
+      if (normalizedState.activeSectionTab === "chats" && nextRoom) {
+        setSelectedRoom(nextRoom);
+        setSelectedContactRoom(nextRoom);
+      }
+
+      if (
+        normalizedState.activeSectionTab === "contacts" &&
+        normalizedState.compactView === "detail" &&
+        normalizedState.selectedContactAccountNumber &&
+        selectedContactDetailRef.current?.account_number !==
+          normalizedState.selectedContactAccountNumber
+      ) {
+        setSelectedContactDetail(null);
+        setAliasFormValue("");
+        setIsContactDetailLoading(true);
+
+        getParentContactDetail(normalizedState.selectedContactAccountNumber)
+          .then((response) => {
+            const nextContactDetail = response.data?.contact || null;
+
+            setSelectedContactDetail(nextContactDetail);
+            setAliasFormValue(nextContactDetail?.alias_name || "");
+          })
+          .catch(() => {
+            setSelectedContactDetail(null);
+            setAliasFormValue("");
+          })
+          .finally(() => {
+            setIsContactDetailLoading(false);
+          });
+      }
+
+      if (normalizedState.compactView === "list") {
+        setIsEditingAlias(false);
+        setContactActionMessage("");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
   const handleRoomSelect = (room) => {
     const participant = getRoomPrimaryParticipant(room);
     const accountNumber = participant?.account_number || "";
 
+    pushNavigationHistoryState({
+      activeSectionTab: "chats",
+      contactsTab: "list",
+      compactView: "detail",
+      selectedRoomId: room.id || "",
+      selectedContactAccountNumber: accountNumber,
+    });
     setSelectedRoom(room);
     setSelectedContactRoom(room);
     setSelectedContactAccountNumber(accountNumber);
@@ -504,6 +711,13 @@ function ContactsPage({ showNotice }) {
       return;
     }
 
+    pushNavigationHistoryState({
+      activeSectionTab: "contacts",
+      contactsTab: "list",
+      compactView: "detail",
+      selectedRoomId: "",
+      selectedContactAccountNumber: contact.account_number,
+    });
     setSelectedContactAccountNumber(contact.account_number);
     setSelectedContactDetail(null);
     setSelectedContactRoom(null);

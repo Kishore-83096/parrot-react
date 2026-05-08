@@ -12,6 +12,10 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import {
+  clearMessengerSession,
+  getMessengerToken,
+} from "../../../messenger/api.js";
 import { loginParent, registerParent } from "../../api.js";
 import ParrotIcon from "../../components/ParrotIcon.jsx";
 import "../css/WelcomePage.css";
@@ -115,9 +119,11 @@ function WelcomePage() {
 
     try {
       await loginParent(loginForm);
+      clearMessengerSession();
+      getMessengerToken({ forceRefresh: true }).catch(() => undefined);
       setLoginForm(loginInitialForm);
       closeModal();
-      navigate("/navigation");
+      navigate("/navigation", { replace: true });
     } catch (error) {
       setMessage(
         getErrorMessage(

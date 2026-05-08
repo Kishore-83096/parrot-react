@@ -38,6 +38,7 @@ export const getStoredMessengerToken = () => {
 };
 
 export const clearMessengerSession = () => {
+  pendingMessagingTokenRequest = null;
   localStorage.removeItem(MESSENGER_TOKEN_KEY);
   localStorage.removeItem(MESSENGER_TOKEN_EXPIRES_AT_KEY);
 };
