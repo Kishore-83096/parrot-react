@@ -2,7 +2,11 @@ import axios from "axios";
 
 import { parentAxios } from "../parent/api.js";
 
+const runtimeConfig = globalThis.__PARROT_CONFIG__ || {};
+
 const MESSENGER_API_BASE_URL =
+  runtimeConfig.VITE_MESSENGER_SERVICE_URL ||
+  runtimeConfig.MESSENGER_SERVICE_URL ||
   import.meta.env.VITE_MESSENGER_SERVICE_URL ||
   import.meta.env.MESSENGER_SERVICE_URL ||
   "http://localhost:8000";

@@ -1,7 +1,11 @@
 import axios from "axios";
 
+const runtimeConfig = globalThis.__PARROT_CONFIG__ || {};
+
 const PARENT_API_BASE_URL =
-  import.meta.env.VITE_PARENT_API_BASE_URL || "http://localhost:5000/parent";
+  runtimeConfig.VITE_PARENT_API_BASE_URL ||
+  import.meta.env.VITE_PARENT_API_BASE_URL ||
+  "http://localhost:5000/parent";
 
 const ACCESS_TOKEN_KEY = "parent_access_token";
 const REFRESH_TOKEN_KEY = "parent_refresh_token";
