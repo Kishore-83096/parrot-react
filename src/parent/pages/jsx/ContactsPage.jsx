@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  MessageCircle,
   Pencil,
   Plus,
   Save,
@@ -21,6 +22,9 @@ import {
   unblockParentContact,
   updateParentContactAlias,
 } from "../../api.js";
+import { getMessengerRooms } from "../../../messenger/api.js";
+import RoomListPage from "../../../messenger/pages/jsx/RoomListPage.jsx";
+import RoomMessagesPage from "../../../messenger/pages/jsx/RoomMessagesPage.jsx";
 import "../css/ContactsPage.css";
 
 const addContactInitialForm = {
@@ -111,9 +115,107 @@ function ContactCard({ contact, isSelected, onSelect }) {
   );
 }
 
+function getSavedContactName(participant, contacts) {
+  if (!participant?.account_number) {
+    return "";
+  }
+
+  const savedContact = contacts.find(
+    (contact) => contact.account_number === participant.account_number,
+  );
+
+  return savedContact?.alias_name || "";
+}
+
+function getParticipantName(participant, contacts) {
+  return (
+    getSavedContactName(participant, contacts) ||
+    participant?.display_name ||
+    participant?.account_number ||
+    ""
+  );
+}
+
+function getRoomTitle(room, contacts = []) {
+  const participants =
+    room?.other_participants?.length > 0
+      ? room.other_participants
+      : room?.participants || [];
+  const names = participants
+    .map((participant) => getParticipantName(participant, contacts))
+    .filter(Boolean);
+
+  return names.join(", ") || (room ? `Room ${room.id}` : "Chat");
+}
+
+function getRoomParticipantsForMatch(room) {
+  return room?.other_participants?.length > 0
+    ? room.other_participants
+    : room?.participants || [];
+}
+
+function getRoomPrimaryParticipant(room) {
+  return getRoomParticipantsForMatch(room)[0] || null;
+}
+
+function getRoomFallbackContact(room, contacts = []) {
+  const participant = getRoomPrimaryParticipant(room);
+
+  if (!participant?.account_number) {
+    return null;
+  }
+
+  const savedContact = contacts.find(
+    (contact) => contact.account_number === participant.account_number,
+  );
+
+  return {
+    account_number: participant.account_number,
+    alias_name:
+      savedContact?.alias_name ||
+      participant.display_name ||
+      participant.account_number,
+    blocked: savedContact?.blocked,
+    profile_picture: savedContact?.profile_picture || "",
+  };
+}
+
+function findRoomByAccountNumber(rooms, accountNumber) {
+  if (!accountNumber) {
+    return null;
+  }
+
+  return (
+    rooms.find(
+      (room) =>
+        !room.is_group &&
+        getRoomParticipantsForMatch(room).some(
+          (participant) => participant.account_number === accountNumber,
+        ),
+    ) || null
+  );
+}
+
+function mergeRoomById(rooms, nextRoom) {
+  if (!nextRoom?.id) {
+    return rooms;
+  }
+
+  const hasRoom = rooms.some((room) => Number(room.id) === Number(nextRoom.id));
+
+  if (!hasRoom) {
+    return [nextRoom, ...rooms];
+  }
+
+  return rooms.map((room) =>
+    Number(room.id) === Number(nextRoom.id) ? { ...room, ...nextRoom } : room,
+  );
+}
+
 function ContactsPage({ showNotice }) {
   const [contacts, setContacts] = useState([]);
   const [contactsMessage, setContactsMessage] = useState("");
+  const [activeSectionTab, setActiveSectionTab] = useState("contacts");
   const [contactsTab, setContactsTab] = useState("list");
   const [compactView, setCompactView] = useState("list");
   const [addContactForm, setAddContactForm] = useState(addContactInitialForm);
@@ -125,6 +227,9 @@ function ContactsPage({ showNotice }) {
   const [aliasFormValue, setAliasFormValue] = useState("");
   const [contactDetailMessage, setContactDetailMessage] = useState("");
   const [contactActionMessage, setContactActionMessage] = useState("");
+  const [messengerRooms, setMessengerRooms] = useState([]);
+  const [selectedContactRoom, setSelectedContactRoom] = useState(null);
+  const [selectedRoom, setSelectedRoom] = useState(null);
   const [isEditingAlias, setIsEditingAlias] = useState(false);
   const [isContactsLoading, setIsContactsLoading] = useState(false);
   const [isSearchingContact, setIsSearchingContact] = useState(false);
@@ -133,6 +238,27 @@ function ContactsPage({ showNotice }) {
   const [isUpdatingAlias, setIsUpdatingAlias] = useState(false);
   const [isUpdatingBlock, setIsUpdatingBlock] = useState(false);
   const [isDeletingContact, setIsDeletingContact] = useState(false);
+  const isChatDetailActive =
+    activeSectionTab === "chats" && compactView === "detail";
+  const isContactDetailActive =
+    activeSectionTab === "contacts" &&
+    compactView === "detail" &&
+    Boolean(selectedContactDetail?.account_number);
+  const hasConversationDetail =
+    (activeSectionTab === "chats" && selectedRoom) ||
+    (activeSectionTab === "contacts" && selectedContactDetail);
+  const selectedRoomFallbackContact = getRoomFallbackContact(
+    selectedRoom,
+    contacts,
+  );
+  const activeConversationContact =
+    activeSectionTab === "chats"
+      ? selectedContactDetail || selectedRoomFallbackContact
+      : selectedContactDetail;
+  const activeConversationRoom =
+    activeSectionTab === "chats" ? selectedRoom : selectedContactRoom;
+  const activeConversationAccountNumber =
+    activeConversationContact?.account_number || "";
 
   useEffect(() => {
     let isMounted = true;
@@ -167,6 +293,17 @@ function ContactsPage({ showNotice }) {
     };
   }, []);
 
+  const openContactsSection = () => {
+    setActiveSectionTab("contacts");
+    setCompactView("list");
+  };
+
+  const openChatsSection = () => {
+    setActiveSectionTab("chats");
+    setContactsTab("list");
+    setCompactView("list");
+  };
+
   const openAddContactTab = () => {
     setContactsTab("add");
     setCompactView("list");
@@ -182,6 +319,78 @@ function ContactsPage({ showNotice }) {
 
   const showContactList = () => {
     setCompactView("list");
+  };
+
+  const loadContactRoom = async (accountNumber) => {
+    const existingRoom = findRoomByAccountNumber(messengerRooms, accountNumber);
+
+    if (existingRoom) {
+      setSelectedContactRoom(existingRoom);
+      return;
+    }
+
+    try {
+      const response = await getMessengerRooms();
+      const result = response.data?.result || {};
+      const nextRooms = Array.isArray(result.rooms) ? result.rooms : [];
+
+      setMessengerRooms(nextRooms);
+      setSelectedContactRoom(findRoomByAccountNumber(nextRooms, accountNumber));
+    } catch {
+      setSelectedContactRoom(null);
+    }
+  };
+
+  const loadConversationContactDetail = async (accountNumber) => {
+    if (!accountNumber) {
+      setSelectedContactDetail(null);
+      setAliasFormValue("");
+      return;
+    }
+
+    try {
+      const response = await getParentContactDetail(accountNumber);
+      const nextContactDetail = response.data?.contact || null;
+
+      setSelectedContactDetail(nextContactDetail);
+      setAliasFormValue(nextContactDetail?.alias_name || "");
+    } catch {
+      setSelectedContactDetail(null);
+      setAliasFormValue("");
+    }
+  };
+
+  const handleRoomSelect = (room) => {
+    const participant = getRoomPrimaryParticipant(room);
+    const accountNumber = participant?.account_number || "";
+
+    setSelectedRoom(room);
+    setSelectedContactRoom(room);
+    setSelectedContactAccountNumber(accountNumber);
+    setSelectedContactDetail(null);
+    setContactDetailMessage("");
+    setContactActionMessage("");
+    setIsEditingAlias(false);
+    setCompactView("detail");
+    loadConversationContactDetail(accountNumber);
+  };
+
+  const handleContactRoomResolved = (room) => {
+    if (!room?.id) {
+      return;
+    }
+
+    setSelectedContactRoom(room);
+    setMessengerRooms((currentRooms) => mergeRoomById(currentRooms, room));
+  };
+
+  const handleSelectedRoomResolved = (room) => {
+    if (!room?.id) {
+      return;
+    }
+
+    setSelectedRoom(room);
+    setMessengerRooms((currentRooms) => mergeRoomById(currentRooms, room));
   };
 
   const mergeContactUpdate = (updatedContact) => {
@@ -297,6 +506,7 @@ function ContactsPage({ showNotice }) {
 
     setSelectedContactAccountNumber(contact.account_number);
     setSelectedContactDetail(null);
+    setSelectedContactRoom(null);
     setContactDetailMessage("");
     setContactActionMessage("");
     setIsEditingAlias(false);
@@ -308,6 +518,7 @@ function ContactsPage({ showNotice }) {
       const nextContactDetail = response.data?.contact || null;
       setSelectedContactDetail(nextContactDetail);
       setAliasFormValue(nextContactDetail?.alias_name || "");
+      loadContactRoom(contact.account_number);
     } catch (error) {
       const errorMessage = getApiErrorMessage(
         error,
@@ -447,6 +658,7 @@ function ContactsPage({ showNotice }) {
       );
       setSelectedContactAccountNumber("");
       setSelectedContactDetail(null);
+      setSelectedContactRoom(null);
       setAliasFormValue("");
       setIsEditingAlias(false);
       setContactDetailMessage("");
@@ -477,34 +689,76 @@ function ContactsPage({ showNotice }) {
       <aside className="parent-navigation__contacts-sidebar">
         <div className="parent-navigation__contacts-heading">
           <div className="parent-navigation__contacts-heading-icon">
-            <Users size={20} aria-hidden="true" />
+            {activeSectionTab === "chats" ? (
+              <MessageCircle size={20} aria-hidden="true" />
+            ) : (
+              <Users size={20} aria-hidden="true" />
+            )}
           </div>
           <div>
             
             <h1 id="parent-contacts-title">
-              {contactsTab === "add" ? "Add Contact" : "Contacts"}
+              {activeSectionTab === "chats"
+                ? "Chats"
+                : contactsTab === "add"
+                  ? "Add Contact"
+                  : "Contacts"}
             </h1>
           </div>
+          {activeSectionTab === "contacts" ? (
+            <button
+              className="parent-navigation__contacts-heading-action"
+              type="button"
+              onClick={
+                contactsTab === "add" ? openContactListTab : openAddContactTab
+              }
+              aria-label={
+                contactsTab === "add" ? "Back to contacts" : "Add contact"
+              }
+              title={contactsTab === "add" ? "Back to contacts" : "Add contact"}
+            >
+              {contactsTab === "add" ? (
+                <ArrowLeft size={16} aria-hidden="true" />
+              ) : (
+                <Plus size={16} aria-hidden="true" />
+              )}
+            </button>
+          ) : (
+            <span className="parent-navigation__contacts-heading-spacer" />
+          )}
+        </div>
+
+        <div className="parent-navigation__section-tabs" role="tablist">
           <button
-            className="parent-navigation__contacts-heading-action"
+            className={activeSectionTab === "chats" ? "is-active" : ""}
             type="button"
-            onClick={
-              contactsTab === "add" ? openContactListTab : openAddContactTab
-            }
-            aria-label={
-              contactsTab === "add" ? "Back to contacts" : "Add contact"
-            }
-            title={contactsTab === "add" ? "Back to contacts" : "Add contact"}
+            onClick={openChatsSection}
+            role="tab"
+            aria-selected={activeSectionTab === "chats"}
           >
-            {contactsTab === "add" ? (
-              <ArrowLeft size={16} aria-hidden="true" />
-            ) : (
-              <Plus size={16} aria-hidden="true" />
-            )}
+            <MessageCircle size={15} aria-hidden="true" />
+            <span>Chats</span>
+          </button>
+          <button
+            className={activeSectionTab === "contacts" ? "is-active" : ""}
+            type="button"
+            onClick={openContactsSection}
+            role="tab"
+            aria-selected={activeSectionTab === "contacts"}
+          >
+            <Users size={15} aria-hidden="true" />
+            <span>Contacts</span>
           </button>
         </div>
 
-        {contactsTab === "list" ? (
+        {activeSectionTab === "chats" ? (
+          <RoomListPage
+            contacts={contacts}
+            onRoomsChange={setMessengerRooms}
+            selectedRoomId={selectedRoom?.id}
+            onRoomSelect={handleRoomSelect}
+          />
+        ) : contactsTab === "list" ? (
           <>
             {contactsMessage ? (
               <p className="parent-navigation__message" role="alert">
@@ -621,7 +875,12 @@ function ContactsPage({ showNotice }) {
 
       <section
         className={`parent-navigation__contact-detail-panel${
-          selectedContactAccountNumber ? " has-contact-detail" : ""
+          (activeSectionTab === "contacts" && selectedContactAccountNumber) ||
+          (activeSectionTab === "chats" && selectedRoom)
+            ? " has-contact-detail"
+            : ""
+        }${
+          hasConversationDetail ? " is-conversation-detail" : ""
         }`}
         aria-live="polite"
       >
@@ -629,13 +888,153 @@ function ContactsPage({ showNotice }) {
           className="parent-navigation__contact-detail-back"
           type="button"
           onClick={showContactList}
-          aria-label="Back to contacts"
-          title="Back to contacts"
+          aria-label={activeSectionTab === "chats" ? "Back to chats" : "Back to contacts"}
+          title={activeSectionTab === "chats" ? "Back to chats" : "Back to contacts"}
         >
           <ArrowLeft size={18} aria-hidden="true" />
         </button>
 
-        {!selectedContactAccountNumber ? (
+        {activeSectionTab === "chats" ? (
+          selectedRoom ? (
+            <>
+              <div className="parent-navigation__contact-chat-header">
+                <div className="parent-navigation__contact-chat-identity">
+                  <div className="parent-navigation__contact-detail-avatar">
+                    {activeConversationContact?.profile_picture ? (
+                      <img
+                        src={activeConversationContact.profile_picture}
+                        alt=""
+                        aria-hidden="true"
+                      />
+                    ) : activeConversationContact ? (
+                      getContactInitials(activeConversationContact)
+                    ) : (
+                      <MessageCircle size={20} aria-hidden="true" />
+                    )}
+                  </div>
+
+                  <div className="parent-navigation__contact-chat-name">
+                    {selectedContactDetail && isEditingAlias ? (
+                      <form
+                        className="parent-navigation__contact-alias-form"
+                        onSubmit={handleAliasSubmit}
+                      >
+                        <input
+                          aria-label="Alias name"
+                          type="text"
+                          value={aliasFormValue}
+                          onChange={(event) =>
+                            setAliasFormValue(event.target.value)
+                          }
+                          disabled={isUpdatingAlias}
+                          autoFocus
+                          required
+                        />
+                        <button
+                          type="submit"
+                          disabled={isUpdatingAlias}
+                          aria-label="Save alias"
+                          title="Save alias"
+                        >
+                          <Save size={14} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAliasEditCancel}
+                          disabled={isUpdatingAlias}
+                          aria-label="Cancel alias edit"
+                          title="Cancel"
+                        >
+                          <X size={14} aria-hidden="true" />
+                        </button>
+                      </form>
+                    ) : (
+                      <>
+                        <h2>
+                          {activeConversationContact?.alias_name ||
+                            getRoomTitle(selectedRoom, contacts)}
+                        </h2>
+                        <p>
+                          {activeConversationContact?.account_number ||
+                            `Room ${selectedRoom.id}`}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {selectedContactDetail ? (
+                  <div className="parent-navigation__contact-chat-actions">
+                    {!isEditingAlias ? (
+                      <button
+                        className="parent-navigation__contact-icon-action"
+                        type="button"
+                        onClick={handleAliasEditStart}
+                        disabled={isDeletingContact}
+                        aria-label="Edit alias"
+                        title="Edit alias"
+                      >
+                        <Pencil size={16} aria-hidden="true" />
+                      </button>
+                    ) : null}
+
+                    <label
+                      className={`parent-navigation__contact-block-switch${
+                        selectedContactDetail.blocked ? " is-blocked" : ""
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedContactDetail.blocked)}
+                        onChange={handleBlockToggle}
+                        disabled={isUpdatingBlock || isDeletingContact}
+                      />
+                      <span aria-hidden="true" />
+                      <strong>
+                        {selectedContactDetail.blocked ? "Blocked" : "Block"}
+                      </strong>
+                    </label>
+
+                    <button
+                      className="parent-navigation__contact-icon-action parent-navigation__contact-icon-action--danger"
+                      type="button"
+                      onClick={handleDeleteContact}
+                      disabled={isDeletingContact}
+                      aria-label="Delete contact"
+                      title={isDeletingContact ? "Deleting..." : "Delete contact"}
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                ) : selectedRoom.unread_count > 0 ? (
+                  <span className="parent-navigation__chat-unread-badge">
+                    {selectedRoom.unread_count}
+                  </span>
+                ) : null}
+              </div>
+
+              {contactActionMessage ? (
+                <p className="parent-navigation__message" role="alert">
+                  {contactActionMessage}
+                </p>
+              ) : null}
+
+              <RoomMessagesPage
+                contacts={contacts}
+                isActive={isChatDetailActive}
+                onRoomResolved={handleSelectedRoomResolved}
+                recipientAccountNumber={activeConversationAccountNumber}
+                room={selectedRoom}
+              />
+            </>
+          ) : (
+            <div className="parent-navigation__contact-detail-empty">
+              <MessageCircle size={38} aria-hidden="true" />
+              <h2>No Chat Selected</h2>
+              <p>Choose a chat to see its room details.</p>
+            </div>
+          )
+        ) : !selectedContactAccountNumber ? (
           <div className="parent-navigation__contact-detail-empty">
             <Users size={38} aria-hidden="true" />
             <h2>No Contact Selected</h2>
@@ -762,6 +1161,14 @@ function ContactsPage({ showNotice }) {
                 {contactActionMessage}
               </p>
             ) : null}
+
+            <RoomMessagesPage
+              contacts={contacts}
+              isActive={isContactDetailActive}
+              onRoomResolved={handleContactRoomResolved}
+              recipientAccountNumber={selectedContactDetail.account_number}
+              room={selectedContactRoom}
+            />
           </>
         ) : null}
       </section>

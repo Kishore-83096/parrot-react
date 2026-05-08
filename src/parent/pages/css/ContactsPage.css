@@ -22,7 +22,7 @@
 .parent-navigation__contacts-sidebar {
   min-height: max(582px, calc(100svh - (var(--parent-page-gap) * 2) - 92px));
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -77,8 +77,61 @@
   cursor: pointer;
 }
 
+.parent-navigation__contacts-heading-spacer {
+  width: 36px;
+  min-height: 36px;
+}
+
+.parent-navigation__section-tabs {
+  padding: 4px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.parent-navigation__section-tabs button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--parent-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 780;
+  cursor: pointer;
+}
+
+.parent-navigation__section-tabs button svg {
+  flex: 0 0 auto;
+}
+
+.parent-navigation__section-tabs button.is-active {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--parent-purple), var(--parent-blue));
+  box-shadow: 0 10px 20px rgba(124, 60, 255, 0.14);
+}
+
 .parent-navigation__contact-detail-panel {
   min-height: max(582px, calc(100svh - (var(--parent-page-gap) * 2) - 92px));
+}
+
+.parent-navigation__contact-detail-panel.is-conversation-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: max(582px, calc(100svh - (var(--parent-page-gap) * 2) - 92px));
+  gap: 0;
+  overflow: hidden;
+}
+
+.parent-navigation__contact-detail-panel.is-conversation-detail .parent-navigation__contact-chat-header {
+  flex: 0 0 auto;
 }
 
 .parent-navigation__contact-detail-back {
@@ -458,6 +511,19 @@
   opacity: 0.66;
 }
 
+.parent-navigation__chat-unread-badge {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0 9px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--parent-green);
+  font-size: 12px;
+  font-weight: 820;
+}
+
 .parent-navigation__contacts-loading {
   display: grid;
   gap: 14px;
@@ -673,6 +739,7 @@
   .parent-navigation__contact-alias-form {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
+
 }
 
 @media (max-width: 1100px) {
@@ -808,6 +875,28 @@
   .parent-navigation__contact-detail-panel.has-contact-detail .parent-navigation__contacts-loading {
     grid-column: 1 / -1;
     margin-top: 14px;
+  }
+
+  .parent-navigation__contact-detail-panel.is-conversation-detail.has-contact-detail {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    height: max(480px, calc(100svh - (var(--parent-page-gap) * 2) - 86px));
+    overflow: hidden;
+  }
+
+  .parent-navigation__contact-detail-panel.is-conversation-detail.has-contact-detail .parent-navigation__contact-detail-back,
+  .parent-navigation__contact-detail-panel.is-conversation-detail.has-contact-detail .parent-navigation__contact-chat-header,
+  .parent-navigation__contact-detail-panel.is-conversation-detail.has-contact-detail .messenger-room-messages {
+    width: 100%;
+  }
+
+  .parent-navigation__contact-detail-panel.is-conversation-detail.has-contact-detail .parent-navigation__contact-detail-back {
+    align-self: flex-start;
+  }
+
+  .parent-navigation__contact-detail-panel.is-conversation-detail.has-contact-detail .parent-navigation__contact-chat-header {
+    min-height: 44px;
   }
 }
 

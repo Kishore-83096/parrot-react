@@ -1,0 +1,14 @@
+@media (max-width: 760px) {
+  .messenger-room-messages {
+    min-height: 0;
+  }
+
+  .messenger-room-messages__list {
+    max-height: none;
+    padding: 10px 0;
+  }
+
+  .messenger-room-messages__bubble {
+    width: min(100%, 420px);
+  }
+}

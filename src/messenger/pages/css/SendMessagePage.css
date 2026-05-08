@@ -1,0 +1,89 @@
+.messenger-send-message {
+  min-width: 0;
+  padding-top: 8px;
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid rgba(124, 60, 255, 0.1);
+}
+
+.messenger-send-message__message {
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 10px;
+  color: #6b3a00;
+  background: #fff4d8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.messenger-send-message__bar {
+  min-width: 0;
+  padding: 5px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(124, 60, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+}
+
+.messenger-send-message textarea {
+  width: 100%;
+  min-height: 34px;
+  max-height: 96px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--parent-text, #201b2b);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 700;
+  resize: none;
+  outline: none;
+}
+
+.messenger-send-message textarea::placeholder {
+  color: var(--parent-muted, #766d85);
+  opacity: 0.82;
+}
+
+.messenger-send-message textarea:focus {
+  background: rgba(124, 60, 255, 0.06);
+  box-shadow: none;
+}
+
+.messenger-send-message textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.messenger-send-message button {
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+  background: linear-gradient(
+    135deg,
+    var(--parent-purple, #7c3cff),
+    var(--parent-blue, #3f8cff)
+  );
+  font: inherit;
+  font-size: 12px;
+  font-weight: 830;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.messenger-send-message button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+}

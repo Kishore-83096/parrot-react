@@ -1,0 +1,5 @@
+@media (min-width: 761px) and (max-width: 1100px) {
+  .messenger-room-messages__list {
+    max-height: none;
+  }
+}

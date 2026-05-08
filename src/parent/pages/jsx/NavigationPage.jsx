@@ -11,6 +11,7 @@ import {
   getStoredParentUser,
   updateParentProfile,
 } from "../../api.js";
+import MessengerInboxListener from "../../../messenger/MessengerInboxListener.jsx";
 import ParrotIcon from "../../components/ParrotIcon.jsx";
 import ContactsPage from "./ContactsPage.jsx";
 import NavigationHeader from "./NavigationHeader.jsx";
@@ -407,6 +408,8 @@ function NavigationPage() {
         onProfileClick={openProfileModal}
         onLogout={handleLogout}
       />
+
+      <MessengerInboxListener />
 
       <ContactsPage showNotice={showNotice} />
 
