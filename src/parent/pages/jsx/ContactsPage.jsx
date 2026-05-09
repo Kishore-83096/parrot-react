@@ -908,15 +908,14 @@ function ContactsPage({
       className={`parent-navigation__contacts-shell is-${compactView}-open`}
       aria-labelledby="parent-contacts-title"
     >
-      <NavigationHeader
-        user={user}
-        profile={profile}
-        onAccountClick={onAccountClick}
-        onProfileClick={onProfileClick}
-        onLogout={onLogout}
-      />
-
       <aside className="parent-navigation__contacts-sidebar">
+        <NavigationHeader
+          user={user}
+          profile={profile}
+          onAccountClick={onAccountClick}
+          onProfileClick={onProfileClick}
+          onLogout={onLogout}
+        />
         <div className="parent-navigation__contacts-heading">
           <div className="parent-navigation__contacts-heading-icon">
             {activeSectionTab === "chats" ? (
@@ -988,7 +987,7 @@ function ContactsPage({
             selectedRoomId={selectedRoom?.id}
             onRoomSelect={handleRoomSelect}
           />
-        ) : contactsTab === "list" ? (
+        ) : (
           <>
             {contactsMessage ? (
               <p className="parent-navigation__message" role="alert">
@@ -1027,79 +1026,95 @@ function ContactsPage({
                 ))}
               </div>
             )}
-          </>
-        ) : (
-          <div className="parent-navigation__contact-add">
-            <form
-              className="parent-navigation__contact-add-form"
-              onSubmit={handleContactSearchSubmit}
-            >
-              <label htmlFor="parent-contact-account-number">
-                Account Number
-              </label>
-              <input
-                id="parent-contact-account-number"
-                name="account_number"
-                type="text"
-                inputMode="numeric"
-                value={addContactForm.account_number}
-                onChange={handleAddContactChange}
-                required
-              />
-              <button type="submit" disabled={isSearchingContact}>
-                <Search size={17} aria-hidden="true" />
-                <span>{isSearchingContact ? "Searching..." : "Search"}</span>
-              </button>
-            </form>
 
-            {searchedContact ? (
-              <>
-                <div className="parent-navigation__contact-search-result">
-                  <div
-                    className="parent-navigation__contact-avatar"
-                    aria-hidden="true"
+            <div className="parent-navigation__contact-add">
+              {contactsTab === "add" ? (
+                <>
+                  <form
+                    className="parent-navigation__contact-add-form"
+                    onSubmit={handleContactSearchSubmit}
                   >
-                    {searchedContact.profile_picture ? (
-                      <img src={searchedContact.profile_picture} alt="" />
-                    ) : (
-                      getSearchedContactInitials(searchedContact)
-                    )}
-                  </div>
-                  <div>
-                    <h2>{getSearchedContactName(searchedContact)}</h2>
-                    <p>{searchedContact.username || "Not added"}</p>
-                  </div>
-                </div>
+                    <label htmlFor="parent-contact-account-number">
+                      Account Number
+                    </label>
+                    <input
+                      id="parent-contact-account-number"
+                      name="account_number"
+                      type="text"
+                      inputMode="numeric"
+                      value={addContactForm.account_number}
+                      onChange={handleAddContactChange}
+                      required
+                    />
+                    <button type="submit" disabled={isSearchingContact}>
+                      <Search size={17} aria-hidden="true" />
+                      <span>{isSearchingContact ? "Searching..." : "Search"}</span>
+                    </button>
+                  </form>
 
-                <form
-                  className="parent-navigation__contact-add-form"
-                  onSubmit={handleSaveContactSubmit}
+                  {searchedContact ? (
+                    <>
+                      <div className="parent-navigation__contact-search-result">
+                        <div
+                          className="parent-navigation__contact-avatar"
+                          aria-hidden="true"
+                        >
+                          {searchedContact.profile_picture ? (
+                            <img src={searchedContact.profile_picture} alt="" />
+                          ) : (
+                            getSearchedContactInitials(searchedContact)
+                          )}
+                        </div>
+                        <div>
+                          <h2>{getSearchedContactName(searchedContact)}</h2>
+                          <p>{searchedContact.username || "Not added"}</p>
+                        </div>
+                      </div>
+
+                      <form
+                        className="parent-navigation__contact-add-form"
+                        onSubmit={handleSaveContactSubmit}
+                      >
+                        <label htmlFor="parent-contact-alias">
+                          Save Contact As
+                        </label>
+                        <input
+                          id="parent-contact-alias"
+                          name="alias_name"
+                          type="text"
+                          value={addContactForm.alias_name}
+                          onChange={handleAddContactChange}
+                          required
+                        />
+                        <button type="submit" disabled={isSavingContact}>
+                          <Save size={17} aria-hidden="true" />
+                          <span>{isSavingContact ? "Saving..." : "Save Contact"}</span>
+                        </button>
+                      </form>
+                    </>
+                  ) : null}
+
+                  {addContactMessage ? (
+                    <p className="parent-navigation__message" role="alert">
+                      {addContactMessage}
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <button
+                  className="parent-navigation__contacts-heading-action"
+                  type="button"
+                  onClick={openAddContactTab}
+                  aria-label="Add contact"
+                  title="Add contact"
+                  style={{ width: "100%", minHeight: "44px" }}
                 >
-                  <label htmlFor="parent-contact-alias">
-                    Save Contact As
-                  </label>
-                  <input
-                    id="parent-contact-alias"
-                    name="alias_name"
-                    type="text"
-                    value={addContactForm.alias_name}
-                    onChange={handleAddContactChange}
-                    required
-                  />
-                  <button type="submit" disabled={isSavingContact}>
-                    <Save size={17} aria-hidden="true" />
-                    <span>{isSavingContact ? "Saving..." : "Save Contact"}</span>
-                  </button>
-                </form>
-              </>
-            ) : null}
-
-            {addContactMessage ? (
-              <p className="parent-navigation__message" role="alert">
-                {addContactMessage}
-              </p>
-            ) : null}
-          </div>
+                  <Plus size={16} aria-hidden="true" />
+                  <span>Add Contact</span>
+                </button>
+              )}
+            </div>
+          </>
         )}
       </aside>
 

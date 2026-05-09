@@ -20,6 +20,12 @@
   backdrop-filter: blur(22px);
 }
 
+.parent-navigation__contacts-shell .parent-navigation__header {
+  grid-column: 1;
+  grid-row: 1;
+  margin-bottom: 0;
+}
+
 .parent-navigation__brand {
   min-width: 0;
   display: inline-flex;
@@ -73,11 +79,15 @@
   right: 0;
   display: grid;
   gap: 4px;
-  border: 1px solid rgba(124, 60, 255, 0.14);
+  border: 1px solid var(--parent-border);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 22px 60px rgba(39, 20, 72, 0.2);
-  backdrop-filter: blur(18px);
+  background:
+    radial-gradient(circle at 8% 50%, rgba(124, 60, 255, 0.14), transparent 34%),
+    radial-gradient(circle at 88% 50%, rgba(255, 204, 246, 0.72), transparent 36%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(246, 239, 255, 0.9)),
+    rgba(255, 255, 255, 0.86);
+  box-shadow: 0 22px 60px rgba(99, 58, 158, 0.22);
+  backdrop-filter: blur(22px);
 }
 
 .parent-navigation__menu-user {
