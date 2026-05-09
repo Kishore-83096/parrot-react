@@ -1,0 +1,106 @@
+.contacts-page__header-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.contacts-page__hamburger {
+  padding: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--parent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background-color 0.2s ease;
+}
+
+.contacts-page__hamburger:hover {
+  background-color: rgba(124, 60, 255, 0.08);
+}
+
+.contacts-page__hamburger:active {
+  background-color: rgba(124, 60, 255, 0.15);
+}
+
+.contacts-page__dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: white;
+  border: 1px solid var(--parent-border);
+  border-radius: 12px;
+  box-shadow: 0 10px 32px rgba(99, 58, 158, 0.16);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  animation: slideDown 0.2s ease-out;
+  z-index: 100;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.contacts-page__dropdown-item {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--parent-text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+
+.contacts-page__dropdown-item:hover {
+  background-color: rgba(124, 60, 255, 0.08);
+}
+
+.contacts-page__dropdown-item:active {
+  background-color: rgba(124, 60, 255, 0.15);
+}
+
+.contacts-page__dropdown-item--logout {
+  color: #ef4444;
+}
+
+.contacts-page__dropdown-item--logout:hover {
+  background-color: rgba(239, 68, 68, 0.08);
+}
+
+.contacts-page__dropdown-divider {
+  margin: 6px 0;
+  border: none;
+  border-top: 1px solid var(--parent-border);
+}
+
+.contacts-page__dropdown-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
+.contacts-page__dropdown-avatar-placeholder {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--parent-purple), var(--parent-blue));
+  flex: 0 0 auto;
+}

@@ -25,6 +25,7 @@ import {
 import { getMessengerRooms } from "../../../messenger/api.js";
 import RoomListPage from "../../../messenger/pages/jsx/RoomListPage.jsx";
 import RoomMessagesPage from "../../../messenger/pages/jsx/RoomMessagesPage.jsx";
+import NavigationHeader from "./NavigationHeader.jsx";
 import "../css/ContactsPage.css";
 
 const addContactInitialForm = {
@@ -241,7 +242,14 @@ function mergeRoomById(rooms, nextRoom) {
   );
 }
 
-function ContactsPage({ showNotice }) {
+function ContactsPage({
+  user,
+  profile,
+  showNotice,
+  onAccountClick,
+  onProfileClick,
+  onLogout,
+}) {
   const [contacts, setContacts] = useState([]);
   const [contactsMessage, setContactsMessage] = useState("");
   const [activeSectionTab, setActiveSectionTab] = useState("chats");
@@ -900,6 +908,14 @@ function ContactsPage({ showNotice }) {
       className={`parent-navigation__contacts-shell is-${compactView}-open`}
       aria-labelledby="parent-contacts-title"
     >
+      <NavigationHeader
+        user={user}
+        profile={profile}
+        onAccountClick={onAccountClick}
+        onProfileClick={onProfileClick}
+        onLogout={onLogout}
+      />
+
       <aside className="parent-navigation__contacts-sidebar">
         <div className="parent-navigation__contacts-heading">
           <div className="parent-navigation__contacts-heading-icon">

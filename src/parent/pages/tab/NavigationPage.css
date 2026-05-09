@@ -1,6 +1,8 @@
 @media (min-width: 761px) and (max-width: 1100px) {
   .parent-navigation {
     --parent-page-gap: 16px;
+    --parent-layout-gap: 16px;
+    --parent-header-height: 66px;
   }
 
   .parent-navigation__modal {

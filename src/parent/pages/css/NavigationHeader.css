@@ -1,14 +1,16 @@
 .parent-navigation__header {
-  width: min(1480px, 100%);
-  min-height: 70px;
-  margin: 0 auto;
+  width: 100%;
+  min-height: var(--parent-header-height);
+  margin: 0;
   padding: 10px 12px 10px 22px;
+  position: relative;
+  z-index: 12;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
   border: 1px solid var(--parent-border);
-  border-radius: 32px;
+  border-radius: 28px;
   background:
     radial-gradient(circle at 8% 50%, rgba(124, 60, 255, 0.14), transparent 34%),
     radial-gradient(circle at 88% 50%, rgba(255, 204, 246, 0.72), transparent 36%),
@@ -19,6 +21,7 @@
 }
 
 .parent-navigation__brand {
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   gap: 12px;
@@ -36,89 +39,120 @@
   flex: 0 0 auto;
 }
 
-.parent-navigation__account {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+.parent-navigation__account-menu {
+  position: relative;
+  flex: 0 0 auto;
 }
 
-.parent-navigation__account p {
-  margin: 0 4px 0 0;
-  color: var(--parent-muted);
-  font-size: 15px;
-  font-weight: 720;
-}
-
-.parent-navigation__account button {
+.parent-navigation__menu-button {
   width: 42px;
   min-height: 42px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 15px;
-  color: var(--parent-purple);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(246, 239, 255, 0.92));
   border: 1px solid rgba(124, 60, 255, 0.14);
+  border-radius: 15px;
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--parent-purple), #b95cff);
+  box-shadow: 0 12px 26px rgba(124, 60, 255, 0.22);
   font: inherit;
-  font-size: 14px;
-  font-weight: 760;
   cursor: pointer;
 }
 
-.parent-navigation__account button:not(.parent-navigation__profile-action):not(.parent-navigation__logout) {
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--parent-purple), #b95cff);
-  border-color: rgba(124, 60, 255, 0.2);
-  box-shadow: 0 12px 26px rgba(124, 60, 255, 0.22);
+.parent-navigation__menu-button:hover,
+.parent-navigation__menu-button.is-open {
+  background: linear-gradient(135deg, var(--parent-purple-deep), var(--parent-blue));
 }
 
-.parent-navigation__account .parent-navigation__profile-action {
-  padding: 0;
-  position: relative;
-  overflow: hidden;
-  color: var(--parent-purple);
-  background: linear-gradient(135deg, var(--parent-purple-soft), var(--parent-blue-soft));
-  border: 0;
+.parent-navigation__menu-dropdown {
+  width: min(260px, calc(100vw - (var(--parent-page-gap) * 2) - 18px));
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(124, 60, 255, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 22px 60px rgba(39, 20, 72, 0.2);
+  backdrop-filter: blur(18px);
 }
 
-.parent-navigation__profile-action img,
-.parent-navigation__profile-mark {
-  width: 42px;
-  height: 42px;
+.parent-navigation__menu-user {
+  min-width: 0;
+  padding: 10px 10px 12px;
+  border-bottom: 1px solid rgba(124, 60, 255, 0.1);
+}
+
+.parent-navigation__menu-user span,
+.parent-navigation__menu-user small {
   display: block;
-  border-radius: inherit;
+  overflow-wrap: anywhere;
 }
 
-.parent-navigation__profile-action img {
-  object-fit: cover;
-  object-position: center;
+.parent-navigation__menu-user span {
+  color: var(--parent-text);
+  font-size: 14px;
+  font-weight: 820;
 }
 
-.parent-navigation__account .parent-navigation__logout {
-  width: 42px;
-  padding: 0;
+.parent-navigation__menu-user small {
+  margin-top: 2px;
+  color: var(--parent-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.parent-navigation__menu-item {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--parent-text);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 760;
+  text-align: left;
+  cursor: pointer;
+}
+
+.parent-navigation__menu-item:hover {
+  color: var(--parent-purple-deep);
+  background: rgba(124, 60, 255, 0.08);
+}
+
+.parent-navigation__menu-item--logout {
   color: var(--parent-red);
-  background: var(--parent-red-soft);
-  border-color: rgba(239, 61, 85, 0.18);
 }
 
-.parent-navigation__account .parent-navigation__logout:hover {
+.parent-navigation__menu-item--logout:hover {
   color: #ffffff;
   background: var(--parent-red);
 }
 
+.parent-navigation__menu-avatar,
+.parent-navigation__menu-avatar-mark {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  display: block;
+  border-radius: 50%;
+}
+
+.parent-navigation__menu-avatar {
+  object-fit: cover;
+  object-position: center;
+}
+
 @media (min-width: 761px) and (max-width: 1100px) {
   .parent-navigation__header {
-    width: auto;
-    margin: 0;
-    position: fixed;
-    top: var(--parent-page-gap);
-    left: var(--parent-page-gap);
-    right: var(--parent-page-gap);
-    z-index: 15;
     min-height: 66px;
     padding: 10px 14px 10px 18px;
     gap: 12px;
@@ -132,70 +166,24 @@
   .parent-navigation__brand-icon {
     width: 40px;
     height: 40px;
-    display: block;
   }
 
-  .parent-navigation__account {
-    flex-wrap: nowrap;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .parent-navigation__account p {
-    display: none;
-  }
-
-  .parent-navigation__account button,
-  .parent-navigation__account .parent-navigation__logout {
+  .parent-navigation__menu-button {
     width: 40px;
     min-height: 40px;
     border-radius: 14px;
-  }
-
-  .parent-navigation__profile-action {
-    width: 40px;
-    height: 40px;
-  }
-
-  .parent-navigation__profile-action img,
-  .parent-navigation__profile-mark {
-    width: 40px;
-    height: 40px;
   }
 }
 
 @media (max-width: 760px) {
   .parent-navigation__header {
-    width: auto;
-    margin: 0;
-    position: fixed;
-    top: var(--parent-page-gap);
-    left: var(--parent-page-gap);
-    right: var(--parent-page-gap);
-    z-index: 15;
-    padding: 14px;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+    min-height: 64px;
+    padding: 12px 14px;
     gap: 10px;
-    border-radius: 28px;
-  }
-
-  .parent-navigation__account {
-    width: auto;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-  }
-
-  .parent-navigation__account p {
-    display: none;
+    border-radius: 24px;
   }
 
   .parent-navigation__brand {
-    min-width: 0;
     gap: 8px;
     font-size: 18px;
   }
@@ -205,25 +193,9 @@
     height: 40px;
   }
 
-  .parent-navigation__account button,
-  .parent-navigation__account .parent-navigation__logout {
+  .parent-navigation__menu-button {
     width: 40px;
     min-height: 40px;
     border-radius: 14px;
-  }
-
-  .parent-navigation__profile-action {
-    width: 40px;
-    height: 40px;
-  }
-
-  .parent-navigation__account .parent-navigation__logout {
-    height: 40px;
-  }
-
-  .parent-navigation__profile-action img,
-  .parent-navigation__profile-mark {
-    width: 40px;
-    height: 40px;
   }
 }

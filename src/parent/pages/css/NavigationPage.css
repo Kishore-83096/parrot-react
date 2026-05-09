@@ -16,6 +16,10 @@
   --parent-pink-soft: rgba(251, 232, 251, 0.9);
   --parent-border: rgba(255, 255, 255, 0.82);
   --parent-page-gap: 18px;
+  --parent-shell-max-width: 1480px;
+  --parent-sidebar-width: 380px;
+  --parent-layout-gap: 18px;
+  --parent-header-height: 70px;
 
   width: 100vw;
   min-height: 100svh;

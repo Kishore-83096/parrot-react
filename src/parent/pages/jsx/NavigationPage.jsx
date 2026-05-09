@@ -15,7 +15,6 @@ import { clearMessengerSession } from "../../../messenger/api.js";
 import MessengerInboxListener from "../../../messenger/MessengerInboxListener.jsx";
 import ParrotIcon from "../../components/ParrotIcon.jsx";
 import ContactsPage from "./ContactsPage.jsx";
-import NavigationHeader from "./NavigationHeader.jsx";
 import "../css/NavigationPage.css";
 import "../tab/NavigationPage.css";
 import "../mobile/NavigationPage.css";
@@ -403,19 +402,18 @@ function NavigationPage() {
 
   return (
     <main className="parent-navigation">
-      <NavigationHeader
-        user={user}
-        profile={profile}
-        onAccountClick={openAccountModal}
-        onProfileClick={openProfileModal}
-        onLogout={handleLogout}
-      />
-
       <MessengerInboxListener
         key={user.user_id || user.id || user.account_number || user.username}
       />
 
-      <ContactsPage showNotice={showNotice} />
+      <ContactsPage
+        user={user}
+        profile={profile}
+        showNotice={showNotice}
+        onAccountClick={openAccountModal}
+        onProfileClick={openProfileModal}
+        onLogout={handleLogout}
+      />
 
       {activeModal ? (
         <div className="parent-navigation__modal-backdrop" role="presentation">
