@@ -121,7 +121,11 @@ export const getMessengerRoomMessages = (
     params.limit = limit;
   }
 
-  if (before_message_id !== undefined && before_message_id !== "") {
+  if (
+    before_message_id !== undefined &&
+    before_message_id !== null &&
+    before_message_id !== ""
+  ) {
     params.before_message_id = before_message_id;
   }
 

@@ -10,6 +10,7 @@ const PARENT_API_BASE_URL =
 const ACCESS_TOKEN_KEY = "parent_access_token";
 const REFRESH_TOKEN_KEY = "parent_refresh_token";
 const USER_KEY = "parent_user";
+const tokenExpirationListeners = new Set();
 
 export const parentAxios = axios.create({
   baseURL: PARENT_API_BASE_URL,
@@ -22,15 +23,76 @@ parentAxios.interceptors.request.use((config) => {
   const token = getAccessToken();
 
   if (token) {
+    if (isTokenExpired(token)) {
+      notifyTokenExpired();
+      return Promise.reject(new axios.CanceledError("Parent session expired."));
+    }
+
     config.headers.Authorization = `Bearer ${token}`;
   }
 
   return config;
 });
 
+parentAxios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && getAccessToken()) {
+      notifyTokenExpired();
+    }
+
+    return Promise.reject(error);
+  },
+);
+
+function decodeTokenPayload(token) {
+  try {
+    const payload = token.split(".")[1];
+    const normalizedPayload = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+
+    return JSON.parse(window.atob(normalizedPayload));
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpired(token) {
+  const expiresAt = getTokenExpiration(token);
+
+  return Boolean(expiresAt && expiresAt <= Date.now());
+}
+
+function notifyTokenExpired() {
+  clearParentSession();
+  tokenExpirationListeners.forEach((listener) => listener());
+}
+
 export const getAccessToken = () => localStorage.getItem(ACCESS_TOKEN_KEY);
 
 export const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY);
+
+export const getAccessTokenExpiration = () => {
+  const token = getAccessToken();
+
+  return token ? getTokenExpiration(token) : null;
+};
+
+export const getTokenExpiration = (token) => {
+  const payload = decodeTokenPayload(token);
+
+  return payload?.exp ? payload.exp * 1000 : null;
+};
+
+export const onTokenExpired = (listener) => {
+  tokenExpirationListeners.add(listener);
+
+  return () => {
+    tokenExpirationListeners.delete(listener);
+  };
+};
 
 export const getStoredParentUser = () => {
   const user = localStorage.getItem(USER_KEY);
