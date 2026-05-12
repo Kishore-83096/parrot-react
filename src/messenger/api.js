@@ -179,6 +179,12 @@ export const markMessengerRoomDelivered = (roomId, data = {}) =>
 export const markMessengerRoomRead = (roomId, data = {}) =>
   messengerAxios.post(`/rooms/${encodeURIComponent(roomId)}/read/`, data);
 
+export const releaseMessengerRoomBlockedMessages = (roomId) =>
+  messengerAxios.post(
+    `/rooms/${encodeURIComponent(roomId)}/blocked-messages/release/`,
+    {},
+  );
+
 export const getMessengerErrorMessage = (error, fallbackMessage) => {
   const data = error.response?.data;
   const errors = data?.errors || data?.result?.errors;

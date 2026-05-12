@@ -7,15 +7,18 @@ import {
   Save,
   Trash2,
   Unlock,
+  UserPlus,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
+import { releaseMessengerRoomBlockedMessages } from "../../api.js";
 import {
   blockParentContact,
   deleteParentContact,
+  saveParentContact,
   searchParentUser,
   unblockParentContact,
   updateParentContactAlias,
@@ -36,6 +39,8 @@ function MessengerRoomHeader({
   user,
   onContactDeleted,
   onContactUpdated,
+  onBlockedMessagesReleased,
+  onCloseConversation,
   onToast,
 }) {
   const [peerProfile, setPeerProfile] = useState(null);
@@ -71,13 +76,12 @@ function MessengerRoomHeader({
     selectedConversationContact?.profile_picture ||
     peerProfile?.profile_picture ||
     "";
-  const selectedConversationSubtitle = selectedConversationContact
-    ? peerProfile?.username
-      ? `@${peerProfile.username}`
-      : ""
-    : peerProfile?.username
-      ? `@${peerProfile.username} - ${selectedPeerAccountNumber}`
-      : selectedPeerAccountNumber;
+  const selectedConversationSubtitle = [
+    peerProfile?.username ? `@${peerProfile.username}` : "",
+    selectedPeerAccountNumber,
+  ]
+    .filter(Boolean)
+    .join(" - ");
   const isSelectedConversationBlocked = Boolean(
     selectedConversationContact?.blocked,
   );
@@ -147,6 +151,69 @@ function MessengerRoomHeader({
     setIsEditContactModalOpen(false);
     setEditContactMessage(null);
     setIsContactActionLoading(false);
+  };
+
+  const getUnsavedContactAlias = () => {
+    const peerFullName = [peerProfile?.first_name, peerProfile?.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    return (
+      peerProfile?.username ||
+      peerFullName ||
+      selectedRoomPeer?.display_name ||
+      selectedConversationName ||
+      selectedPeerAccountNumber
+    ).trim();
+  };
+
+  const handleSaveSelectedPeer = async () => {
+    const aliasName = getUnsavedContactAlias();
+
+    if (!selectedPeerAccountNumber || selectedConversationContact || !aliasName) {
+      return;
+    }
+
+    setIsContactActionLoading(true);
+    setActionMessage("");
+
+    try {
+      const response = await saveParentContact({
+        account_number: selectedPeerAccountNumber,
+        alias_name: aliasName,
+      });
+      const savedContact = response.data?.contact;
+
+      if (savedContact) {
+        onContactUpdated(savedContact);
+      }
+
+      onToast?.({
+        type: "success",
+        title: "Contact saved",
+        message: `${aliasName} was added to your contacts.`,
+      });
+    } catch (error) {
+      const errorMessage = getParentApiErrorMessage(
+        error,
+        "Unable to save this contact.",
+      );
+
+      setActionMessage(errorMessage);
+      onToast?.({
+        type: "error",
+        title: "Contact not saved",
+        message: errorMessage,
+      });
+    } finally {
+      setIsContactActionLoading(false);
+    }
+  };
+
+  const handleCloseConversation = () => {
+    setIsConversationMenuOpen(false);
+    onCloseConversation?.();
   };
 
   const handleEditContactChange = (event) => {
@@ -220,6 +287,18 @@ function MessengerRoomHeader({
 
       if (updatedContact) {
         onContactUpdated(updatedContact);
+      }
+
+      if (!willBlockContact && selectedRoom?.id) {
+        releaseMessengerRoomBlockedMessages(selectedRoom.id)
+          .then((releaseResponse) => {
+            onBlockedMessagesReleased?.(releaseResponse.data?.result);
+          })
+          .catch(() => {
+            setActionMessage(
+              "Contact unblocked. Refresh the chat if older sent messages do not appear.",
+            );
+          });
       }
 
       onToast?.({
@@ -388,78 +467,102 @@ function MessengerRoomHeader({
           ) : null}
         </div>
 
-        {selectedConversationContact ? (
-          <div className="parent-layout-page__conversation-actions">
-            <button
-              className="parent-layout-page__conversation-menu-button"
-              type="button"
-              onClick={() =>
-                setIsConversationMenuOpen((currentValue) => !currentValue)
-              }
-              aria-label="Contact actions"
-              aria-expanded={isConversationMenuOpen}
-              title="Contact actions"
-              disabled={isContactActionLoading}
-            >
-              <MoreVertical size={22} aria-hidden="true" />
-            </button>
+        <div className="parent-layout-page__conversation-actions">
+          {selectedConversationContact ? (
+            <>
+              <button
+                className="parent-layout-page__conversation-menu-button"
+                type="button"
+                onClick={() =>
+                  setIsConversationMenuOpen((currentValue) => !currentValue)
+                }
+                aria-label="Contact actions"
+                aria-expanded={isConversationMenuOpen}
+                title="Contact actions"
+                disabled={isContactActionLoading}
+              >
+                <MoreVertical size={22} aria-hidden="true" />
+              </button>
 
-            {isConversationMenuOpen ? (
-              <div className="parent-layout-page__conversation-menu">
-                <button type="button" onClick={openEditContactModal}>
-                  <Pencil size={16} aria-hidden="true" />
-                  <span>Edit Name</span>
-                </button>
-                <button
-                  className={`parent-layout-page__block-toggle ${
-                    isSelectedConversationBlocked ? "is-blocked" : "is-unblocked"
-                  }`}
-                  type="button"
-                  role="switch"
-                  aria-checked={isSelectedConversationBlocked}
-                  aria-label={
-                    isSelectedConversationBlocked
-                      ? "Unblock contact"
-                      : "Block contact"
-                  }
-                  title={
-                    isSelectedConversationBlocked
-                      ? "Unblock contact"
-                      : "Block contact"
-                  }
-                  onClick={handleToggleSelectedContactBlock}
-                  disabled={isContactActionLoading}
-                >
-                  <span className="parent-layout-page__block-toggle-label">
-                    {isSelectedConversationBlocked ? (
-                      <Ban size={16} aria-hidden="true" />
-                    ) : (
-                      <Unlock size={16} aria-hidden="true" />
-                    )}
-                    <span>
-                      {isSelectedConversationBlocked ? "Blocked" : "Unblocked"}
-                    </span>
-                  </span>
-                  <span
-                    className="parent-layout-page__block-toggle-switch"
-                    aria-hidden="true"
+              {isConversationMenuOpen ? (
+                <div className="parent-layout-page__conversation-menu">
+                  <button type="button" onClick={openEditContactModal}>
+                    <Pencil size={16} aria-hidden="true" />
+                    <span>Edit Name</span>
+                  </button>
+                  <button
+                    className={`parent-layout-page__block-toggle ${
+                      isSelectedConversationBlocked ? "is-blocked" : "is-unblocked"
+                    }`}
+                    type="button"
+                    role="switch"
+                    aria-checked={isSelectedConversationBlocked}
+                    aria-label={
+                      isSelectedConversationBlocked
+                        ? "Unblock contact"
+                        : "Block contact"
+                    }
+                    title={
+                      isSelectedConversationBlocked
+                        ? "Unblock contact"
+                        : "Block contact"
+                    }
+                    onClick={handleToggleSelectedContactBlock}
+                    disabled={isContactActionLoading}
                   >
-                    <span />
-                  </span>
-                </button>
-                <button
-                  className="is-danger"
-                  type="button"
-                  onClick={handleDeleteSelectedContact}
-                  disabled={isContactActionLoading}
-                >
-                  <Trash2 size={16} aria-hidden="true" />
-                  <span>Delete</span>
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+                    <span className="parent-layout-page__block-toggle-label">
+                      {isSelectedConversationBlocked ? (
+                        <Ban size={16} aria-hidden="true" />
+                      ) : (
+                        <Unlock size={16} aria-hidden="true" />
+                      )}
+                      <span>
+                        {isSelectedConversationBlocked ? "Blocked" : "Unblocked"}
+                      </span>
+                    </span>
+                    <span
+                      className="parent-layout-page__block-toggle-switch"
+                      aria-hidden="true"
+                    >
+                      <span />
+                    </span>
+                  </button>
+                  <button
+                    className="is-danger"
+                    type="button"
+                    onClick={handleDeleteSelectedContact}
+                    disabled={isContactActionLoading}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                    <span>Delete</span>
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <button
+              className="parent-layout-page__conversation-save-button"
+              type="button"
+              onClick={handleSaveSelectedPeer}
+              disabled={isContactActionLoading}
+              aria-label={`Save ${selectedConversationName} as contact`}
+              title="Save contact"
+            >
+              <UserPlus size={18} aria-hidden="true" />
+              <span>{isContactActionLoading ? "Saving..." : "Save Contact"}</span>
+            </button>
+          )}
+
+          <button
+            className="parent-layout-page__conversation-close-button"
+            type="button"
+            onClick={handleCloseConversation}
+            aria-label="Close message room"
+            title="Close chat"
+          >
+            <X size={21} aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       {editContactModal ? createPortal(editContactModal, document.body) : null}

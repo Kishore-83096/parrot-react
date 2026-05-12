@@ -1,4 +1,5 @@
 import {
+  Ban,
   Check,
   CheckCheck,
   LoaderCircle,
@@ -26,7 +27,6 @@ import {
 } from "../../api.js";
 import {
   formatRoomTime,
-  getConversationContact,
   getConversationPeerAccount,
   getCurrentUserId,
   getMessageDateDividerLabel,
@@ -60,10 +60,10 @@ function mergeMessagePage(currentMessages, pageMessages) {
 }
 
 function MessengerConversation({
-  contacts,
   selectedContact,
   selectedRoom,
   user,
+  releasedMessagesVersion,
   onRoomMessage,
   onRoomRead,
 }) {
@@ -88,12 +88,6 @@ function MessengerConversation({
   const selectedPeerAccountNumber = getConversationPeerAccount({
     selectedContact,
     selectedRoom,
-    user,
-  });
-  const selectedConversationContact = getConversationContact({
-    selectedContact,
-    selectedRoom,
-    contacts,
     user,
   });
   const hasActiveConversation = Boolean(selectedPeerAccountNumber);
@@ -200,7 +194,12 @@ function MessengerConversation({
     }
 
     loadRoomMessages(selectedRoom.id);
-  }, [loadRoomMessages, selectedPeerAccountNumber, selectedRoom?.id]);
+  }, [
+    loadRoomMessages,
+    releasedMessagesVersion,
+    selectedPeerAccountNumber,
+    selectedRoom?.id,
+  ]);
 
   useLayoutEffect(() => {
     const scrollSnapshot = olderMessagesScrollRef.current;
@@ -511,9 +510,20 @@ function MessengerConversation({
 
   if (!hasActiveConversation) {
     return (
-      <div className="parent-layout-page__room-placeholder">
+      <div className="parent-layout-page__room-placeholder parent-layout-page__room-placeholder--chat">
         <MessageCircle size={32} aria-hidden="true" />
-        <p>Select a contact or chat room to open messages here.</p>
+        <div className="parent-layout-page__room-placeholder-copy">
+          <h3>Private contact chat</h3>
+          <p>
+            Message saved contacts, see live delivery updates, and keep control
+            with block, unblock, and contact-saving tools.
+          </p>
+        </div>
+        <ul className="parent-layout-page__room-feature-list" aria-label="Chat features">
+          <li>Real-time conversations</li>
+          <li>Sent, delivered, and read status</li>
+          <li>Saved-contact and block controls</li>
+        </ul>
       </div>
     );
   }
@@ -560,6 +570,7 @@ function MessengerConversation({
               ({ dateLabel, message, shouldShowDateDivider }) => {
             const isMine = Number(message.sender_user_id) === currentUserId;
             const messageStatus = getMessageStatusLabel(message.status);
+            const sentWhileBlocked = Boolean(message.sent_while_blocked);
 
             return (
               <Fragment key={message.id}>
@@ -596,6 +607,15 @@ function MessengerConversation({
                       <time dateTime={message.created_at}>
                         {formatRoomTime(message.created_at)}
                       </time>
+                      {sentWhileBlocked ? (
+                        <span
+                          className="parent-layout-page__message-blocked-marker"
+                          aria-label="Sent while blocked"
+                          title="Sent while blocked"
+                        >
+                          <Ban size={13} aria-hidden="true" />
+                        </span>
+                      ) : null}
                       {isMine ? (
                         <span
                           className={`parent-layout-page__message-status is-${
@@ -637,12 +657,8 @@ function MessengerConversation({
           value={messageDraft}
           onChange={handleMessageDraftChange}
           onKeyDown={handleMessageDraftKeyDown}
-          placeholder={
-            selectedConversationContact?.blocked
-              ? "Unblock to send a message"
-              : "Message"
-          }
-          disabled={isSendingMessage || selectedConversationContact?.blocked}
+          placeholder="Message"
+          disabled={isSendingMessage}
           maxLength={5000}
           rows={1}
         />
@@ -650,8 +666,7 @@ function MessengerConversation({
           type="submit"
           disabled={
             !messageDraft.trim() ||
-            isSendingMessage ||
-            selectedConversationContact?.blocked
+            isSendingMessage
           }
           aria-label={isSendingMessage ? "Sending message" : "Send message"}
           title="Send"

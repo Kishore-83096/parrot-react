@@ -381,9 +381,27 @@
   min-height: 100%;
 }
 
+.parent-layout-page__room-placeholder--chat {
+  padding: 24px;
+}
+
 .parent-layout-page__contacts-placeholder svg,
 .parent-layout-page__room-placeholder svg {
   color: var(--layout-purple);
+}
+
+.parent-layout-page__room-placeholder-copy {
+  max-width: 420px;
+  display: grid;
+  gap: 8px;
+}
+
+.parent-layout-page__room-placeholder h3 {
+  margin: 0;
+  color: var(--layout-text);
+  font-size: 24px;
+  line-height: 1.12;
+  font-weight: 860;
 }
 
 .parent-layout-page__contacts-placeholder p,
@@ -393,6 +411,34 @@
   font-size: 14px;
   line-height: 1.45;
   font-weight: 700;
+}
+
+.parent-layout-page__room-placeholder-copy p {
+  max-width: none;
+}
+
+.parent-layout-page__room-feature-list {
+  width: min(100%, 520px);
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  list-style: none;
+}
+
+.parent-layout-page__room-feature-list li {
+  min-height: 48px;
+  padding: 10px 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(124, 60, 255, 0.12);
+  border-radius: 14px;
+  color: #40354f;
+  background: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 800;
 }
 
 .parent-layout-page__contacts {
@@ -815,6 +861,62 @@
 
 .parent-layout-page__conversation-actions {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parent-layout-page__conversation-save-button {
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(24, 185, 99, 0.18);
+  border-radius: 14px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #18b963, #0e8749);
+  box-shadow: 0 12px 24px rgba(24, 185, 99, 0.16);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 840;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.parent-layout-page__conversation-save-button:hover,
+.parent-layout-page__conversation-save-button:focus-visible {
+  background: linear-gradient(135deg, #0e8749, #096b39);
+  outline: none;
+  box-shadow:
+    0 12px 24px rgba(24, 185, 99, 0.22),
+    0 0 0 4px rgba(24, 185, 99, 0.12);
+}
+
+.parent-layout-page__conversation-save-button:disabled {
+  cursor: wait;
+  opacity: 0.78;
+}
+
+.parent-layout-page__conversation-close-button {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(239, 61, 85, 0.16);
+  border-radius: 14px;
+  color: #ef3d55;
+  background: rgba(255, 235, 239, 0.82);
+  cursor: pointer;
+}
+
+.parent-layout-page__conversation-close-button:hover,
+.parent-layout-page__conversation-close-button:focus-visible {
+  color: #ffffff;
+  background: #ef3d55;
+  outline: none;
 }
 
 .parent-layout-page__conversation-menu-button {
@@ -1169,6 +1271,20 @@
 .parent-layout-page__message-status svg {
   display: block;
   stroke-width: 2.7;
+}
+
+.parent-layout-page__message-blocked-marker {
+  width: 16px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 16px;
+  color: #b42318;
+}
+
+.parent-layout-page__message-blocked-marker svg {
+  display: block;
+  stroke-width: 2.6;
 }
 
 .parent-layout-page__message-status.is-delivered {
@@ -1948,6 +2064,10 @@
   .parent-layout-page__profile-tabs button {
     padding: 0 8px;
     font-size: 12px;
+  }
+
+  .parent-layout-page__room-feature-list {
+    grid-template-columns: 1fr;
   }
 
 }

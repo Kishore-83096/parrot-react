@@ -49,6 +49,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [rooms, setRooms] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [releasedMessagesVersion, setReleasedMessagesVersion] = useState(0);
   const [toast, setToast] = useState(null);
   const currentUserId = getCurrentUserId(user);
 
@@ -114,6 +115,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const handleSelectRoom = useCallback((room, contact) => {
     setSelectedRoom(room);
     setSelectedContact(contact || null);
+  }, []);
+
+  const handleCloseConversation = useCallback(() => {
+    setSelectedRoom(null);
+    setSelectedContact(null);
   }, []);
 
   const handleContactUpdated = useCallback((updatedContact) => {
@@ -235,6 +241,14 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     );
   }, []);
 
+  const handleBlockedMessagesReleased = useCallback((releaseResult) => {
+    if (!releaseResult?.room_id) {
+      return;
+    }
+
+    setReleasedMessagesVersion((currentVersion) => currentVersion + 1);
+  }, []);
+
   useEffect(() => {
     const handleInboxEvent = (event) => {
       const eventPayload = event.detail;
@@ -341,6 +355,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             user={user}
             onContactDeleted={handleContactDeleted}
             onContactUpdated={handleContactUpdated}
+            onBlockedMessagesReleased={handleBlockedMessagesReleased}
+            onCloseConversation={handleCloseConversation}
             onToast={setToast}
           />
         }
@@ -350,6 +366,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             selectedContact={selectedContact}
             selectedRoom={selectedRoom}
             user={user}
+            releasedMessagesVersion={releasedMessagesVersion}
             onRoomMessage={handleRoomMessage}
             onRoomRead={handleRoomRead}
           />
