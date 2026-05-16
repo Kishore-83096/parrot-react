@@ -79,6 +79,11 @@ export const getMessengerToken = async ({ forceRefresh = false } = {}) => {
 messengerAxios.interceptors.request.use(async (config) => {
   const token = await getMessengerToken();
 
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+    delete config.headers["content-type"];
+  }
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -113,7 +118,7 @@ export const getMessengerRooms = () => messengerAxios.get("/rooms/");
 
 export const getMessengerRoomMessages = (
   roomId,
-  { limit, before_message_id } = {},
+  { limit, before_message_id, around_message_id } = {},
 ) => {
   const params = {};
 
@@ -127,6 +132,14 @@ export const getMessengerRoomMessages = (
     before_message_id !== ""
   ) {
     params.before_message_id = before_message_id;
+  }
+
+  if (
+    around_message_id !== undefined &&
+    around_message_id !== null &&
+    around_message_id !== ""
+  ) {
+    params.around_message_id = around_message_id;
   }
 
   return messengerAxios.get(
