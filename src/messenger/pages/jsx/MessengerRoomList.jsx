@@ -19,6 +19,7 @@ function MessengerRoomList({
   rooms,
   selectedRoom,
   user,
+  onlineUserIds,
   onContactsChange,
   onRoomsChange,
   onSelectRoom,
@@ -160,6 +161,7 @@ function MessengerRoomList({
             const peerAccountNumber = String(peer?.account_number || "");
             const contact = contactsByAccountNumber.get(peerAccountNumber) || null;
             const isSelected = selectedRoom?.id === room.id;
+            const isPeerOnline = onlineUserIds?.has(Number(peer?.user_id));
             const unreadCount = Number(room.unread_count || 0);
             const roomName =
               (contact ? getContactName(contact) : "") ||
@@ -180,7 +182,9 @@ function MessengerRoomList({
                 onClick={() => onSelectRoom(room, contact)}
               >
                 <span
-                  className="parent-layout-page__contact-avatar"
+                  className={`parent-layout-page__contact-avatar${
+                    isPeerOnline ? " is-online" : ""
+                  }`}
                   aria-hidden="true"
                 >
                   {contact?.profile_picture ? (
@@ -188,6 +192,9 @@ function MessengerRoomList({
                   ) : (
                     getRoomInitials(room, contact, peer)
                   )}
+                  {isPeerOnline ? (
+                    <span className="parent-layout-page__presence-dot" />
+                  ) : null}
                 </span>
 
                 <span className="parent-layout-page__contact-text">

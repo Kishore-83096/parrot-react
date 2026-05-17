@@ -631,6 +631,7 @@
 .parent-layout-page__contact-avatar {
   width: 42px;
   height: 42px;
+  position: relative;
   display: grid;
   place-items: center;
   border-radius: 15px;
@@ -638,14 +639,27 @@
   background: linear-gradient(135deg, var(--layout-blue), var(--layout-purple));
   font-size: 13px;
   font-weight: 850;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .parent-layout-page__contact-avatar img {
   width: 100%;
   height: 100%;
   display: block;
+  border-radius: inherit;
   object-fit: cover;
+}
+
+.parent-layout-page__presence-dot {
+  width: 11px;
+  height: 11px;
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: #18b963;
+  box-shadow: 0 0 0 3px rgba(24, 185, 99, 0.16);
 }
 
 .parent-layout-page__contact-text {
@@ -689,6 +703,12 @@
   color: var(--layout-muted);
   font-size: 11px;
   font-weight: 700;
+}
+
+.parent-layout-page__contact-text .parent-layout-page__presence-text {
+  color: #0e8749;
+  font-size: 11px;
+  font-weight: 820;
 }
 
 .parent-layout-page__chat-meta {
@@ -851,6 +871,25 @@
   font-size: 13px;
   line-height: 1.2;
   font-weight: 740;
+}
+
+.parent-layout-page__presence-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #0e8749;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 840;
+}
+
+.parent-layout-page__presence-status span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #18b963;
+  box-shadow: 0 0 0 3px rgba(24, 185, 99, 0.14);
 }
 
 .parent-layout-page__conversation-title .parent-layout-page__conversation-action-message {
@@ -1185,6 +1224,120 @@
   opacity: 0.72;
 }
 
+.parent-layout-page__typing-indicator {
+  justify-self: start;
+  max-width: min(74%, 360px);
+  padding: 8px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(124, 60, 255, 0.1);
+  border-radius: 16px;
+  color: var(--layout-muted);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.82), rgba(244, 239, 255, 0.68)),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: 0 10px 20px rgba(95, 52, 167, 0.08);
+}
+
+.parent-layout-page__typing-indicator > span {
+  width: 36px;
+  height: 23px;
+  position: relative;
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  overflow: hidden;
+  padding: 5px 6px 4px;
+  border: 1px solid rgba(124, 60, 255, 0.12);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(244, 239, 255, 0.66)),
+    rgba(255, 255, 255, 0.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.88),
+    inset 0 -2px 0 rgba(100, 32, 232, 0.08),
+    0 7px 15px rgba(95, 52, 167, 0.1);
+}
+
+.parent-layout-page__typing-indicator > span::before {
+  content: "";
+  position: absolute;
+  inset: 2px 3px auto;
+  height: 1px;
+  border-radius: 999px;
+  background: rgba(100, 32, 232, 0.16);
+}
+
+.parent-layout-page__typing-indicator > span::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  right: 5px;
+  bottom: 3px;
+  height: 1px;
+  border-radius: 999px;
+  background: rgba(100, 32, 232, 0.2);
+}
+
+.parent-layout-page__typing-indicator i {
+  width: 3px;
+  height: 3px;
+  display: block;
+  border-radius: 1px;
+  background: rgba(100, 32, 232, 0.74);
+  box-shadow:
+    5px 0 0 rgba(100, 32, 232, 0.52),
+    10px 0 0 rgba(100, 32, 232, 0.76),
+    15px 0 0 rgba(100, 32, 232, 0.46),
+    20px 0 0 rgba(100, 32, 232, 0.62);
+  animation: parentTypingKeyFlicker 1250ms ease-in-out infinite;
+}
+
+.parent-layout-page__typing-indicator i:nth-child(2) {
+  margin-left: 2px;
+  box-shadow:
+    5px 0 0 rgba(100, 32, 232, 0.72),
+    10px 0 0 rgba(100, 32, 232, 0.44),
+    15px 0 0 rgba(100, 32, 232, 0.7),
+    20px 0 0 rgba(100, 32, 232, 0.38);
+  animation-delay: 180ms;
+}
+
+.parent-layout-page__typing-indicator i:nth-child(3) {
+  width: 14px;
+  margin-left: 6px;
+  background: rgba(100, 32, 232, 0.66);
+  box-shadow:
+    -5px 0 0 rgba(100, 32, 232, 0.35),
+    19px 0 0 rgba(100, 32, 232, 0.38);
+  animation-delay: 360ms;
+}
+
+.parent-layout-page__typing-indicator p {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 780;
+}
+
+@keyframes parentTypingKeyFlicker {
+  0%,
+  100% {
+    opacity: 0.42;
+    filter: saturate(0.9);
+  }
+
+  28%,
+  62% {
+    opacity: 1;
+    filter: saturate(1.35);
+  }
+}
+
 .parent-layout-page__message-date-divider {
   display: grid;
   place-items: center;
@@ -1400,6 +1553,10 @@
 .parent-layout-page__message-status svg {
   display: block;
   stroke-width: 2.7;
+}
+
+.parent-layout-page__message-status.is-sending svg {
+  animation: parentMessageSpinner 0.8s linear infinite;
 }
 
 .parent-layout-page__message-blocked-marker {
@@ -1784,46 +1941,92 @@
 
 .parent-layout-page__message-submit:disabled {
   cursor: default;
-  opacity: 0.52;
+  opacity: 0.78;
+}
+
+.parent-layout-page__send-buffer {
+  position: relative;
+  width: 25px;
+  height: 14px;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
+}
+
+.parent-layout-page__send-buffer::before,
+.parent-layout-page__send-buffer::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: -12px;
+  width: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  animation: parentSendBuffer 1.05s ease-in-out infinite;
+}
+
+.parent-layout-page__send-buffer::after {
+  animation-delay: 0.48s;
+  opacity: 0.72;
 }
 
 .parent-layout-page__attachment-viewer {
-  position: absolute;
+  --layout-text: #090812;
+  --layout-muted: #6e657d;
+  --layout-purple: #7a35f5;
+  --layout-purple-deep: #6420e8;
+  --layout-blue: #3f8cff;
+
+  position: fixed;
   inset: 0;
-  z-index: 45;
+  z-index: 10000;
   display: grid;
   place-items: center;
-  padding: 14px;
+  padding: 22px;
   overflow: hidden;
+}
+
+.parent-layout-page__attachment-viewer,
+.parent-layout-page__attachment-viewer *,
+.parent-layout-page__attachment-viewer *::before,
+.parent-layout-page__attachment-viewer *::after {
+  box-sizing: border-box;
 }
 
 .parent-layout-page__attachment-viewer-backdrop {
   position: absolute;
   inset: 0;
   border: 0;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px) saturate(1.18);
+  background:
+    radial-gradient(circle at 10% 10%, rgba(255, 255, 255, 0.24), transparent 34%),
+    rgba(20, 14, 32, 0.32);
+  backdrop-filter: blur(22px) saturate(1.24);
   cursor: default;
 }
 
 .parent-layout-page__attachment-viewer-surface {
-  width: min(900px, calc(100% - 28px));
-  height: min(720px, calc(100% - 28px));
+  width: min(1120px, calc(100vw - 44px));
+  height: min(820px, calc(100svh - 44px));
   position: relative;
   z-index: 1;
   display: grid;
   grid-template-rows: 58px auto minmax(0, 1fr);
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.46);
-  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 18px;
   color: var(--layout-text);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.36), rgba(244, 239, 255, 0.22)),
-    rgba(255, 255, 255, 0.18);
+    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.44), transparent 34%),
+    radial-gradient(circle at 90% 14%, rgba(255, 181, 230, 0.28), transparent 36%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(244, 239, 255, 0.18)),
+    rgba(255, 255, 255, 0.14);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.58),
-    0 22px 70px rgba(45, 28, 76, 0.24);
-  backdrop-filter: blur(28px) saturate(1.25);
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 34px 120px rgba(28, 18, 48, 0.38);
+  backdrop-filter: blur(30px) saturate(1.28);
 }
 
 .parent-layout-page__attachment-viewer-surface.has-single-tab {
@@ -1832,7 +2035,7 @@
 
 .parent-layout-page__attachment-viewer-surface header {
   min-width: 0;
-  padding: 10px 12px 10px 16px;
+  padding: 10px 18px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 38px;
   align-items: center;
@@ -2077,12 +2280,15 @@
 }
 
 .parent-layout-page__attachment-image-stage img {
-  width: auto;
-  height: auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   max-width: 100%;
   max-height: 100%;
   display: block;
   object-fit: contain;
+  object-position: center center;
 }
 
 .parent-layout-page__attachment-image-nav {
@@ -2836,6 +3042,26 @@
 @keyframes parentMessageSpinner {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes parentSendBuffer {
+  0% {
+    transform: translateX(0) scaleX(0.72);
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  70% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateX(38px) scaleX(1);
+    opacity: 0;
   }
 }
 

@@ -37,6 +37,7 @@ function MessengerRoomHeader({
   selectedContact,
   selectedRoom,
   user,
+  onlineUserIds,
   onContactDeleted,
   onContactUpdated,
   onBlockedMessagesReleased,
@@ -84,6 +85,9 @@ function MessengerRoomHeader({
     .join(" - ");
   const isSelectedConversationBlocked = Boolean(
     selectedConversationContact?.blocked,
+  );
+  const isSelectedPeerOnline = onlineUserIds?.has(
+    Number(selectedRoomPeer?.user_id),
   );
 
   useEffect(() => {
@@ -452,8 +456,21 @@ function MessengerRoomHeader({
           <h2 id="parrot-layout-room-title">{selectedConversationName}</h2>
           {selectedConversationSubtitle ? (
             <div className="parent-layout-page__conversation-meta">
+              {isSelectedPeerOnline ? (
+                <span className="parent-layout-page__presence-status">
+                  <span aria-hidden="true" />
+                  Online
+                </span>
+              ) : null}
               <span className="parent-layout-page__conversation-subtitle">
                 {selectedConversationSubtitle}
+              </span>
+            </div>
+          ) : isSelectedPeerOnline ? (
+            <div className="parent-layout-page__conversation-meta">
+              <span className="parent-layout-page__presence-status">
+                <span aria-hidden="true" />
+                Online
               </span>
             </div>
           ) : null}

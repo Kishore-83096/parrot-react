@@ -18,6 +18,7 @@
   Video,
   X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import {
   Fragment,
   useCallback,
@@ -56,6 +57,9 @@ const MAX_MESSAGE_ATTACHMENTS = 10;
 const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
 const MEDIA_CACHE_NAME = "parrot-message-media-v1";
 const ATTACHMENT_PREVIEW_LIMIT = 4;
+const TYPING_REFRESH_INTERVAL_MS = 3000;
+const TYPING_STOP_DELAY_MS = 1600;
+const TYPING_REMOTE_TIMEOUT_MS = 8000;
 const ATTACHMENT_TABS = [
   { id: "all", label: "All" },
   { id: "images", label: "Images" },
@@ -104,6 +108,23 @@ function getAttachmentLabel(attachment) {
 
 function getAttachmentDownloadName(attachment) {
   return getAttachmentLabel(attachment).replace(/[\\/:*?"<>|]+/g, "_");
+}
+
+function createOptimisticAttachment(selectedFile, index) {
+  const { file, fileType } = selectedFile;
+  const objectUrl = URL.createObjectURL(file);
+
+  return {
+    id: `pending-attachment-${selectedFile.id}`,
+    file_type: fileType,
+    file_url: objectUrl,
+    file_name: file.name,
+    mime_type: file.type,
+    file_size_bytes: file.size,
+    sort_order: index,
+    is_pending: true,
+    object_url: objectUrl,
+  };
 }
 
 function getAttachmentKey(attachment) {
@@ -712,7 +733,7 @@ function AttachmentViewerModal({
     return null;
   }
 
-  return (
+  const viewer = (
     <div
       className="parent-layout-page__attachment-viewer"
       role="dialog"
@@ -795,6 +816,12 @@ function AttachmentViewerModal({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") {
+    return viewer;
+  }
+
+  return createPortal(viewer, document.body);
 }
 
 function getSelectedFileType(file) {
@@ -903,15 +930,22 @@ function MessengerConversation({
     activeTab: "all",
     selectedAttachmentId: "",
   });
+  const [typingUserIds, setTypingUserIds] = useState([]);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const roomSocketRef = useRef(null);
   const messagesListRef = useRef(null);
   const messagesEndRef = useRef(null);
   const messageDraftRef = useRef(null);
   const fileInputRef = useRef(null);
+  const isSendingMessageRef = useRef(false);
   const olderMessagesScrollRef = useRef(null);
   const skipNextAutoScrollRef = useRef(false);
   const isOlderMessagesLoadingRef = useRef(false);
   const replyDragStateRef = useRef(null);
+  const typingStopTimeoutRef = useRef(null);
+  const typingRemoteTimeoutsRef = useRef(new Map());
+  const isTypingSentRef = useRef(false);
+  const lastTypingStartedAtRef = useRef(0);
 
   const focusMessageDraft = useCallback(() => {
     const textarea = messageDraftRef.current;
@@ -945,6 +979,117 @@ function MessengerConversation({
     user,
   });
   const hasActiveConversation = Boolean(selectedPeerAccountNumber);
+
+  const clearTypingStopTimeout = useCallback(() => {
+    if (typingStopTimeoutRef.current) {
+      globalThis.clearTimeout(typingStopTimeoutRef.current);
+      typingStopTimeoutRef.current = null;
+    }
+  }, []);
+
+  const sendRoomSocketEvent = useCallback((eventType) => {
+    const socket = roomSocketRef.current;
+
+    if (!socket || socket.readyState !== globalThis.WebSocket?.OPEN) {
+      return false;
+    }
+
+    socket.send(JSON.stringify({ type: eventType }));
+    return true;
+  }, []);
+
+  const sendTypingStopped = useCallback(() => {
+    clearTypingStopTimeout();
+
+    if (!isTypingSentRef.current) {
+      return;
+    }
+
+    sendRoomSocketEvent("typing.stopped");
+    isTypingSentRef.current = false;
+    lastTypingStartedAtRef.current = 0;
+  }, [clearTypingStopTimeout, sendRoomSocketEvent]);
+
+  const scheduleTypingStopped = useCallback(() => {
+    clearTypingStopTimeout();
+    typingStopTimeoutRef.current = globalThis.setTimeout(() => {
+      sendTypingStopped();
+    }, TYPING_STOP_DELAY_MS);
+  }, [clearTypingStopTimeout, sendTypingStopped]);
+
+  const sendTypingStarted = useCallback(() => {
+    const now = Date.now();
+
+    if (
+      !isTypingSentRef.current ||
+      now - lastTypingStartedAtRef.current >= TYPING_REFRESH_INTERVAL_MS
+    ) {
+      if (sendRoomSocketEvent("typing.started")) {
+        isTypingSentRef.current = true;
+        lastTypingStartedAtRef.current = now;
+      }
+    }
+
+    scheduleTypingStopped();
+  }, [scheduleTypingStopped, sendRoomSocketEvent]);
+
+  const removeRemoteTypingUser = useCallback((userId) => {
+    const numericUserId = Number(userId);
+
+    if (!numericUserId) {
+      return;
+    }
+
+    const timeout = typingRemoteTimeoutsRef.current.get(numericUserId);
+    if (timeout) {
+      globalThis.clearTimeout(timeout);
+      typingRemoteTimeoutsRef.current.delete(numericUserId);
+    }
+
+    setTypingUserIds((currentUserIds) =>
+      currentUserIds.filter((currentUserId) => currentUserId !== numericUserId),
+    );
+  }, []);
+
+  const setRemoteTypingUser = useCallback(
+    (userId, expiresInSeconds) => {
+      const numericUserId = Number(userId);
+
+      if (!numericUserId || numericUserId === Number(currentUserId)) {
+        return;
+      }
+
+      setTypingUserIds((currentUserIds) =>
+        currentUserIds.includes(numericUserId)
+          ? currentUserIds
+          : [...currentUserIds, numericUserId],
+      );
+
+      const previousTimeout =
+        typingRemoteTimeoutsRef.current.get(numericUserId);
+      if (previousTimeout) {
+        globalThis.clearTimeout(previousTimeout);
+      }
+
+      const timeout = globalThis.setTimeout(
+        () => removeRemoteTypingUser(numericUserId),
+        Math.max(
+          Number(expiresInSeconds || 0) * 1000,
+          TYPING_REMOTE_TIMEOUT_MS,
+        ),
+      );
+      typingRemoteTimeoutsRef.current.set(numericUserId, timeout);
+    },
+    [currentUserId, removeRemoteTypingUser],
+  );
+
+  const clearRemoteTypingUsers = useCallback(() => {
+    typingRemoteTimeoutsRef.current.forEach((timeout) => {
+      globalThis.clearTimeout(timeout);
+    });
+    typingRemoteTimeoutsRef.current.clear();
+    setTypingUserIds([]);
+  }, []);
 
   const markRoomReadForMessages = useCallback(
     async (roomId, messages) => {
@@ -1053,6 +1198,8 @@ function MessengerConversation({
   );
 
   useEffect(() => {
+    sendTypingStopped();
+    clearRemoteTypingUsers();
     setMessageDraft("");
     setReplyTarget(null);
     setSelectedFiles([]);
@@ -1074,10 +1221,12 @@ function MessengerConversation({
 
     loadRoomMessages(selectedRoom.id);
   }, [
+    clearRemoteTypingUsers,
     loadRoomMessages,
     releasedMessagesVersion,
     selectedPeerAccountNumber,
     selectedRoom?.id,
+    sendTypingStopped,
   ]);
 
   useEffect(() => {
@@ -1171,6 +1320,7 @@ function MessengerConversation({
         }
 
         socket = new WebSocket(getMessengerRoomWebSocketUrl(roomId, token));
+        roomSocketRef.current = socket;
 
         socket.onopen = () => {
           reconnectAttempt = 0;
@@ -1189,6 +1339,34 @@ function MessengerConversation({
             eventPayload.type === "connection.accepted" ||
             eventPayload.type === "pong"
           ) {
+            return;
+          }
+
+          if (
+            eventPayload.type === "typing.snapshot" &&
+            Number(eventPayload.room_id) === Number(roomId)
+          ) {
+            clearRemoteTypingUsers();
+            (eventPayload.typing_user_ids || []).forEach((typingUserId) => {
+              setRemoteTypingUser(typingUserId, eventPayload.expires_in);
+            });
+            return;
+          }
+
+          if (
+            (eventPayload.type === "typing.started" ||
+              eventPayload.type === "typing.stopped") &&
+            Number(eventPayload.room_id) === Number(roomId)
+          ) {
+            if (Number(eventPayload.user_id) === Number(currentUserId)) {
+              return;
+            }
+
+            if (eventPayload.type === "typing.started") {
+              setRemoteTypingUser(eventPayload.user_id, eventPayload.expires_in);
+            } else {
+              removeRemoteTypingUser(eventPayload.user_id);
+            }
             return;
           }
 
@@ -1246,6 +1424,10 @@ function MessengerConversation({
         };
 
         socket.onclose = (event) => {
+          if (roomSocketRef.current === socket) {
+            roomSocketRef.current = null;
+          }
+
           if (!isMounted) {
             return;
           }
@@ -1271,15 +1453,23 @@ function MessengerConversation({
       }
 
       if (socket) {
+        sendTypingStopped();
+        if (roomSocketRef.current === socket) {
+          roomSocketRef.current = null;
+        }
         socket.close(1000, "Conversation changed");
       }
     };
   }, [
+    clearRemoteTypingUsers,
     currentUserId,
     loadRoomMessages,
     onRoomMessage,
     onRoomRead,
+    removeRemoteTypingUser,
     selectedRoom?.id,
+    sendTypingStopped,
+    setRemoteTypingUser,
   ]);
 
   useEffect(() => {
@@ -1364,6 +1554,25 @@ function MessengerConversation({
 
     return namesByUserId;
   }, [selectedContact, selectedRoom]);
+
+  const typingIndicatorText = useMemo(() => {
+    const typingNames = typingUserIds
+      .map(
+        (typingUserId) =>
+          participantNamesByUserId.get(Number(typingUserId)) || "Contact",
+      )
+      .filter(Boolean);
+
+    if (typingNames.length === 0) {
+      return "";
+    }
+
+    if (typingNames.length === 1) {
+      return `${typingNames[0]} is typing`;
+    }
+
+    return `${typingNames.slice(0, 2).join(", ")} are typing`;
+  }, [participantNamesByUserId, typingUserIds]);
 
   const getReplyPreview = useCallback(
     (message) => {
@@ -1766,25 +1975,46 @@ function MessengerConversation({
     if (
       (!text && filesToSend.length === 0) ||
       !selectedPeerAccountNumber ||
-      isSendingMessage
+      isSendingMessage ||
+      isSendingMessageRef.current
     ) {
       return;
     }
 
     const replyTargetId = replyTarget?.id;
+    const clientMessageId = createMessengerClientMessageId();
+    const optimisticAttachments = selectedFiles.map(createOptimisticAttachment);
+    const optimisticMessage = {
+      id: -Date.now(),
+      room_id: selectedRoom?.id || null,
+      reply_to_message_id: replyTargetId || null,
+      reply_to: replyTarget || null,
+      sender_user_id: currentUserId,
+      recipient_user_id: null,
+      text,
+      client_message_id: clientMessageId,
+      status: "sending",
+      attachments: optimisticAttachments,
+      created_at: new Date().toISOString(),
+      is_pending: true,
+    };
 
+    isSendingMessageRef.current = true;
     setIsSendingMessage(true);
     setRoomMessage("");
+    setRoomMessages((currentMessages) =>
+      upsertMessage(currentMessages, optimisticMessage),
+    );
     setMessageDraft("");
     setReplyTarget(null);
     setSelectedFiles([]);
+    sendTypingStopped();
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
     focusMessageDraft();
 
     try {
-      const clientMessageId = createMessengerClientMessageId();
       const sendPayload =
         filesToSend.length > 0
           ? new FormData()
@@ -1822,15 +2052,33 @@ function MessengerConversation({
         });
       }
     } catch (error) {
+      setRoomMessages((currentMessages) =>
+        currentMessages.filter(
+          (message) => message.client_message_id !== clientMessageId,
+        ),
+      );
       setRoomMessage(getMessengerErrorMessage(error, "Unable to send message."));
     } finally {
+      optimisticAttachments.forEach((attachment) => {
+        if (attachment.object_url) {
+          URL.revokeObjectURL(attachment.object_url);
+        }
+      });
       setIsSendingMessage(false);
+      isSendingMessageRef.current = false;
       globalThis.requestAnimationFrame(focusMessageDraftUnlessTextEntryIsActive);
     }
   };
 
   const handleMessageDraftChange = (event) => {
-    setMessageDraft(event.target.value);
+    const nextMessageDraft = event.target.value;
+    setMessageDraft(nextMessageDraft);
+
+    if (nextMessageDraft.trim()) {
+      sendTypingStarted();
+    } else {
+      sendTypingStopped();
+    }
   };
 
   const handleMessageDraftKeyDown = (event) => {
@@ -1991,7 +2239,9 @@ function MessengerConversation({
                           aria-label={messageStatus}
                           title={messageStatus}
                         >
-                          {message.status === "read" ||
+                          {message.status === "sending" ? (
+                            <LoaderCircle size={13} aria-hidden="true" />
+                          ) : message.status === "read" ||
                           message.status === "delivered" ? (
                             <CheckCheck size={14} aria-hidden="true" />
                           ) : (
@@ -2017,6 +2267,20 @@ function MessengerConversation({
             )}
           </>
         )}
+        {typingIndicatorText ? (
+          <div
+            className="parent-layout-page__typing-indicator"
+            role="status"
+            aria-live="polite"
+          >
+            <span aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+            <p>{typingIndicatorText}</p>
+          </div>
+        ) : null}
         <div
           className="parent-layout-page__messages-end"
           ref={messagesEndRef}
@@ -2108,7 +2372,14 @@ function MessengerConversation({
           aria-label={isSendingMessage ? "Sending message" : "Send message"}
           title="Send"
         >
-          <Send size={20} aria-hidden="true" />
+          {isSendingMessage ? (
+            <span
+              className="parent-layout-page__send-buffer"
+              aria-hidden="true"
+            />
+          ) : (
+            <Send size={20} aria-hidden="true" />
+          )}
         </button>
       </form>
       {attachmentViewer.attachments.length > 0 ? (

@@ -1,5 +1,5 @@
 import { MessagesSquare, UsersRound } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Layout from "../../../components/Layout.jsx";
 import ParrotToast from "../../../components/ParrotToast.jsx";
@@ -49,8 +49,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [rooms, setRooms] = useState([]);
   const [selectedContact, setSelectedContact] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [releasedMessagesVersion, setReleasedMessagesVersion] = useState(0);
   const [toast, setToast] = useState(null);
+  const onlineUserTimeoutsRef = useRef(new Map());
   const currentUserId = getCurrentUserId(user);
 
   const handleLogout = () => {
@@ -241,6 +243,77 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     );
   }, []);
 
+  const removeOnlineUser = useCallback((userId) => {
+    const numericUserId = Number(userId);
+
+    if (!numericUserId) {
+      return;
+    }
+
+    const timeout = onlineUserTimeoutsRef.current.get(numericUserId);
+    if (timeout) {
+      globalThis.clearTimeout(timeout);
+      onlineUserTimeoutsRef.current.delete(numericUserId);
+    }
+
+    setOnlineUserIds((currentOnlineUserIds) => {
+      if (!currentOnlineUserIds.has(numericUserId)) {
+        return currentOnlineUserIds;
+      }
+
+      const nextOnlineUserIds = new Set(currentOnlineUserIds);
+      nextOnlineUserIds.delete(numericUserId);
+      return nextOnlineUserIds;
+    });
+  }, []);
+
+  const markOnlineUser = useCallback(
+    (userId, expiresInSeconds) => {
+      const numericUserId = Number(userId);
+
+      if (!numericUserId || numericUserId === Number(currentUserId)) {
+        return;
+      }
+
+      setOnlineUserIds((currentOnlineUserIds) => {
+        if (currentOnlineUserIds.has(numericUserId)) {
+          return currentOnlineUserIds;
+        }
+
+        const nextOnlineUserIds = new Set(currentOnlineUserIds);
+        nextOnlineUserIds.add(numericUserId);
+        return nextOnlineUserIds;
+      });
+
+      const previousTimeout =
+        onlineUserTimeoutsRef.current.get(numericUserId);
+      if (previousTimeout) {
+        globalThis.clearTimeout(previousTimeout);
+      }
+
+      const timeoutMs =
+        Math.max(Number(expiresInSeconds) || 60, 5) * 1000 + 5000;
+      const timeout = globalThis.setTimeout(
+        () => removeOnlineUser(numericUserId),
+        timeoutMs,
+      );
+      onlineUserTimeoutsRef.current.set(numericUserId, timeout);
+    },
+    [currentUserId, removeOnlineUser],
+  );
+
+  const replaceOnlineUsers = useCallback(
+    (userIds, expiresInSeconds) => {
+      onlineUserTimeoutsRef.current.forEach((timeout) => {
+        globalThis.clearTimeout(timeout);
+      });
+      onlineUserTimeoutsRef.current.clear();
+      setOnlineUserIds(new Set());
+      (userIds || []).forEach((userId) => markOnlineUser(userId, expiresInSeconds));
+    },
+    [markOnlineUser],
+  );
+
   const handleBlockedMessagesReleased = useCallback((releaseResult) => {
     if (!releaseResult?.room_id) {
       return;
@@ -250,11 +323,35 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   }, []);
 
   useEffect(() => {
+    return () => {
+      onlineUserTimeoutsRef.current.forEach((timeout) => {
+        globalThis.clearTimeout(timeout);
+      });
+      onlineUserTimeoutsRef.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
     const handleInboxEvent = (event) => {
       const eventPayload = event.detail;
 
       if (eventPayload?.type === "message.sent") {
         handleRoomMessage(eventPayload.room, eventPayload.message);
+      }
+
+      if (eventPayload?.type === "presence.snapshot") {
+        replaceOnlineUsers(
+          eventPayload.online_user_ids || [],
+          eventPayload.expires_in,
+        );
+      }
+
+      if (eventPayload?.type === "presence.online") {
+        markOnlineUser(eventPayload.user_id, eventPayload.expires_in);
+      }
+
+      if (eventPayload?.type === "presence.offline") {
+        removeOnlineUser(eventPayload.user_id);
       }
 
       if (
@@ -276,7 +373,14 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         handleInboxEvent,
       );
     };
-  }, [currentUserId, handleRoomMessage, handleRoomRead]);
+  }, [
+    currentUserId,
+    handleRoomMessage,
+    handleRoomRead,
+    markOnlineUser,
+    removeOnlineUser,
+    replaceOnlineUsers,
+  ]);
 
 
   const totalUnreadCount = useMemo(
@@ -298,6 +402,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         rooms={rooms}
         selectedRoom={selectedRoom}
         user={user}
+        onlineUserIds={onlineUserIds}
         onContactsChange={handleContactsChange}
         onRoomsChange={handleRoomsChange}
         onSelectRoom={handleSelectRoom}
@@ -353,6 +458,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             selectedContact={selectedContact}
             selectedRoom={selectedRoom}
             user={user}
+            onlineUserIds={onlineUserIds}
             onContactDeleted={handleContactDeleted}
             onContactUpdated={handleContactUpdated}
             onBlockedMessagesReleased={handleBlockedMessagesReleased}

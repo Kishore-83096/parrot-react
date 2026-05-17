@@ -246,15 +246,25 @@ export function upsertMessage(messages, nextMessage) {
     return messages;
   }
 
-  const nextMessages = messages.filter((message) => message.id !== nextMessage.id);
+  const nextClientMessageId = String(nextMessage.client_message_id || "");
+  const nextMessages = messages.filter((message) => {
+    if (message.id === nextMessage.id) {
+      return false;
+    }
+
+    return (
+      !nextClientMessageId ||
+      String(message.client_message_id || "") !== nextClientMessageId
+    );
+  });
   nextMessages.push(nextMessage);
 
   return nextMessages.sort((first, second) => {
-    const firstTime = new Date(first.created_at || 0).getTime();
-    const secondTime = new Date(second.created_at || 0).getTime();
+    const firstTime = new Date(first.created_at || 0).getTime() || 0;
+    const secondTime = new Date(second.created_at || 0).getTime() || 0;
 
     if (firstTime === secondTime) {
-      return Number(first.id || 0) - Number(second.id || 0);
+      return (Number(first.id) || 0) - (Number(second.id) || 0);
     }
 
     return firstTime - secondTime;
@@ -262,6 +272,10 @@ export function upsertMessage(messages, nextMessage) {
 }
 
 export function getMessageStatusLabel(status) {
+  if (status === "sending") {
+    return "Sending";
+  }
+
   if (status === "read") {
     return "Read";
   }

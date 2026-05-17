@@ -9,6 +9,7 @@ import {
 } from "./api.js";
 
 const SOCKET_RECONNECT_DELAY_MS = 1500;
+const SOCKET_PING_INTERVAL_MS = 25000;
 
 function emitInboxEvent(eventPayload) {
   globalThis.dispatchEvent(
@@ -21,12 +22,31 @@ function emitInboxEvent(eventPayload) {
 function MessengerInboxListener() {
   const currentUserIdRef = useRef(null);
   const deliveredMessageIdsRef = useRef(new Set());
+  const socketPingIntervalRef = useRef(null);
   const socketReconnectRef = useRef(null);
   const socketRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
     let reconnectAttempt = 0;
+
+    const clearSocketPingInterval = () => {
+      if (socketPingIntervalRef.current) {
+        globalThis.clearInterval(socketPingIntervalRef.current);
+        socketPingIntervalRef.current = null;
+      }
+    };
+
+    const startSocketPingInterval = (socket) => {
+      clearSocketPingInterval();
+      socketPingIntervalRef.current = globalThis.setInterval(() => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+
+        socket.send(JSON.stringify({ type: "ping" }));
+      }, SOCKET_PING_INTERVAL_MS);
+    };
 
     const markIncomingMessageDelivered = (roomMessage) => {
       const currentUserId = Number(currentUserIdRef.current);
@@ -68,6 +88,7 @@ function MessengerInboxListener() {
 
         socket.onopen = () => {
           reconnectAttempt = 0;
+          startSocketPingInterval(socket);
         };
 
         socket.onmessage = (event) => {
@@ -97,6 +118,8 @@ function MessengerInboxListener() {
         };
 
         socket.onclose = (event) => {
+          clearSocketPingInterval();
+
           if (socketRef.current === socket) {
             socketRef.current = null;
           }
@@ -142,6 +165,8 @@ function MessengerInboxListener() {
         globalThis.clearTimeout(socketReconnectRef.current);
         socketReconnectRef.current = null;
       }
+
+      clearSocketPingInterval();
 
       if (socketRef.current) {
         socketRef.current.close(1000, "Inbox listener unmounted");
