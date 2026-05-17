@@ -5,6 +5,7 @@ import {
   getMessengerErrorMessage,
   getMessengerRooms,
 } from "../../api.js";
+import { decryptRoomsForUser } from "../../e2ee/messages.js";
 import { getParentContacts } from "../../../parent/api.js";
 import {
   formatRoomTime,
@@ -20,6 +21,7 @@ function MessengerRoomList({
   selectedRoom,
   user,
   onlineUserIds,
+  e2eeRecoveryVersion,
   onContactsChange,
   onRoomsChange,
   onSelectRoom,
@@ -46,9 +48,10 @@ function MessengerRoomList({
     try {
       const response = await getMessengerRooms();
       const roomsResult = response.data?.result || response.data;
-      const nextRooms = Array.isArray(roomsResult?.rooms)
+      const rawRooms = Array.isArray(roomsResult?.rooms)
         ? roomsResult.rooms
         : [];
+      const nextRooms = await decryptRoomsForUser(rawRooms, user);
 
       onRoomsChange(nextRooms);
     } catch (error) {
@@ -59,7 +62,7 @@ function MessengerRoomList({
     } finally {
       setIsRoomsLoading(false);
     }
-  }, [onRoomsChange]);
+  }, [onRoomsChange, user]);
 
   const loadContactMap = useCallback(async () => {
     if (hasLoadedContactMap) {
@@ -82,7 +85,7 @@ function MessengerRoomList({
 
   useEffect(() => {
     loadRooms();
-  }, [loadRooms]);
+  }, [e2eeRecoveryVersion, loadRooms]);
 
   useEffect(() => {
     loadContactMap();

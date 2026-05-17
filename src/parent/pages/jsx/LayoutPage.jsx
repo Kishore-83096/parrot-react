@@ -3,7 +3,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Layout from "../../../components/Layout.jsx";
 import ParrotToast from "../../../components/ParrotToast.jsx";
-import { MESSENGER_INBOX_EVENT_NAME } from "../../../messenger/api.js";
+import {
+  clearMessengerSession,
+  getMessengerUserCryptoDevices,
+  MESSENGER_INBOX_EVENT_NAME,
+} from "../../../messenger/api.js";
+import {
+  clearStoredMessengerDeviceIdentity,
+  ensureMessengerDeviceKey,
+  getStoredMessengerDeviceIdentity,
+} from "../../../messenger/e2ee/device.js";
+import { decryptMessageForUser } from "../../../messenger/e2ee/messages.js";
+import RecoveryRestoreModal from "../../../messenger/e2ee/RecoveryRestoreModal.jsx";
+import RecoverySetupModal from "../../../messenger/e2ee/RecoverySetupModal.jsx";
+import { getRecoveryKeyBackupStatus } from "../../../messenger/e2ee/recovery.js";
 import MessengerInboxListener from "../../../messenger/MessengerInboxListener.jsx";
 import MessengerConversation from "../../../messenger/pages/jsx/MessengerConversation.jsx";
 import MessengerRoomHeader from "../../../messenger/pages/jsx/MessengerRoomHeader.jsx";
@@ -51,11 +64,185 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [releasedMessagesVersion, setReleasedMessagesVersion] = useState(0);
+  const [e2eeRecoveryVersion, setE2eeRecoveryVersion] = useState(0);
+  const [defaultDevicePromptVersion, setDefaultDevicePromptVersion] = useState(0);
+  const [recoveryBackup, setRecoveryBackup] = useState(null);
+  const [isRecoveryRestoreOpen, setIsRecoveryRestoreOpen] = useState(false);
+  const [isRecoverySetupOpen, setIsRecoverySetupOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const onlineUserTimeoutsRef = useRef(new Map());
   const currentUserId = getCurrentUserId(user);
 
+  const promptForMissingDefaultDevice = useCallback(
+    async ({ showToast = false } = {}) => {
+      const userId = user?.id || user?.user_id;
+
+      if (!userId) {
+        return false;
+      }
+
+      const devicesResponse = await getMessengerUserCryptoDevices(userId);
+      const devicesResult = devicesResponse.data?.result || devicesResponse.data;
+      const linkedDevices = Array.isArray(devicesResult?.devices)
+        ? devicesResult.devices
+        : [];
+      const hasDefaultDevice = linkedDevices.some((device) => device.is_default);
+
+      if (linkedDevices.length === 0 || hasDefaultDevice) {
+        return false;
+      }
+
+      setDefaultDevicePromptVersion((currentVersion) => currentVersion + 1);
+
+      if (showToast) {
+        setToast({
+          type: "error",
+          title: "Select default device",
+          message: "Choose which linked device can manage your devices.",
+        });
+      }
+
+      return true;
+    },
+    [user],
+  );
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    async function setupEncryptedMessaging() {
+      try {
+        const localIdentity = await getStoredMessengerDeviceIdentity(user);
+        const backupStatus = await getRecoveryKeyBackupStatus();
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (localIdentity) {
+          const userId = user?.id || user?.user_id;
+
+          if (userId) {
+            const devicesResponse = await getMessengerUserCryptoDevices(userId);
+
+            if (!isMounted) {
+              return;
+            }
+
+            const devicesResult = devicesResponse.data?.result || devicesResponse.data;
+            const linkedDevices = Array.isArray(devicesResult?.devices)
+              ? devicesResult.devices
+              : [];
+            const isLinkedDevice = linkedDevices.some(
+              (device) => device.device_id === localIdentity.device_id,
+            );
+            const hasDefaultDevice = linkedDevices.some(
+              (device) => device.is_default,
+            );
+
+            if (linkedDevices.length > 0 && !isLinkedDevice) {
+              await clearStoredMessengerDeviceIdentity(user);
+              clearMessengerSession();
+              clearParentSession();
+              onLogout?.();
+              return;
+            }
+
+            if (linkedDevices.length > 0 && !hasDefaultDevice) {
+              setDefaultDevicePromptVersion((currentVersion) => currentVersion + 1);
+              setToast({
+                type: "error",
+                title: "Select default device",
+                message: "Choose which linked device can manage your devices.",
+              });
+            }
+          }
+
+          await ensureMessengerDeviceKey(user);
+        } else if (backupStatus.exists && backupStatus.backup) {
+          setRecoveryBackup(backupStatus.backup);
+          setIsRecoveryRestoreOpen(true);
+          return;
+        } else {
+          await ensureMessengerDeviceKey(user);
+        }
+
+        if (!backupStatus.exists) {
+          setIsRecoverySetupOpen(true);
+        }
+      } catch {
+        if (!isMounted) {
+          return;
+        }
+
+        setToast({
+          type: "error",
+          title: "Encrypted messaging setup failed",
+          message: "This device could not finish encrypted messaging setup.",
+        });
+      }
+    }
+
+    setupEncryptedMessaging();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [onLogout, user]);
+
+  const handleRecoverySetupComplete = useCallback(() => {
+    setIsRecoverySetupOpen(false);
+    setToast({
+      type: "success",
+      title: "Recovery backup created",
+      message: "This device can now be used to recover encrypted messages later.",
+    });
+  }, []);
+
+  const handleRecoverySetupSkip = useCallback(() => {
+    setIsRecoverySetupOpen(false);
+  }, []);
+
+  const handleRecoveryRestoreComplete = useCallback(() => {
+    setIsRecoveryRestoreOpen(false);
+    setRecoveryBackup(null);
+    setReleasedMessagesVersion((currentVersion) => currentVersion + 1);
+    setE2eeRecoveryVersion((currentVersion) => currentVersion + 1);
+    setToast({
+      type: "success",
+      title: "Encrypted messages recovered",
+      message: "Old messages can now decrypt on this device.",
+    });
+    promptForMissingDefaultDevice({ showToast: true }).catch(() => {});
+  }, [promptForMissingDefaultDevice]);
+
+  const handleRecoveryUseNewKey = useCallback(() => {
+    ensureMessengerDeviceKey(user)
+      .then(async () => {
+        setIsRecoveryRestoreOpen(false);
+        setRecoveryBackup(null);
+        setToast({
+          type: "error",
+          title: "Recovery skipped",
+          message: "Old messages may not decrypt on this device.",
+        });
+        await promptForMissingDefaultDevice({ showToast: true });
+      })
+      .catch(() => {
+        setToast({
+          type: "error",
+          title: "Encrypted messaging setup failed",
+          message: "This device could not create a new encryption key.",
+        });
+      });
+  }, [promptForMissingDefaultDevice, user]);
+
   const handleLogout = () => {
+    clearMessengerSession();
     clearParentSession();
     onLogout?.();
   };
@@ -227,6 +414,19 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     [contacts, mergeRoomMessage, user],
   );
 
+  const handleMaybeEncryptedRoomMessage = useCallback(
+    (room, message, options) => {
+      decryptMessageForUser(message, user)
+        .then((nextMessage) => {
+          handleRoomMessage(room, nextMessage, options);
+        })
+        .catch(() => {
+          handleRoomMessage(room, message, options);
+        });
+    },
+    [handleRoomMessage, user],
+  );
+
   const handleRoomRead = useCallback((roomId) => {
     const markRoomRead = (room) =>
       Number(room.id) === Number(roomId)
@@ -336,7 +536,22 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       const eventPayload = event.detail;
 
       if (eventPayload?.type === "message.sent") {
-        handleRoomMessage(eventPayload.room, eventPayload.message);
+        handleMaybeEncryptedRoomMessage(eventPayload.room, eventPayload.message);
+      }
+
+      if (eventPayload?.type === "device.revoked") {
+        getStoredMessengerDeviceIdentity(user)
+          .then(async (identity) => {
+            if (identity?.device_id !== eventPayload.device_id) {
+              return;
+            }
+
+            await clearStoredMessengerDeviceIdentity(user);
+            clearMessengerSession();
+            clearParentSession();
+            onLogout?.();
+          })
+          .catch(() => {});
       }
 
       if (eventPayload?.type === "presence.snapshot") {
@@ -375,11 +590,13 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     };
   }, [
     currentUserId,
-    handleRoomMessage,
+    handleMaybeEncryptedRoomMessage,
     handleRoomRead,
     markOnlineUser,
+    onLogout,
     removeOnlineUser,
     replaceOnlineUsers,
+    user,
   ]);
 
 
@@ -403,6 +620,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         selectedRoom={selectedRoom}
         user={user}
         onlineUserIds={onlineUserIds}
+        e2eeRecoveryVersion={e2eeRecoveryVersion}
         onContactsChange={handleContactsChange}
         onRoomsChange={handleRoomsChange}
         onSelectRoom={handleSelectRoom}
@@ -445,6 +663,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         contactHeader={
           <Header
             user={user}
+            defaultDevicePromptVersion={defaultDevicePromptVersion}
             onLogout={handleLogout}
             onUserUpdate={onUserUpdate}
             onToast={setToast}
@@ -480,6 +699,23 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         contactsLabel="Contacts and chats"
         roomLabel="Message Room"
       />
+
+      {isRecoverySetupOpen ? (
+        <RecoverySetupModal
+          user={user}
+          onComplete={handleRecoverySetupComplete}
+          onSkip={handleRecoverySetupSkip}
+        />
+      ) : null}
+
+      {isRecoveryRestoreOpen && recoveryBackup ? (
+        <RecoveryRestoreModal
+          backup={recoveryBackup}
+          user={user}
+          onRestore={handleRecoveryRestoreComplete}
+          onUseNewKey={handleRecoveryUseNewKey}
+        />
+      ) : null}
 
       <ParrotToast toast={toast} onClose={closeToast} />
     </>

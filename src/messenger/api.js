@@ -186,6 +186,38 @@ export const getMessengerInboxWebSocketUrl = (token) =>
 export const sendMessengerMessage = (data) =>
   messengerAxios.post("/messages/send/", data);
 
+export const registerMessengerCryptoDevice = (data) =>
+  messengerAxios.post("/crypto/devices/", data);
+
+export const setMessengerDefaultCryptoDevice = (deviceId, data = {}) =>
+  messengerAxios.post(
+    `/crypto/devices/${encodeURIComponent(deviceId)}/default/`,
+    data,
+  );
+
+export const revokeMessengerCryptoDevice = (deviceId, data = {}) =>
+  messengerAxios.post(
+    `/crypto/devices/${encodeURIComponent(deviceId)}/revoke/`,
+    data,
+  );
+
+export const uploadMessengerEncryptedFile = (data) =>
+  messengerAxios.post("/crypto/files/", data);
+
+export const getMessengerCryptoKeyBackup = () =>
+  messengerAxios.get("/crypto/key-backup/");
+
+export const saveMessengerCryptoKeyBackup = (data) =>
+  messengerAxios.post("/crypto/key-backup/", data);
+
+export const getMessengerUserCryptoDevices = (userId) =>
+  messengerAxios.get(`/crypto/users/${encodeURIComponent(userId)}/devices/`);
+
+export const getMessengerRecipientCryptoDevices = (recipientAccountNumber) =>
+  messengerAxios.get(
+    `/crypto/recipients/${encodeURIComponent(recipientAccountNumber)}/devices/`,
+  );
+
 export const markMessengerRoomDelivered = (roomId, data = {}) =>
   messengerAxios.post(`/rooms/${encodeURIComponent(roomId)}/delivered/`, data);
 
@@ -214,5 +246,5 @@ export const getMessengerErrorMessage = (error, fallbackMessage) => {
       .join(" ");
   }
 
-  return data?.message || fallbackMessage;
+  return data?.message || data?.result?.message || fallbackMessage;
 };

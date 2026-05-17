@@ -755,7 +755,7 @@
   min-height: 52px;
   padding: 5px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 7px;
   border: 1px solid rgba(124, 60, 255, 0.12);
   border-radius: 18px;
@@ -1646,10 +1646,38 @@
   transition: transform 180ms ease;
 }
 
+.parent-layout-page__message-attachment-pdf-thumb {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  background: #ffffff;
+  pointer-events: none;
+  transition: transform 180ms ease;
+}
+
+.parent-layout-page__message-attachment-pdf-thumb iframe {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: #ffffff;
+  pointer-events: none;
+}
+
+.parent-layout-page__message-attachment-pdf-thumb svg {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: #b42318;
+}
+
 .parent-layout-page__message-attachment-tile:hover img,
 .parent-layout-page__message-attachment-tile:focus-visible img,
 .parent-layout-page__message-attachment-tile:hover video,
-.parent-layout-page__message-attachment-tile:focus-visible video {
+.parent-layout-page__message-attachment-tile:focus-visible video,
+.parent-layout-page__message-attachment-tile:hover .parent-layout-page__message-attachment-pdf-thumb,
+.parent-layout-page__message-attachment-tile:focus-visible .parent-layout-page__message-attachment-pdf-thumb {
   transform: scale(1.025);
 }
 
@@ -2178,6 +2206,12 @@
   backdrop-filter: blur(16px);
 }
 
+.parent-layout-page__attachment-row.is-active {
+  border-color: rgba(124, 60, 255, 0.38);
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow: inset 0 0 0 1px rgba(124, 60, 255, 0.12);
+}
+
 .parent-layout-page__attachment-row-preview {
   width: 42px;
   height: 42px;
@@ -2241,6 +2275,7 @@
 }
 
 .parent-layout-page__attachment-row-actions button,
+.parent-layout-page__attachment-document-actions button,
 .parent-layout-page__attachment-image-footer button {
   height: 34px;
   padding: 0 9px;
@@ -2255,6 +2290,152 @@
   line-height: 1;
   font-weight: 820;
   cursor: pointer;
+}
+
+.parent-layout-page__attachment-document-viewer {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 300px);
+  gap: 10px;
+}
+
+.parent-layout-page__attachment-document-preview {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(16px);
+}
+
+.parent-layout-page__attachment-document-toolbar {
+  min-width: 0;
+  padding: 9px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.34);
+}
+
+.parent-layout-page__attachment-document-file {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.parent-layout-page__attachment-document-file > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--layout-purple-deep);
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.parent-layout-page__attachment-document-file div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.parent-layout-page__attachment-document-file strong,
+.parent-layout-page__attachment-document-file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parent-layout-page__attachment-document-file strong {
+  color: var(--layout-text);
+  font-size: 12px;
+  line-height: 1.12;
+  font-weight: 840;
+}
+
+.parent-layout-page__attachment-document-file div span {
+  color: var(--layout-muted);
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 740;
+}
+
+.parent-layout-page__attachment-document-actions {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 34px;
+  gap: 6px;
+}
+
+.parent-layout-page__attachment-document-stage {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: rgba(9, 8, 18, 0.68);
+}
+
+.parent-layout-page__attachment-document-frame {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border: 0;
+  background: #ffffff;
+}
+
+.parent-layout-page__attachment-document-stage pre {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  overflow: auto;
+  color: #f8fafc;
+  background: #111827;
+  font: 500 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.parent-layout-page__attachment-document-message {
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  padding: 20px;
+  color: rgba(255, 255, 255, 0.86);
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 740;
+}
+
+.parent-layout-page__attachment-document-message svg {
+  animation: parentMessageSpinner 900ms linear infinite;
+}
+
+.parent-layout-page__attachment-document-message svg:not(.lucide-loader-circle) {
+  animation: none;
+}
+
+.parent-layout-page__attachment-document-list {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow: auto;
 }
 
 .parent-layout-page__attachment-image-viewer {
@@ -2708,6 +2889,143 @@
   font-weight: 780;
 }
 
+.parent-layout-page__crypto-devices {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.parent-layout-page__crypto-device-loading,
+.parent-layout-page__crypto-device-empty {
+  min-height: 54px;
+  padding: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(124, 60, 255, 0.2);
+  border-radius: 14px;
+  color: var(--layout-muted);
+  background: rgba(255, 255, 255, 0.54);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.parent-layout-page__crypto-device-list {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.parent-layout-page__crypto-device {
+  min-width: 0;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(124, 60, 255, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.parent-layout-page__crypto-device > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.parent-layout-page__crypto-device-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.parent-layout-page__crypto-device strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--layout-text);
+  font-size: 13px;
+  line-height: 1.1;
+  font-weight: 850;
+}
+
+.parent-layout-page__crypto-device-badge {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #25a56a, #168457);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 850;
+}
+
+.parent-layout-page__crypto-device-badge--current {
+  color: var(--layout-purple);
+  background: rgba(244, 239, 255, 0.94);
+}
+
+.parent-layout-page__crypto-device code {
+  min-width: 0;
+  overflow: hidden;
+  color: #5d536e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.parent-layout-page__crypto-device small {
+  color: var(--layout-muted);
+  font-size: 11px;
+  line-height: 1.1;
+  font-weight: 700;
+}
+
+.parent-layout-page__crypto-device-actions {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 7px;
+}
+
+.parent-layout-page__crypto-device-default,
+.parent-layout-page__crypto-device-revoke {
+  min-height: 34px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #ff6b7d, #ef3d55);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.parent-layout-page__crypto-device-default {
+  color: var(--layout-purple);
+  background: rgba(244, 239, 255, 0.94);
+}
+
+.parent-layout-page__crypto-device-revoke {
+  color: #ffffff;
+  background: linear-gradient(135deg, #ff6b7d, #ef3d55);
+}
+
+.parent-layout-page__crypto-device-default:disabled,
+.parent-layout-page__crypto-device-revoke:disabled {
+  cursor: not-allowed;
+  color: #6c6178;
+  background: rgba(108, 97, 120, 0.12);
+}
+
 .parent-layout-page__profile-form {
   min-width: 0;
   display: grid;
@@ -2823,6 +3141,26 @@
   min-width: 0;
   display: grid;
   gap: 7px;
+}
+
+.parent-layout-page__form-note,
+.parent-layout-page__modal-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.35;
+  font-weight: 640;
+}
+
+.parent-layout-page__form-note {
+  color: #51445f;
+  background: rgba(244, 239, 255, 0.72);
+}
+
+.parent-layout-page__modal-error {
+  color: #9f1d33;
+  background: rgba(255, 107, 125, 0.12);
 }
 
 .parent-layout-page__field-label {
@@ -2946,6 +3284,21 @@
 
 .parent-layout-page__modal-submit--danger:disabled {
   background: linear-gradient(135deg, #ff6b7d, #ef3d55);
+}
+
+.parent-layout-page__modal-submit--secondary {
+  color: #51445f;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: inset 0 0 0 1px rgba(124, 60, 255, 0.14);
+}
+
+.parent-layout-page__modal-submit--secondary span {
+  color: #51445f;
+}
+
+.parent-layout-page__modal-submit--secondary:disabled {
+  color: #51445f;
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .parent-layout-page__found-contact {
@@ -3084,9 +3437,44 @@
   .parrot-layout__room {
     min-height: 0;
   }
+
+  .parent-layout-page__attachment-document-viewer {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(92px, auto);
+  }
+
+  .parent-layout-page__attachment-document-list {
+    max-height: 180px;
+  }
 }
 
 @media (max-width: 620px) {
+  .parent-layout-page__attachment-viewer {
+    padding: 10px;
+  }
+
+  .parent-layout-page__attachment-viewer-surface {
+    width: calc(100vw - 20px);
+    height: calc(100svh - 20px);
+  }
+
+  .parent-layout-page__attachment-document-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .parent-layout-page__attachment-document-actions {
+    justify-self: start;
+  }
+
+  .parent-layout-page__attachment-row {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+  }
+
+  .parent-layout-page__attachment-row-preview {
+    width: 38px;
+    height: 38px;
+  }
+
   .parent-layout-page__modal--profile,
   .parent-layout-page__modal--account {
     width: calc(100vw - 24px);
@@ -3104,6 +3492,14 @@
 
   .parent-layout-page__profile-details div {
     gap: 4px;
+  }
+
+  .parent-layout-page__crypto-device {
+    grid-template-columns: 1fr;
+  }
+
+  .parent-layout-page__crypto-device-actions {
+    justify-content: start;
   }
 
   .parent-layout-page__profile-tabs button {

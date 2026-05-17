@@ -16,6 +16,16 @@ import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
 import {
+  getMessengerErrorMessage,
+  getMessengerUserCryptoDevices,
+  revokeMessengerCryptoDevice,
+  setMessengerDefaultCryptoDevice,
+} from "../../../messenger/api.js";
+import {
+  clearStoredMessengerDeviceIdentity,
+  getStoredMessengerDeviceIdentity,
+} from "../../../messenger/e2ee/device.js";
+import {
   changeParentPassword,
   deleteParentAccount,
   getParentProfile,
@@ -189,6 +199,15 @@ function getProfileValue(profile, field) {
   return value || "Not saved";
 }
 
+function formatDeviceTime(value) {
+  if (!value) {
+    return "Unknown";
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+}
+
 function getProfileAddress(profile) {
   const address = [
     profile?.dr_no,
@@ -235,10 +254,17 @@ function buildProfilePayload(form) {
   };
 }
 
-function Header({ user, onLogout, onUserUpdate, onToast }) {
+function Header({
+  user,
+  defaultDevicePromptVersion = 0,
+  onLogout,
+  onUserUpdate,
+  onToast,
+}) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isLinkedDevicesModalOpen, setIsLinkedDevicesModalOpen] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("view");
   const [activeAccountTab, setActiveAccountTab] = useState("password");
   const [profile, setProfile] = useState(null);
@@ -246,10 +272,16 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
   const [accountForm, setAccountForm] = useState(() => getAccountForm(user));
   const [profileMessage, setProfileMessage] = useState(null);
   const [accountMessage, setAccountMessage] = useState(null);
+  const [linkedDevicesMessage, setLinkedDevicesMessage] = useState(null);
+  const [cryptoDevices, setCryptoDevices] = useState([]);
+  const [currentCryptoDeviceId, setCurrentCryptoDeviceId] = useState("");
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [isPasswordChanging, setIsPasswordChanging] = useState(false);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
+  const [isDevicesLoading, setIsDevicesLoading] = useState(false);
+  const [revokingDeviceId, setRevokingDeviceId] = useState("");
+  const [defaultingDeviceId, setDefaultingDeviceId] = useState("");
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
   const username = accountDisplay?.username || user?.username || "parrot_user";
@@ -262,6 +294,11 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
   const email =
     accountDisplay?.email || user?.email || (username ? `${username}@epost.com` : "");
   const profilePicture = displayProfile?.profile_picture;
+  const currentCryptoDevice = cryptoDevices.find(
+    (device) => device.device_id === currentCryptoDeviceId,
+  );
+  const hasDefaultCryptoDevice = cryptoDevices.some((device) => device.is_default);
+  const canManageCryptoDevices = Boolean(currentCryptoDevice?.is_default);
 
   const syncProfile = useCallback(
     (nextProfile) => {
@@ -296,6 +333,42 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
     }
   }, [syncProfile]);
 
+  const loadCryptoDevices = useCallback(async ({ preserveMessage = false } = {}) => {
+    const userId = user?.id || user?.user_id;
+
+    if (!userId) {
+      setCryptoDevices([]);
+      setLinkedDevicesMessage({
+        type: "error",
+        text: "Unable to load devices without a user id.",
+      });
+      return;
+    }
+
+    setIsDevicesLoading(true);
+    if (!preserveMessage) {
+      setLinkedDevicesMessage(null);
+    }
+
+    try {
+      const [identity, response] = await Promise.all([
+        getStoredMessengerDeviceIdentity(user),
+        getMessengerUserCryptoDevices(userId),
+      ]);
+      const result = response.data?.result || response.data;
+
+      setCurrentCryptoDeviceId(identity?.device_id || "");
+      setCryptoDevices(Array.isArray(result?.devices) ? result.devices : []);
+    } catch (error) {
+      setLinkedDevicesMessage({
+        type: "error",
+        text: getMessengerErrorMessage(error, "Unable to load encrypted devices."),
+      });
+    } finally {
+      setIsDevicesLoading(false);
+    }
+  }, [user]);
+
   const openProfileModal = () => {
     pushLoggedInHistoryView({ modal: "profile", profileTab: "view" });
     setIsMenuOpen(false);
@@ -313,6 +386,28 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
     setIsAccountModalOpen(true);
   };
 
+  const openLinkedDevicesModal = () => {
+    pushLoggedInHistoryView({ modal: "linkedDevices" });
+    setIsMenuOpen(false);
+    setLinkedDevicesMessage(null);
+    setIsLinkedDevicesModalOpen(true);
+    loadCryptoDevices();
+  };
+
+  useEffect(() => {
+    if (!defaultDevicePromptVersion) {
+      return;
+    }
+
+    setIsMenuOpen(false);
+    setIsLinkedDevicesModalOpen(true);
+    setLinkedDevicesMessage({
+      type: "error",
+      text: "Select a default device to manage linked devices.",
+    });
+    loadCryptoDevices({ preserveMessage: true });
+  }, [defaultDevicePromptVersion, loadCryptoDevices]);
+
   const resetProfileModal = useCallback(() => {
     setIsProfileModalOpen(false);
     setProfileMessage(null);
@@ -326,6 +421,14 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
     setIsAccountDeleting(false);
     setAccountForm(getAccountForm(user));
   }, [user]);
+
+  const resetLinkedDevicesModal = useCallback(() => {
+    setIsLinkedDevicesModalOpen(false);
+    setLinkedDevicesMessage(null);
+    setIsDevicesLoading(false);
+    setRevokingDeviceId("");
+    setDefaultingDeviceId("");
+  }, []);
 
   const closeProfileModal = useCallback(() => {
     if (isCurrentHistoryModal("profile")) {
@@ -344,6 +447,15 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
 
     resetAccountModal();
   }, [resetAccountModal]);
+
+  const closeLinkedDevicesModal = useCallback(() => {
+    if (isCurrentHistoryModal("linkedDevices")) {
+      window.history.back();
+      return;
+    }
+
+    resetLinkedDevicesModal();
+  }, [resetLinkedDevicesModal]);
 
   useEffect(() => {
     if (!isProfileModalOpen) {
@@ -382,12 +494,31 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
   }, [closeAccountModal, isAccountModalOpen]);
 
   useEffect(() => {
+    if (!isLinkedDevicesModalOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        closeLinkedDevicesModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeLinkedDevicesModal, isLinkedDevicesModalOpen]);
+
+  useEffect(() => {
     const handlePopState = (event) => {
       const historyView =
         event.state?.[LOGGED_IN_HISTORY_KEY] || getLoggedInHistoryView();
 
       if (historyView?.modal === "profile") {
         resetAccountModal();
+        resetLinkedDevicesModal();
         setIsProfileModalOpen(true);
         setActiveProfileTab(historyView.profileTab === "edit" ? "edit" : "view");
         setProfileMessage(null);
@@ -401,17 +532,30 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
 
       if (historyView?.modal === "account") {
         resetProfileModal();
+        resetLinkedDevicesModal();
         setIsAccountModalOpen(true);
         setActiveAccountTab(
-          historyView.accountTab === "delete" ? "delete" : "password",
+          historyView.accountTab === "delete"
+            ? historyView.accountTab
+            : "password",
         );
         setAccountForm(getAccountForm(user));
         setAccountMessage(null);
         return;
       }
 
+      if (historyView?.modal === "linkedDevices") {
+        resetProfileModal();
+        resetAccountModal();
+        setIsLinkedDevicesModalOpen(true);
+        setLinkedDevicesMessage(null);
+        loadCryptoDevices();
+        return;
+      }
+
       resetProfileModal();
       resetAccountModal();
+      resetLinkedDevicesModal();
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -422,7 +566,9 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
   }, [
     isProfileModalOpen,
     loadProfile,
+    loadCryptoDevices,
     resetAccountModal,
+    resetLinkedDevicesModal,
     resetProfileModal,
     user,
   ]);
@@ -484,6 +630,100 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
     setActiveAccountTab("delete");
     setAccountForm(getAccountForm(user));
     setAccountMessage(null);
+  };
+
+  const handleRevokeCryptoDevice = async (device) => {
+    const deviceId = device?.device_id;
+    const isCurrent = deviceId === currentCryptoDeviceId;
+
+    if (
+      !deviceId ||
+      !currentCryptoDeviceId ||
+      (!isCurrent && (device?.is_default || !canManageCryptoDevices))
+    ) {
+      return;
+    }
+
+    setRevokingDeviceId(deviceId);
+    setLinkedDevicesMessage(null);
+    let didLogoutCurrentDevice = false;
+
+    try {
+      await revokeMessengerCryptoDevice(deviceId, {
+        acting_device_id: currentCryptoDeviceId,
+      });
+      if (isCurrent) {
+        await clearStoredMessengerDeviceIdentity(user);
+        didLogoutCurrentDevice = true;
+        onToast?.({
+          type: "success",
+          title: "Device logged out",
+          message: "This device was removed from linked devices.",
+        });
+        onLogout?.();
+        return;
+      }
+
+      setCryptoDevices((currentDevices) =>
+        currentDevices.filter(
+          (currentDevice) => currentDevice.device_id !== deviceId,
+        ),
+      );
+      onToast?.({
+        type: "success",
+        title: "Device revoked",
+        message: "That device was logged out and cannot receive new encrypted messages.",
+      });
+    } catch (error) {
+      setLinkedDevicesMessage({
+        type: "error",
+        text: getMessengerErrorMessage(error, "Unable to revoke this device."),
+      });
+    } finally {
+      if (!didLogoutCurrentDevice) {
+        setRevokingDeviceId("");
+      }
+    }
+  };
+
+  const handleSetDefaultCryptoDevice = async (device) => {
+    const deviceId = device?.device_id;
+
+    if (
+      !deviceId ||
+      !currentCryptoDeviceId ||
+      device?.is_default ||
+      (hasDefaultCryptoDevice && !canManageCryptoDevices)
+    ) {
+      return;
+    }
+
+    setDefaultingDeviceId(deviceId);
+    setLinkedDevicesMessage(null);
+
+    try {
+      await setMessengerDefaultCryptoDevice(deviceId, {
+        acting_device_id: currentCryptoDeviceId,
+      });
+      setCryptoDevices((currentDevices) =>
+        currentDevices.map((currentDevice) => ({
+          ...currentDevice,
+          is_default: currentDevice.device_id === deviceId,
+        })),
+      );
+      onToast?.({
+        type: "success",
+        title: "Default device updated",
+        message: "Only the selected device can manage linked devices now.",
+      });
+    } catch (error) {
+      setLinkedDevicesMessage({
+        type: "error",
+        text: getMessengerErrorMessage(error, "Unable to update the default device."),
+      });
+    } finally {
+      setDefaultingDeviceId("");
+    }
   };
 
   const handleChangePasswordSubmit = async (event) => {
@@ -1032,6 +1272,173 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
               </button>
             </form>
           ) : null}
+
+        </div>
+      </section>
+    </div>
+  ) : null;
+
+  const linkedDevicesModal = isLinkedDevicesModalOpen ? (
+    <div className="parent-layout-page__modal-backdrop" role="presentation">
+      <section
+        className="parent-layout-page__modal parent-layout-page__modal--account"
+        aria-modal="true"
+        aria-labelledby="parent-linked-devices-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close"
+          type="button"
+          onClick={closeLinkedDevicesModal}
+          aria-label="Close linked devices"
+          title="Close"
+        >
+          <X size={28} strokeWidth={3} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__modal-header">
+          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <div>
+            <h2 id="parent-linked-devices-title">Linked devices</h2>
+          </div>
+        </div>
+
+        <div className="parent-layout-page__profile-content">
+          {linkedDevicesMessage ? (
+            <p
+              className={`parent-layout-page__form-message parent-layout-page__form-message--${linkedDevicesMessage.type}`}
+              role="alert"
+            >
+              {linkedDevicesMessage.type === "success" ? (
+                <CheckCircle2 size={18} aria-hidden="true" />
+              ) : (
+                <AlertCircle size={18} aria-hidden="true" />
+              )}
+              <span>{linkedDevicesMessage.text}</span>
+            </p>
+          ) : null}
+
+          <section className="parent-layout-page__crypto-devices">
+            <p className="parent-layout-page__form-note">
+              Only the default device can change defaults or revoke another
+              linked device.
+            </p>
+
+            {isDevicesLoading ? (
+              <div className="parent-layout-page__crypto-device-loading">
+                Loading devices...
+              </div>
+            ) : cryptoDevices.length === 0 ? (
+              <div className="parent-layout-page__crypto-device-empty">
+                No encrypted devices registered.
+              </div>
+            ) : (
+              <div className="parent-layout-page__crypto-device-list">
+                {cryptoDevices.map((device) => {
+                  const isCurrent = device.device_id === currentCryptoDeviceId;
+                  const isDefault = Boolean(device.is_default);
+                  const isRevoking = revokingDeviceId === device.device_id;
+                  const isDefaulting = defaultingDeviceId === device.device_id;
+                  const deviceName =
+                    device.device_name ||
+                    (isCurrent ? "This device" : "Linked device");
+                  const canSetDefault =
+                    !isDefault &&
+                    Boolean(currentCryptoDeviceId) &&
+                    (!hasDefaultCryptoDevice || canManageCryptoDevices);
+                  const canRevoke =
+                    isCurrent || (canManageCryptoDevices && !isDefault);
+
+                  return (
+                    <article
+                      className="parent-layout-page__crypto-device"
+                      key={device.device_id}
+                    >
+                      <div>
+                        <div className="parent-layout-page__crypto-device-title">
+                          <strong>{deviceName}</strong>
+                          {isCurrent ? (
+                            <span className="parent-layout-page__crypto-device-badge parent-layout-page__crypto-device-badge--current">
+                              This device
+                            </span>
+                          ) : null}
+                          {isDefault ? (
+                            <span className="parent-layout-page__crypto-device-badge">
+                              Default
+                            </span>
+                          ) : null}
+                        </div>
+                        <small>
+                          Last seen {formatDeviceTime(device.last_seen_at)}
+                        </small>
+                      </div>
+
+                      <div className="parent-layout-page__crypto-device-actions">
+                        <button
+                          type="button"
+                          className="parent-layout-page__crypto-device-default"
+                          onClick={() => handleSetDefaultCryptoDevice(device)}
+                          disabled={!canSetDefault || isDefaulting}
+                          title={
+                            isDefault
+                              ? "Already default"
+                              : canSetDefault
+                                ? "Make default"
+                                : "Only the default device can change this"
+                          }
+                        >
+                          <ShieldCheck size={15} aria-hidden="true" />
+                          <span>
+                            {isDefault
+                              ? "Default"
+                              : isDefaulting
+                                ? "Saving"
+                                : "Make default"}
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="parent-layout-page__crypto-device-revoke"
+                          onClick={() => handleRevokeCryptoDevice(device)}
+                          disabled={!canRevoke || isRevoking}
+                          title={
+                            isCurrent
+                              ? "Remove this device and log out"
+                              : isDefault
+                                ? "Default device cannot be revoked"
+                                : canManageCryptoDevices
+                                  ? "Revoke device"
+                                  : "Only the default device can revoke devices"
+                          }
+                        >
+                          <Trash2 size={15} aria-hidden="true" />
+                          <span>
+                            {isRevoking
+                              ? isCurrent
+                                ? "Logging out"
+                                : "Revoking"
+                              : isCurrent
+                                ? "Logout"
+                                : "Revoke"}
+                          </span>
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
+              onClick={() => loadCryptoDevices()}
+              disabled={isDevicesLoading}
+            >
+              <span>{isDevicesLoading ? "Refreshing" : "Refresh devices"}</span>
+            </button>
+          </section>
         </div>
       </section>
     </div>
@@ -1108,6 +1515,16 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
               <span>Account</span>
             </button>
 
+            <button
+              className="parent-header__account-button"
+              type="button"
+              onClick={openLinkedDevicesModal}
+              role="menuitem"
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              <span>Linked devices</span>
+            </button>
+
             {onLogout ? (
               <button
                 className="parent-header__logout"
@@ -1125,6 +1542,7 @@ function Header({ user, onLogout, onUserUpdate, onToast }) {
 
       {profileModal ? createPortal(profileModal, document.body) : null}
       {accountModal ? createPortal(accountModal, document.body) : null}
+      {linkedDevicesModal ? createPortal(linkedDevicesModal, document.body) : null}
     </div>
   );
 }

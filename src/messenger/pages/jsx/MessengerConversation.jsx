@@ -39,6 +39,17 @@ import {
   sendMessengerMessage,
 } from "../../api.js";
 import {
+  decryptMessageForUser,
+  decryptMessagesForUser,
+  encryptMessageText,
+  getRenderableMessageText,
+} from "../../e2ee/messages.js";
+import {
+  decryptEncryptedAttachmentBlob,
+  encryptSelectedFilesForMessage,
+  isEncryptedAttachment,
+} from "../../e2ee/files.js";
+import {
   formatRoomTime,
   getConversationPeerAccount,
   getContactName,
@@ -66,6 +77,23 @@ const ATTACHMENT_TABS = [
   { id: "pdfs", label: "PDF" },
   { id: "other", label: "Other" },
 ];
+const TEXT_DOCUMENT_EXTENSIONS = new Set(["csv", "json", "md", "rtf", "txt"]);
+const OFFICE_DOCUMENT_EXTENSIONS = new Set([
+  "doc",
+  "docx",
+  "ppt",
+  "pptx",
+  "xls",
+  "xlsx",
+]);
+const OFFICE_DOCUMENT_MIME_TYPES = new Set([
+  "application/msword",
+  "application/vnd.ms-excel",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
 
 function isTextEntryElement(element) {
   if (!element) {
@@ -80,17 +108,36 @@ function isTextEntryElement(element) {
 }
 
 function getMessagePreviewText(message) {
-  const text = String(message?.text || "").trim();
+  const text = getRenderableMessageText(message).trim();
 
   if (text) {
     return text;
   }
 
-  const attachmentCount = Array.isArray(message?.attachments)
-    ? message.attachments.length
-    : Number(message?.attachment_count || 0);
+  const attachmentCount = getMessageAttachmentCount(message);
 
   return attachmentCount > 0 ? "Attachment" : "Message";
+}
+
+function getMessageAttachments(message) {
+  if (
+    Array.isArray(message?.decrypted_attachments) &&
+    message.decrypted_attachments.length > 0
+  ) {
+    return message.decrypted_attachments;
+  }
+
+  return Array.isArray(message?.attachments) ? message.attachments : [];
+}
+
+function getMessageAttachmentCount(message) {
+  const attachments = getMessageAttachments(message);
+
+  if (attachments.length > 0) {
+    return attachments.length;
+  }
+
+  return Number(message?.attachment_count || 0);
 }
 
 function createSelectedFileId(file) {
@@ -110,21 +157,11 @@ function getAttachmentDownloadName(attachment) {
   return getAttachmentLabel(attachment).replace(/[\\/:*?"<>|]+/g, "_");
 }
 
-function createOptimisticAttachment(selectedFile, index) {
-  const { file, fileType } = selectedFile;
-  const objectUrl = URL.createObjectURL(file);
+function getAttachmentExtension(attachment) {
+  const fileName = String(attachment?.file_name || "");
+  const extension = fileName.split(".").pop()?.toLowerCase() || "";
 
-  return {
-    id: `pending-attachment-${selectedFile.id}`,
-    file_type: fileType,
-    file_url: objectUrl,
-    file_name: file.name,
-    mime_type: file.type,
-    file_size_bytes: file.size,
-    sort_order: index,
-    is_pending: true,
-    object_url: objectUrl,
-  };
+  return extension && extension !== fileName.toLowerCase() ? extension : "";
 }
 
 function getAttachmentKey(attachment) {
@@ -227,14 +264,6 @@ function getAttachmentTabCounts(attachments) {
 }
 
 function getVisibleAttachmentTabs(tabCounts) {
-  const populatedTabs = ATTACHMENT_TABS.filter(
-    (tab) => tab.id !== "all" && tabCounts[tab.id] > 0,
-  );
-
-  if (populatedTabs.length <= 1) {
-    return populatedTabs;
-  }
-
   return ATTACHMENT_TABS.filter(
     (tab) => tab.id === "all" || tabCounts[tab.id] > 0,
   );
@@ -248,6 +277,69 @@ function getAttachmentsForTab(attachments, activeTab) {
   return (attachments || []).filter(
     (attachment) => getAttachmentTabId(attachment) === activeTab,
   );
+}
+
+function canPreviewAttachmentInModal() {
+  return false;
+}
+
+function isTextPreviewAttachment(attachment) {
+  const mimeType = String(attachment?.mime_type || "").toLowerCase();
+  const extension = getAttachmentExtension(attachment);
+
+  return (
+    mimeType.startsWith("text/") ||
+    mimeType === "application/json" ||
+    TEXT_DOCUMENT_EXTENSIONS.has(extension)
+  );
+}
+
+function isOfficePreviewAttachment(attachment) {
+  const mimeType = String(attachment?.mime_type || "").toLowerCase();
+  const extension = getAttachmentExtension(attachment);
+
+  return (
+    OFFICE_DOCUMENT_MIME_TYPES.has(mimeType) ||
+    OFFICE_DOCUMENT_EXTENSIONS.has(extension)
+  );
+}
+
+function getDocumentPreviewMode(attachment) {
+  if (isPdfAttachment(attachment)) {
+    return "pdf";
+  }
+
+  if (isTextPreviewAttachment(attachment)) {
+    return "text";
+  }
+
+  if (isOfficePreviewAttachment(attachment)) {
+    return "office";
+  }
+
+  return "embed";
+}
+
+function isHttpUrl(url) {
+  return /^https?:\/\//i.test(String(url || ""));
+}
+
+function getOfficePreviewUrl(fileUrl) {
+  if (!isHttpUrl(fileUrl)) {
+    return "";
+  }
+
+  return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
+    fileUrl,
+  )}`;
+}
+
+function getPdfThumbnailUrl(fileUrl) {
+  const cleanUrl = String(fileUrl || "").split("#")[0];
+
+  return cleanUrl
+    ? `${cleanUrl}#page=1&toolbar=0&navpanes=0&scrollbar=0&view=FitH`
+    : "";
 }
 
 async function getCachedMediaResponse(url) {
@@ -273,17 +365,20 @@ async function getCachedMediaResponse(url) {
 }
 
 async function downloadCachedAttachment(attachment) {
-  if (!attachment?.file_url) {
+  if (!attachment?.file_url && !attachment?.encrypted_file_url) {
     return;
   }
 
   try {
-    const response = await getCachedMediaResponse(attachment.file_url);
-    if (!response) {
-      throw new Error("Media cache unavailable.");
-    }
+    const blob = isEncryptedAttachment(attachment)
+      ? await decryptEncryptedAttachmentBlob(attachment)
+      : await getCachedMediaResponse(attachment.file_url).then((response) => {
+          if (!response) {
+            throw new Error("Media cache unavailable.");
+          }
 
-    const blob = await response.blob();
+          return response.blob();
+        });
     const objectUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement("a");
     downloadLink.href = objectUrl;
@@ -292,7 +387,11 @@ async function downloadCachedAttachment(attachment) {
     downloadLink.click();
     downloadLink.remove();
     URL.revokeObjectURL(objectUrl);
-  } catch {
+  } catch (error) {
+    if (isEncryptedAttachment(attachment)) {
+      throw error;
+    }
+
     const fallbackLink = document.createElement("a");
     fallbackLink.href = attachment.file_url;
     fallbackLink.target = "_blank";
@@ -305,7 +404,7 @@ async function downloadCachedAttachment(attachment) {
 }
 
 async function openCachedAttachment(attachment) {
-  if (!attachment?.file_url) {
+  if (!attachment?.file_url && !attachment?.encrypted_file_url) {
     return;
   }
 
@@ -316,12 +415,15 @@ async function openCachedAttachment(attachment) {
   }
 
   try {
-    const response = await getCachedMediaResponse(attachment.file_url);
-    if (!response) {
-      throw new Error("Media cache unavailable.");
-    }
+    const blob = isEncryptedAttachment(attachment)
+      ? await decryptEncryptedAttachmentBlob(attachment)
+      : await getCachedMediaResponse(attachment.file_url).then((response) => {
+          if (!response) {
+            throw new Error("Media cache unavailable.");
+          }
 
-    const blob = await response.blob();
+          return response.blob();
+        });
     const objectUrl = URL.createObjectURL(blob);
 
     if (openedWindow) {
@@ -337,7 +439,14 @@ async function openCachedAttachment(attachment) {
     }
 
     globalThis.setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
-  } catch {
+  } catch (error) {
+    if (isEncryptedAttachment(attachment)) {
+      if (openedWindow) {
+        openedWindow.close();
+      }
+      throw error;
+    }
+
     if (openedWindow) {
       openedWindow.location.href = attachment.file_url;
     } else {
@@ -354,6 +463,9 @@ async function openCachedAttachment(attachment) {
 
 function useCachedMediaUrl(attachment) {
   const fileUrl = attachment?.file_url || "";
+  const encryptedFileUrl = attachment?.encrypted_file_url || "";
+  const isEncrypted = isEncryptedAttachment(attachment);
+  const sourceUrl = isEncrypted ? encryptedFileUrl : fileUrl;
   const [cachedMedia, setCachedMedia] = useState({
     sourceUrl: "",
     objectUrl: "",
@@ -363,17 +475,35 @@ function useCachedMediaUrl(attachment) {
     let objectUrl = "";
     let isMounted = true;
     setCachedMedia({
-      sourceUrl: fileUrl,
+      sourceUrl,
       objectUrl: "",
     });
 
     async function loadCachedMedia() {
-      if (!fileUrl || !("caches" in globalThis)) {
+      if (!sourceUrl) {
+        return;
+      }
+
+      if (isEncrypted) {
+        const blob = await decryptEncryptedAttachmentBlob(attachment);
+        if (!isMounted) {
+          return;
+        }
+
+        objectUrl = URL.createObjectURL(blob);
+        setCachedMedia({
+          sourceUrl,
+          objectUrl,
+        });
+        return;
+      }
+
+      if (!("caches" in globalThis)) {
         return;
       }
 
       const cache = await globalThis.caches.open(MEDIA_CACHE_NAME);
-      const cachedResponse = await cache.match(fileUrl);
+      const cachedResponse = await cache.match(sourceUrl);
 
       if (!cachedResponse || !isMounted) {
         return;
@@ -382,7 +512,7 @@ function useCachedMediaUrl(attachment) {
       const blob = await cachedResponse.blob();
       objectUrl = URL.createObjectURL(blob);
       setCachedMedia({
-        sourceUrl: fileUrl,
+        sourceUrl,
         objectUrl,
       });
     }
@@ -396,18 +526,32 @@ function useCachedMediaUrl(attachment) {
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [fileUrl]);
+  }, [
+    attachment,
+    isEncrypted,
+    sourceUrl,
+  ]);
 
-  return cachedMedia.sourceUrl === fileUrl && cachedMedia.objectUrl
+  if (isEncrypted) {
+    return cachedMedia.sourceUrl === sourceUrl ? cachedMedia.objectUrl : "";
+  }
+
+  return cachedMedia.sourceUrl === sourceUrl && cachedMedia.objectUrl
     ? cachedMedia.objectUrl
-    : fileUrl;
+    : sourceUrl;
 }
 
-function AttachmentPreviewTile({ attachment, index, overflowCount, onOpen }) {
+function AttachmentPreviewTile({
+  attachment,
+  index,
+  overflowCount,
+  onOpen,
+}) {
   const previewUrl = useCachedMediaUrl(attachment);
   const label = getAttachmentLabel(attachment);
   const kind = getAttachmentKind(attachment);
-  const shouldShowMediaPreview = kind === "image" || kind === "video";
+  const shouldShowMediaPreview =
+    kind === "image" || kind === "video" || kind === "pdf";
 
   return (
     <button
@@ -419,6 +563,9 @@ function AttachmentPreviewTile({ attachment, index, overflowCount, onOpen }) {
       {kind === "image" ? <img src={previewUrl} alt={label} /> : null}
       {kind === "video" ? (
         <video src={previewUrl} muted playsInline preload="metadata" />
+      ) : null}
+      {kind === "pdf" ? (
+        <PdfAttachmentThumbnail label={label} sourceUrl={previewUrl} />
       ) : null}
       {!shouldShowMediaPreview ? (
         <span className="parent-layout-page__message-attachment-tile-icon">
@@ -435,6 +582,28 @@ function AttachmentPreviewTile({ attachment, index, overflowCount, onOpen }) {
         {getAttachmentKindLabel(kind, 1)}
       </span>
     </button>
+  );
+}
+
+function PdfAttachmentThumbnail({ label, sourceUrl }) {
+  const thumbnailUrl = getPdfThumbnailUrl(sourceUrl);
+
+  return (
+    <span
+      className="parent-layout-page__message-attachment-pdf-thumb"
+      aria-hidden="true"
+    >
+      {thumbnailUrl ? (
+        <iframe
+          src={thumbnailUrl}
+          title={`${label} first page`}
+          loading="lazy"
+          tabIndex="-1"
+        />
+      ) : (
+        <AttachmentIcon fileType="pdf" size={28} />
+      )}
+    </span>
   );
 }
 
@@ -485,7 +654,7 @@ function MessageAttachments({ attachments, onOpen }) {
           <AttachmentPreviewTile
             attachment={attachment}
             index={index}
-            key={attachment.id || attachment.file_url}
+            key={getAttachmentKey(attachment)}
             overflowCount={hiddenAttachmentCount}
             onOpen={() => onOpen(attachments, attachment)}
           />
@@ -509,21 +678,40 @@ function AttachmentListItem({
   onDownload,
   onOpen,
   onPreviewImage,
+  onSelectAttachment,
+  selected,
 }) {
   const previewUrl = useCachedMediaUrl(attachment);
   const label = getAttachmentLabel(attachment);
   const kind = getAttachmentKind(attachment);
   const isImage = kind === "image";
+  const canPreview = canPreviewAttachmentInModal(attachment);
+  const openActionLabel = isImage ? "View" : canPreview ? "Preview" : "Open";
+  const handlePrimaryAction = () => {
+    if (isImage) {
+      onPreviewImage(attachment);
+      return;
+    }
+
+    if (canPreview) {
+      onSelectAttachment(attachment);
+      return;
+    }
+
+    onOpen(attachment);
+  };
 
   return (
-    <article className={`parent-layout-page__attachment-row is-${kind}`}>
+    <article
+      className={`parent-layout-page__attachment-row is-${kind}${
+        selected ? " is-active" : ""
+      }`}
+    >
       <button
         type="button"
         className="parent-layout-page__attachment-row-preview"
-        onClick={() =>
-          isImage ? onPreviewImage(attachment) : onOpen(attachment)
-        }
-        aria-label={`${isImage ? "View" : "Open"} ${label}`}
+        onClick={handlePrimaryAction}
+        aria-label={`${openActionLabel} ${label}`}
       >
         {isImage ? <img src={previewUrl} alt={label} /> : null}
         {kind === "video" ? (
@@ -543,12 +731,10 @@ function AttachmentListItem({
         <button
           type="button"
           className="parent-layout-page__attachment-open"
-          onClick={() =>
-            isImage ? onPreviewImage(attachment) : onOpen(attachment)
-          }
+          onClick={handlePrimaryAction}
         >
           <ExternalLink size={15} aria-hidden="true" />
-          <span>{isImage ? "View" : "Open"}</span>
+          <span>{openActionLabel}</span>
         </button>
         <button
           type="button"
@@ -691,6 +877,228 @@ function AttachmentThumbImage({ attachment }) {
   return <img src={imageUrl} alt="" />;
 }
 
+function useAttachmentTextPreview(sourceUrl, enabled) {
+  const [textPreview, setTextPreview] = useState({
+    error: "",
+    status: "idle",
+    text: "",
+  });
+
+  useEffect(() => {
+    if (!enabled || !sourceUrl) {
+      setTextPreview({
+        error: "",
+        status: "idle",
+        text: "",
+      });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let isMounted = true;
+
+    setTextPreview({
+      error: "",
+      status: "loading",
+      text: "",
+    });
+
+    fetch(sourceUrl, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Unable to load document preview.");
+        }
+
+        return response.text();
+      })
+      .then((text) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setTextPreview({
+          error: "",
+          status: "ready",
+          text,
+        });
+      })
+      .catch((error) => {
+        if (!isMounted || error?.name === "AbortError") {
+          return;
+        }
+
+        setTextPreview({
+          error: "Preview is not available for this document.",
+          status: "error",
+          text: "",
+        });
+      });
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [enabled, sourceUrl]);
+
+  return textPreview;
+}
+
+function AttachmentDocumentPreview({ attachment, onDownload, onOpen }) {
+  const previewUrl = useCachedMediaUrl(attachment);
+  const label = getAttachmentLabel(attachment);
+  const kind = getAttachmentKind(attachment);
+  const previewMode = getDocumentPreviewMode(attachment);
+  const officePreviewUrl =
+    previewMode === "office" ? getOfficePreviewUrl(attachment?.file_url) : "";
+  const frameUrl = previewMode === "office" ? officePreviewUrl : previewUrl;
+  const textPreview = useAttachmentTextPreview(
+    previewUrl,
+    previewMode === "text",
+  );
+
+  let stageContent = null;
+
+  if (previewMode === "text") {
+    if (textPreview.status === "loading") {
+      stageContent = (
+        <div className="parent-layout-page__attachment-document-message">
+          <LoaderCircle size={22} aria-hidden="true" />
+          <span>Loading preview...</span>
+        </div>
+      );
+    } else if (textPreview.status === "ready") {
+      stageContent = <pre>{textPreview.text}</pre>;
+    } else {
+      stageContent = (
+        <div className="parent-layout-page__attachment-document-message">
+          <FileText size={24} aria-hidden="true" />
+          <span>
+            {textPreview.error || "Preview is not available for this document."}
+          </span>
+        </div>
+      );
+    }
+  } else if (frameUrl) {
+    stageContent = (
+      <iframe
+        src={frameUrl}
+        title={`${label} preview`}
+        className="parent-layout-page__attachment-document-frame"
+      />
+    );
+  } else {
+    stageContent = (
+      <div className="parent-layout-page__attachment-document-message">
+        <FileText size={24} aria-hidden="true" />
+        <span>Preview is not available for this document.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="parent-layout-page__attachment-document-preview">
+      <div className="parent-layout-page__attachment-document-toolbar">
+        <div className="parent-layout-page__attachment-document-file">
+          <span>
+            <AttachmentIcon fileType={kind} size={18} />
+          </span>
+          <div>
+            <strong>{label}</strong>
+            <span>{getAttachmentKindLabel(kind, 1)}</span>
+          </div>
+        </div>
+        <div className="parent-layout-page__attachment-document-actions">
+          <button
+            type="button"
+            className="parent-layout-page__attachment-open"
+            onClick={() => onOpen(attachment)}
+          >
+            <ExternalLink size={15} aria-hidden="true" />
+            <span>New tab</span>
+          </button>
+          <button
+            type="button"
+            className="parent-layout-page__attachment-download"
+            onClick={() => onDownload(attachment)}
+            aria-label={`Download ${label}`}
+            title="Download to device"
+          >
+            <Download size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      <div className="parent-layout-page__attachment-document-stage">
+        {stageContent}
+      </div>
+    </div>
+  );
+}
+
+function AttachmentDocumentViewer({
+  attachments,
+  selectedAttachmentId,
+  onDownload,
+  onOpen,
+  onPreviewImage,
+  onSelectAttachment,
+}) {
+  const previewableAttachments = attachments.filter(canPreviewAttachmentInModal);
+  const selectedAttachment =
+    previewableAttachments.find(
+      (attachment) => getAttachmentKey(attachment) === selectedAttachmentId,
+    ) ||
+    previewableAttachments[0] ||
+    null;
+  const selectedAttachmentKey = getAttachmentKey(selectedAttachment);
+
+  if (!selectedAttachment) {
+    return (
+      <div className="parent-layout-page__attachment-list">
+        {attachments.map((attachment) => (
+          <AttachmentListItem
+            attachment={attachment}
+            key={getAttachmentKey(attachment)}
+            onDownload={onDownload}
+            onOpen={onOpen}
+            onPreviewImage={onPreviewImage}
+            onSelectAttachment={onSelectAttachment}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="parent-layout-page__attachment-document-viewer">
+      <AttachmentDocumentPreview
+        attachment={selectedAttachment}
+        onDownload={onDownload}
+        onOpen={onOpen}
+      />
+
+      {attachments.length > 1 ? (
+        <div
+          className="parent-layout-page__attachment-document-list"
+          aria-label="Attachments"
+        >
+          {attachments.map((attachment) => (
+            <AttachmentListItem
+              attachment={attachment}
+              key={getAttachmentKey(attachment)}
+              onDownload={onDownload}
+              onOpen={onOpen}
+              onPreviewImage={onPreviewImage}
+              onSelectAttachment={onSelectAttachment}
+              selected={getAttachmentKey(attachment) === selectedAttachmentKey}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AttachmentViewerModal({
   attachments,
   activeTab,
@@ -795,20 +1203,17 @@ function AttachmentViewerModal({
               onSelectImage={onSelectAttachment}
             />
           ) : visibleAttachments.length > 0 ? (
-            <div className="parent-layout-page__attachment-list">
-              {visibleAttachments.map((attachment) => (
-                <AttachmentListItem
-                  attachment={attachment}
-                  key={getAttachmentKey(attachment)}
-                  onDownload={onDownload}
-                  onOpen={onOpen}
-                  onPreviewImage={(imageAttachment) => {
-                    onSelectAttachment(imageAttachment);
-                    onChangeTab("images");
-                  }}
-                />
-              ))}
-            </div>
+            <AttachmentDocumentViewer
+              attachments={visibleAttachments}
+              selectedAttachmentId={selectedAttachmentId}
+              onDownload={onDownload}
+              onOpen={onOpen}
+              onPreviewImage={(imageAttachment) => {
+                onSelectAttachment(imageAttachment);
+                onChangeTab("images");
+              }}
+              onSelectAttachment={onSelectAttachment}
+            />
           ) : (
             <p>No attachments in this tab.</p>
           )}
@@ -946,18 +1351,19 @@ function MessengerConversation({
   const typingRemoteTimeoutsRef = useRef(new Map());
   const isTypingSentRef = useRef(false);
   const lastTypingStartedAtRef = useRef(0);
+  const isAttachmentViewerOpen = attachmentViewer.attachments.length > 0;
 
   const focusMessageDraft = useCallback(() => {
     const textarea = messageDraftRef.current;
 
-    if (!textarea) {
+    if (!textarea || isAttachmentViewerOpen) {
       return;
     }
 
     textarea.focus({ preventScroll: true });
     const cursorPosition = textarea.value.length;
     textarea.setSelectionRange(cursorPosition, cursorPosition);
-  }, []);
+  }, [isAttachmentViewerOpen]);
 
   const focusMessageDraftUnlessTextEntryIsActive = useCallback(() => {
     const activeElement = globalThis.document?.activeElement;
@@ -1009,6 +1415,18 @@ function MessengerConversation({
     isTypingSentRef.current = false;
     lastTypingStartedAtRef.current = 0;
   }, [clearTypingStopTimeout, sendRoomSocketEvent]);
+
+  useEffect(() => {
+    if (!isAttachmentViewerOpen) {
+      return;
+    }
+
+    if (globalThis.document?.activeElement === messageDraftRef.current) {
+      messageDraftRef.current.blur();
+    }
+
+    sendTypingStopped();
+  }, [isAttachmentViewerOpen, sendTypingStopped]);
 
   const scheduleTypingStopped = useCallback(() => {
     clearTypingStopTimeout();
@@ -1155,6 +1573,7 @@ function MessengerConversation({
         const nextMessages = Array.isArray(messagesResult?.messages)
           ? messagesResult.messages
           : [];
+        const decryptedMessages = await decryptMessagesForUser(nextMessages, user);
         const pagination = messagesResult?.pagination || {};
         const nextPagination = {
           hasMore: Boolean(pagination.has_more),
@@ -1163,17 +1582,17 @@ function MessengerConversation({
 
         setRoomMessages((currentMessages) =>
           mode === "prepend"
-            ? mergeMessagePage(currentMessages, nextMessages)
-            : nextMessages,
+            ? mergeMessagePage(currentMessages, decryptedMessages)
+            : decryptedMessages,
         );
         setMessagePagination(nextPagination);
 
         if (markRead) {
-          markRoomReadForMessages(roomId, nextMessages).catch(() => {});
+          markRoomReadForMessages(roomId, decryptedMessages).catch(() => {});
         }
 
         return {
-          messages: nextMessages,
+          messages: decryptedMessages,
           pagination: nextPagination,
         };
       } catch (error) {
@@ -1194,7 +1613,7 @@ function MessengerConversation({
         }
       }
     },
-    [markRoomReadForMessages],
+    [markRoomReadForMessages, user],
   );
 
   useEffect(() => {
@@ -1230,17 +1649,22 @@ function MessengerConversation({
   ]);
 
   useEffect(() => {
-    if (!hasActiveConversation) {
+    if (!hasActiveConversation || isAttachmentViewerOpen) {
       return undefined;
     }
 
     const focusFrame = globalThis.requestAnimationFrame(focusMessageDraft);
 
     return () => globalThis.cancelAnimationFrame(focusFrame);
-  }, [focusMessageDraft, hasActiveConversation, selectedPeerAccountNumber]);
+  }, [
+    focusMessageDraft,
+    hasActiveConversation,
+    isAttachmentViewerOpen,
+    selectedPeerAccountNumber,
+  ]);
 
   useEffect(() => {
-    if (!hasActiveConversation) {
+    if (!hasActiveConversation || isAttachmentViewerOpen) {
       return undefined;
     }
 
@@ -1267,7 +1691,7 @@ function MessengerConversation({
         handleConversationKeyDown,
       );
     };
-  }, [focusMessageDraft, hasActiveConversation]);
+  }, [focusMessageDraft, hasActiveConversation, isAttachmentViewerOpen]);
 
   useLayoutEffect(() => {
     const scrollSnapshot = olderMessagesScrollRef.current;
@@ -1324,9 +1748,12 @@ function MessengerConversation({
 
         socket.onopen = () => {
           reconnectAttempt = 0;
+          if (messageDraftRef.current?.value.trim()) {
+            sendTypingStarted();
+          }
         };
 
-        socket.onmessage = (event) => {
+        socket.onmessage = async (event) => {
           let eventPayload;
 
           try {
@@ -1374,16 +1801,20 @@ function MessengerConversation({
             eventPayload.type === "message.sent" &&
             Number(eventPayload.message?.room_id) === Number(roomId)
           ) {
-            setRoomMessages((currentMessages) =>
-              upsertMessage(currentMessages, eventPayload.message),
+            const nextMessage = await decryptMessageForUser(
+              eventPayload.message,
+              user,
             );
-            onRoomMessage(eventPayload.room, eventPayload.message, {
+            setRoomMessages((currentMessages) =>
+              upsertMessage(currentMessages, nextMessage),
+            );
+            onRoomMessage(eventPayload.room, nextMessage, {
               selectRoom: true,
             });
 
-            if (Number(eventPayload.message?.sender_user_id) !== currentUserId) {
+            if (Number(nextMessage?.sender_user_id) !== currentUserId) {
               markMessengerRoomRead(roomId, {
-                last_read_message_id: eventPayload.message.id,
+                last_read_message_id: nextMessage.id,
               })
                 .then(() => onRoomRead(roomId))
                 .catch(() => {});
@@ -1467,9 +1898,11 @@ function MessengerConversation({
     onRoomMessage,
     onRoomRead,
     removeRemoteTypingUser,
+    sendTypingStarted,
     selectedRoom?.id,
     sendTypingStopped,
     setRemoteTypingUser,
+    user,
   ]);
 
   useEffect(() => {
@@ -1659,22 +2092,29 @@ function MessengerConversation({
   }, [focusMessageDraft]);
 
   const handleDownloadAttachment = useCallback((attachment) => {
-    downloadCachedAttachment(attachment);
+    downloadCachedAttachment(attachment).catch(() => {
+      setRoomMessage("Unable to decrypt this attachment.");
+    });
   }, []);
 
   const handleOpenAttachment = useCallback((attachment) => {
-    openCachedAttachment(attachment);
+    openCachedAttachment(attachment).catch(() => {
+      setRoomMessage("Unable to decrypt this attachment.");
+    });
   }, []);
 
   const handleOpenAttachmentViewer = useCallback((attachments, attachment) => {
     const imageAttachments = getAttachmentsForTab(attachments, "images");
+    const previewableAttachments = attachments.filter(canPreviewAttachmentInModal);
     const selectedAttachment =
       attachment ||
-      (imageAttachments.length === 1 ? imageAttachments[0] : null);
+      (imageAttachments.length === 1 ? imageAttachments[0] : null) ||
+      previewableAttachments[0] ||
+      null;
 
     setAttachmentViewer({
       attachments,
-      activeTab: attachment ? getAttachmentTabId(attachment) : "all",
+      activeTab: "all",
       selectedAttachmentId: selectedAttachment
         ? getAttachmentKey(selectedAttachment)
         : "",
@@ -1970,10 +2410,9 @@ function MessengerConversation({
     event?.preventDefault();
 
     const text = messageDraft.trim();
-    const filesToSend = selectedFiles.map((selectedFile) => selectedFile.file);
 
     if (
-      (!text && filesToSend.length === 0) ||
+      (!text && selectedFiles.length === 0) ||
       !selectedPeerAccountNumber ||
       isSendingMessage ||
       isSendingMessageRef.current
@@ -1983,87 +2422,91 @@ function MessengerConversation({
 
     const replyTargetId = replyTarget?.id;
     const clientMessageId = createMessengerClientMessageId();
-    const optimisticAttachments = selectedFiles.map(createOptimisticAttachment);
-    const optimisticMessage = {
-      id: -Date.now(),
-      room_id: selectedRoom?.id || null,
-      reply_to_message_id: replyTargetId || null,
-      reply_to: replyTarget || null,
-      sender_user_id: currentUserId,
-      recipient_user_id: null,
-      text,
-      client_message_id: clientMessageId,
-      status: "sending",
-      attachments: optimisticAttachments,
-      created_at: new Date().toISOString(),
-      is_pending: true,
-    };
+    let optimisticMessage = null;
 
     isSendingMessageRef.current = true;
     setIsSendingMessage(true);
     setRoomMessage("");
-    setRoomMessages((currentMessages) =>
-      upsertMessage(currentMessages, optimisticMessage),
-    );
-    setMessageDraft("");
-    setReplyTarget(null);
-    setSelectedFiles([]);
     sendTypingStopped();
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-    focusMessageDraft();
 
     try {
-      const sendPayload =
-        filesToSend.length > 0
-          ? new FormData()
-          : {
-              recipient_account_number: selectedPeerAccountNumber,
-              text,
-              ...(replyTargetId ? { reply_to_message_id: replyTargetId } : {}),
-              client_message_id: clientMessageId,
-            };
-
-      if (sendPayload instanceof FormData) {
-        sendPayload.append("recipient_account_number", selectedPeerAccountNumber);
-        sendPayload.append("text", text);
-        sendPayload.append("client_message_id", clientMessageId);
-        if (replyTargetId) {
-          sendPayload.append("reply_to_message_id", String(replyTargetId));
-        }
-        filesToSend.forEach((file) => {
-          sendPayload.append("attachments", file);
-        });
+      const encryptedAttachments =
+        selectedFiles.length > 0
+          ? await encryptSelectedFilesForMessage(selectedFiles)
+          : [];
+      const encryptedText = await encryptMessageText({
+        attachments: encryptedAttachments,
+        recipientAccountNumber: selectedPeerAccountNumber,
+        text,
+        user,
+      });
+      optimisticMessage = {
+        id: -Date.now(),
+        room_id: selectedRoom?.id || null,
+        reply_to_message_id: replyTargetId || null,
+        reply_to: replyTarget || null,
+        sender_user_id: currentUserId,
+        recipient_user_id: null,
+        text: encryptedText,
+        decrypted_text: text,
+        decrypted_attachments: encryptedAttachments,
+        decryption_status: "ok",
+        is_encrypted: true,
+        client_message_id: clientMessageId,
+        status: "sending",
+        attachments: [],
+        created_at: new Date().toISOString(),
+        is_pending: true,
+      };
+      setRoomMessages((currentMessages) =>
+        upsertMessage(currentMessages, optimisticMessage),
+      );
+      setMessageDraft("");
+      setReplyTarget(null);
+      setSelectedFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
       }
+      focusMessageDraft();
+
+      const sendPayload = {
+        recipient_account_number: selectedPeerAccountNumber,
+        text: encryptedText,
+        ...(replyTargetId ? { reply_to_message_id: replyTargetId } : {}),
+        client_message_id: clientMessageId,
+      };
 
       const response = await sendMessengerMessage(sendPayload);
       const messageResult = response.data?.result || response.data;
+      const sentMessage = messageResult?.message
+        ? await decryptMessageForUser(messageResult.message, user)
+        : null;
 
-      if (messageResult?.message) {
+      if (sentMessage) {
         setRoomMessages((currentMessages) =>
-          upsertMessage(currentMessages, messageResult.message),
+          upsertMessage(currentMessages, sentMessage),
         );
       }
 
-      if (messageResult?.room || messageResult?.message) {
-        onRoomMessage(messageResult?.room, messageResult?.message, {
+      if (messageResult?.room || sentMessage) {
+        onRoomMessage(messageResult?.room, sentMessage, {
           selectRoom: true,
         });
       }
     } catch (error) {
-      setRoomMessages((currentMessages) =>
-        currentMessages.filter(
-          (message) => message.client_message_id !== clientMessageId,
-        ),
+      if (optimisticMessage) {
+        setRoomMessages((currentMessages) =>
+          currentMessages.filter(
+            (message) => message.client_message_id !== clientMessageId,
+          ),
+        );
+      }
+      setRoomMessage(
+        error?.response
+          ? getMessengerErrorMessage(error, "Unable to send message.")
+          : error?.message || "Unable to send message.",
       );
-      setRoomMessage(getMessengerErrorMessage(error, "Unable to send message."));
     } finally {
-      optimisticAttachments.forEach((attachment) => {
-        if (attachment.object_url) {
-          URL.revokeObjectURL(attachment.object_url);
-        }
-      });
       setIsSendingMessage(false);
       isSendingMessageRef.current = false;
       globalThis.requestAnimationFrame(focusMessageDraftUnlessTextEntryIsActive);
@@ -2154,6 +2597,8 @@ function MessengerConversation({
             const sentWhileBlocked = Boolean(message.sent_while_blocked);
             const replyPreview = getReplyPreview(message);
             const isReplyDragging = replyDrag.messageId === message.id;
+            const messageText = getRenderableMessageText(message);
+            const messageAttachments = getMessageAttachments(message);
             const messageStyle = isReplyDragging
               ? { "--message-reply-drag-x": `${replyDrag.offsetX}px` }
               : undefined;
@@ -2204,17 +2649,16 @@ function MessengerConversation({
                       </div>
                     ) : null}
 
-                    {Array.isArray(message.attachments) &&
-                    message.attachments.length > 0 ? (
+                    {messageAttachments.length > 0 ? (
                       <MessageAttachments
-                        attachments={message.attachments}
+                        attachments={messageAttachments}
                         onOpen={handleOpenAttachmentViewer}
                       />
                     ) : null}
 
-                    {message.text ? (
+                    {messageText ? (
                       <p className="parent-layout-page__message-text">
-                        {message.text}
+                        {messageText}
                       </p>
                     ) : null}
 

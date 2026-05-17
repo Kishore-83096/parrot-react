@@ -4,6 +4,10 @@ import {
   getInitials,
   getParentApiErrorMessage,
 } from "../../../parent/pages/jsx/contactHelpers.js";
+import {
+  getMessagePreviewLabel,
+  isEncryptedMessageText,
+} from "../../e2ee/messages.js";
 
 export {
   getContactInitials,
@@ -80,11 +84,21 @@ export function getLastMessagePreview(room, currentUser) {
     return "No messages yet.";
   }
 
-  const messageText = String(message.text || "").trim();
-  const attachmentCount = Array.isArray(message.attachments)
-    ? message.attachments.length
-    : 0;
-  const preview = messageText || (attachmentCount ? "Attachment" : "Message");
+  const messageText = getMessagePreviewLabel(message);
+  const attachmentCount = Array.isArray(message.decrypted_attachments)
+    ? message.decrypted_attachments.length
+    : Array.isArray(message.attachments)
+      ? message.attachments.length
+      : 0;
+  let preview = messageText;
+
+  if (!preview && isEncryptedMessageText(message.text)) {
+    preview = "Encrypted message";
+  }
+
+  if (!preview) {
+    preview = attachmentCount ? "Attachment" : "Message";
+  }
   const currentUserId = getCurrentUserId(currentUser);
 
   if (currentUserId && Number(message.sender_user_id) === currentUserId) {
