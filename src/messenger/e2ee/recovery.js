@@ -22,6 +22,7 @@ const BACKUP_SALT_BYTES = 16;
 const BACKUP_KEY_BYTES = 32;
 const MIN_RECOVERY_PASSWORD_LENGTH = 12;
 const RECOVERY_KEY_STORAGE_PREFIX = "parrot:e2ee.recovery-key:v1";
+const RECOVERY_KEY_ACK_STORAGE_PREFIX = "parrot:e2ee.recovery-key-ack:v1";
 
 function getResult(response) {
   return response?.data?.result || response?.data || {};
@@ -52,6 +53,12 @@ function getRecoveryKeyStorageKey(user) {
   return scope ? `${RECOVERY_KEY_STORAGE_PREFIX}:${scope}` : "";
 }
 
+function getRecoveryKeyAcknowledgementStorageKey(user) {
+  const scope = getUserStorageScope(user);
+
+  return scope ? `${RECOVERY_KEY_ACK_STORAGE_PREFIX}:${scope}` : "";
+}
+
 function getLocalStorage() {
   try {
     return globalThis.localStorage || null;
@@ -73,6 +80,16 @@ function storeRecoveryKey(user, recoveryPassword) {
   } catch {
     // The encrypted backup is still valid if the browser blocks local storage.
   }
+}
+
+function getRecoveryBackupRevision(backup) {
+  return String(
+    backup?.updated_at ||
+      backup?.created_at ||
+      backup?.nonce ||
+      backup?.encrypted_private_key ||
+      "",
+  );
 }
 
 export function getStoredRecoveryKey(user) {
@@ -103,6 +120,61 @@ export function clearStoredRecoveryKey(user) {
   } catch {
     // Clearing local recovery state is best effort.
   }
+}
+
+export function getAcknowledgedRecoveryBackupRevision(user) {
+  const storageKey = getRecoveryKeyAcknowledgementStorageKey(user);
+  const storage = getLocalStorage();
+
+  if (!storageKey || !storage) {
+    return "";
+  }
+
+  try {
+    return storage.getItem(storageKey) || "";
+  } catch {
+    return "";
+  }
+}
+
+export function acknowledgeRecoveryKeyBackup(user, backup) {
+  const backupRevision = getRecoveryBackupRevision(backup);
+  const storageKey = getRecoveryKeyAcknowledgementStorageKey(user);
+  const storage = getLocalStorage();
+
+  if (!backupRevision || !storageKey || !storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(storageKey, backupRevision);
+  } catch {
+    // The device can still continue if local acknowledgement storage is blocked.
+  }
+}
+
+export function clearRecoveryKeyBackupAcknowledgement(user) {
+  const storageKey = getRecoveryKeyAcknowledgementStorageKey(user);
+  const storage = getLocalStorage();
+
+  if (!storageKey || !storage) {
+    return;
+  }
+
+  try {
+    storage.removeItem(storageKey);
+  } catch {
+    // Clearing local recovery acknowledgement is best effort.
+  }
+}
+
+export function isRecoveryKeyBackupAcknowledged(user, backup) {
+  const backupRevision = getRecoveryBackupRevision(backup);
+
+  return Boolean(
+    backupRevision &&
+      getAcknowledgedRecoveryBackupRevision(user) === backupRevision,
+  );
 }
 
 async function deriveBackupKey(recoveryPassword, salt, iterations) {
@@ -190,6 +262,7 @@ export async function saveRecoveryKeyBackup(user, recoveryPassword) {
   const result = getResult(response);
 
   storeRecoveryKey(user, normalizedPassword);
+  acknowledgeRecoveryKeyBackup(user, result.backup);
 
   return result;
 }
@@ -230,6 +303,22 @@ export async function restoreRecoveryKeyBackup(user, backup, recoveryPassword) {
   });
 
   const result = await registerMessengerDeviceIdentity(identity);
+  acknowledgeRecoveryKeyBackup(user, backup);
 
   return result;
+}
+
+export async function verifyRecoveryKeyBackup(user, backup, recoveryPassword) {
+  const restoredIdentity = await decryptRecoveryKeyBackup(
+    backup,
+    recoveryPassword,
+  );
+
+  if (Number(restoredIdentity?.v) !== E2EE_KEY_BACKUP_VERSION) {
+    throw new Error("This recovery backup is not supported.");
+  }
+
+  acknowledgeRecoveryKeyBackup(user, backup);
+
+  return restoredIdentity;
 }

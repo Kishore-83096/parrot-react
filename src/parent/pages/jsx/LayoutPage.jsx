@@ -17,9 +17,12 @@ import {
 import { decryptMessageForUser } from "../../../messenger/e2ee/messages.js";
 import RecoveryRestoreModal from "../../../messenger/e2ee/RecoveryRestoreModal.jsx";
 import RecoverySetupModal from "../../../messenger/e2ee/RecoverySetupModal.jsx";
+import RecoveryVerifyModal from "../../../messenger/e2ee/RecoveryVerifyModal.jsx";
 import {
+  clearRecoveryKeyBackupAcknowledgement,
   clearStoredRecoveryKey,
   getRecoveryKeyBackupStatus,
+  isRecoveryKeyBackupAcknowledged,
 } from "../../../messenger/e2ee/recovery.js";
 import MessengerInboxListener from "../../../messenger/MessengerInboxListener.jsx";
 import MessengerConversation from "../../../messenger/pages/jsx/MessengerConversation.jsx";
@@ -71,8 +74,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [e2eeRecoveryVersion, setE2eeRecoveryVersion] = useState(0);
   const [defaultDevicePromptVersion, setDefaultDevicePromptVersion] = useState(0);
   const [recoveryBackup, setRecoveryBackup] = useState(null);
+  const [recoveryVerifyBackup, setRecoveryVerifyBackup] = useState(null);
   const [isRecoveryRestoreOpen, setIsRecoveryRestoreOpen] = useState(false);
   const [isRecoverySetupOpen, setIsRecoverySetupOpen] = useState(false);
+  const [isRecoveryVerifyOpen, setIsRecoveryVerifyOpen] = useState(false);
+  const [isRecoveryVerifyRequired, setIsRecoveryVerifyRequired] = useState(false);
   const [toast, setToast] = useState(null);
   const onlineUserTimeoutsRef = useRef(new Map());
   const currentUserId = getCurrentUserId(user);
@@ -112,6 +118,75 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       return true;
     },
     [loadLinkedDevices],
+  );
+
+  const openRecoveryKeyVerification = useCallback(
+    async ({ required = false, showToast = false } = {}) => {
+      const backupStatus = await getRecoveryKeyBackupStatus();
+
+      if (!backupStatus.exists || !backupStatus.backup) {
+        if (showToast) {
+          setToast({
+            type: "error",
+            title: "Recovery key unavailable",
+            message: "No recovery backup is available for this account yet.",
+          });
+        }
+
+        return false;
+      }
+
+      setRecoveryVerifyBackup(backupStatus.backup);
+      setIsRecoveryVerifyRequired(required);
+      setIsRecoveryVerifyOpen(true);
+
+      if (showToast) {
+        setToast({
+          type: "error",
+          title: "Recovery key updated",
+          message: "Enter the current recovery key on this device.",
+        });
+      }
+
+      return true;
+    },
+    [],
+  );
+
+  const maybePromptForRecoveryKeyUpdate = useCallback(
+    async ({ backupStatus, linkedDevices, localIdentity, showToast = false }) => {
+      if (
+        !backupStatus?.exists ||
+        !backupStatus?.backup ||
+        !localIdentity?.device_id ||
+        isRecoveryKeyBackupAcknowledged(user, backupStatus.backup)
+      ) {
+        return false;
+      }
+
+      const currentLinkedDevice = linkedDevices.find(
+        (device) => device.device_id === localIdentity.device_id,
+      );
+
+      if (!currentLinkedDevice || currentLinkedDevice.is_default) {
+        return false;
+      }
+
+      setRecoveryVerifyBackup(backupStatus.backup);
+      setIsRecoveryVerifyRequired(true);
+      setIsRecoveryVerifyOpen(true);
+
+      if (showToast) {
+        setToast({
+          type: "error",
+          title: "Recovery key updated",
+          message: "Enter the current recovery key on this device.",
+        });
+      }
+
+      return true;
+    },
+    [user],
   );
 
   useEffect(() => {
@@ -172,6 +247,12 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             setIsRecoverySetupOpen(true);
           }
 
+          await maybePromptForRecoveryKeyUpdate({
+            backupStatus,
+            linkedDevices,
+            localIdentity,
+          });
+
           return;
         }
 
@@ -212,6 +293,12 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         if (currentLinkedDevice?.is_default && !backupStatus.exists) {
           setIsRecoverySetupOpen(true);
         }
+
+        await maybePromptForRecoveryKeyUpdate({
+          backupStatus,
+          linkedDevices,
+          localIdentity,
+        });
       } catch (error) {
         if (!isMounted) {
           return;
@@ -233,7 +320,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     return () => {
       isMounted = false;
     };
-  }, [loadLinkedDevices, onLogout, user]);
+  }, [loadLinkedDevices, maybePromptForRecoveryKeyUpdate, onLogout, user]);
 
   const handleRecoverySetupComplete = useCallback(() => {
     setIsRecoverySetupOpen(false);
@@ -262,11 +349,59 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       .catch(() => {})
       .finally(() => {
         clearStoredRecoveryKey(user);
+        clearRecoveryKeyBackupAcknowledgement(user);
         clearMessengerSession();
         clearParentSession();
         onLogout?.();
       });
   }, [onLogout, user]);
+
+  const handleRecoveryVerifyComplete = useCallback(() => {
+    setIsRecoveryVerifyOpen(false);
+    setIsRecoveryVerifyRequired(false);
+    setRecoveryVerifyBackup(null);
+    setToast({
+      type: "success",
+      title: "Recovery key confirmed",
+      message: "This device has verified the current recovery key.",
+    });
+  }, []);
+
+  const handleRecoveryVerifyClose = useCallback(() => {
+    if (isRecoveryVerifyRequired) {
+      return;
+    }
+
+    setIsRecoveryVerifyOpen(false);
+    setRecoveryVerifyBackup(null);
+  }, [isRecoveryVerifyRequired]);
+
+  const handleRecoveryVerifyFailed = useCallback(() => {
+    clearStoredMessengerDeviceIdentity(user)
+      .catch(() => {})
+      .finally(() => {
+        clearStoredRecoveryKey(user);
+        clearRecoveryKeyBackupAcknowledgement(user);
+        clearMessengerSession();
+        clearParentSession();
+        onLogout?.();
+      });
+  }, [onLogout, user]);
+
+  const handleRecoveryKeyRequested = useCallback(() => {
+    openRecoveryKeyVerification({ required: false, showToast: true }).catch(
+      (error) => {
+        setToast({
+          type: "error",
+          title: "Recovery key unavailable",
+          message: getMessengerErrorMessage(
+            error,
+            "Unable to open recovery key confirmation.",
+          ),
+        });
+      },
+    );
+  }, [openRecoveryKeyVerification]);
 
   const handleDefaultDeviceChanged = useCallback(
     async (device) => {
@@ -617,6 +752,31 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
           .catch(() => {});
       }
 
+      if (eventPayload?.type === "recovery.key_updated") {
+        getStoredMessengerDeviceIdentity(user)
+          .then(async (identity) => {
+            if (
+              !identity?.device_id ||
+              identity.device_id === eventPayload.updated_by_device_id
+            ) {
+              return;
+            }
+
+            const [backupStatus, linkedDevices] = await Promise.all([
+              getRecoveryKeyBackupStatus(),
+              loadLinkedDevices(),
+            ]);
+
+            await maybePromptForRecoveryKeyUpdate({
+              backupStatus,
+              linkedDevices,
+              localIdentity: identity,
+              showToast: true,
+            });
+          })
+          .catch(() => {});
+      }
+
       if (eventPayload?.type === "presence.snapshot") {
         replaceOnlineUsers(
           eventPayload.online_user_ids || [],
@@ -655,7 +815,9 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     currentUserId,
     handleMaybeEncryptedRoomMessage,
     handleRoomRead,
+    loadLinkedDevices,
     markOnlineUser,
+    maybePromptForRecoveryKeyUpdate,
     onLogout,
     removeOnlineUser,
     replaceOnlineUsers,
@@ -728,6 +890,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             user={user}
             defaultDevicePromptVersion={defaultDevicePromptVersion}
             onDefaultDeviceChanged={handleDefaultDeviceChanged}
+            onRecoveryKeyRequested={handleRecoveryKeyRequested}
             onLogout={handleLogout}
             onUserUpdate={onUserUpdate}
             onToast={setToast}
@@ -777,6 +940,18 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
           user={user}
           onFailedAttemptsExceeded={handleRecoveryRestoreFailed}
           onRestore={handleRecoveryRestoreComplete}
+        />
+      ) : null}
+
+      {isRecoveryVerifyOpen && recoveryVerifyBackup ? (
+        <RecoveryVerifyModal
+          backup={recoveryVerifyBackup}
+          user={user}
+          onClose={
+            isRecoveryVerifyRequired ? undefined : handleRecoveryVerifyClose
+          }
+          onFailedAttemptsExceeded={handleRecoveryVerifyFailed}
+          onVerify={handleRecoveryVerifyComplete}
         />
       ) : null}
 

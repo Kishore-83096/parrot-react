@@ -28,6 +28,7 @@ import {
   setDefaultMessengerDevice,
 } from "../../../messenger/e2ee/devices/index.js";
 import {
+  clearRecoveryKeyBackupAcknowledgement,
   clearStoredRecoveryKey,
   getStoredRecoveryKey,
   saveRecoveryKeyBackup,
@@ -297,6 +298,7 @@ function Header({
   user,
   defaultDevicePromptVersion = 0,
   onDefaultDeviceChanged,
+  onRecoveryKeyRequested,
   onLogout,
   onUserUpdate,
   onToast,
@@ -752,6 +754,15 @@ function Header({
     refreshStoredRecoveryKey();
   };
 
+  const handleRecoveryKeyVerificationRequest = () => {
+    if (isCurrentHistoryModal("linkedDevices")) {
+      clearLoggedInHistoryModal();
+    }
+
+    resetLinkedDevicesModal();
+    onRecoveryKeyRequested?.();
+  };
+
   const handleRevokeCryptoDevice = async (device) => {
     const deviceId = device?.device_id;
     const isCurrent = deviceId === currentCryptoDeviceId;
@@ -773,6 +784,7 @@ function Header({
       if (isCurrent) {
         await clearStoredMessengerDeviceIdentity(user);
         clearStoredRecoveryKey(user);
+        clearRecoveryKeyBackupAcknowledgement(user);
         setStoredRecoveryKey("");
         setIsStoredRecoveryKeyVisible(false);
         didLogoutCurrentDevice = true;
@@ -1696,7 +1708,8 @@ function Header({
               {!canManageCryptoDevices ? (
                 <p className="parent-layout-page__account-danger">
                   Only the current default device can view or change the
-                  recovery key.
+                  recovery key. This device can confirm the current key without
+                  saving it.
                 </p>
               ) : null}
 
@@ -1769,100 +1782,113 @@ function Header({
                 </p>
               ) : null}
 
-              <label className="parent-layout-page__profile-field">
-                <span className="parent-layout-page__field-label">
-                  New recovery key
-                  <em className="is-required">Required</em>
-                </span>
-                <div className="parent-layout-page__table-input-action">
-                  <input
-                    name="recovery_key"
-                    type={isRecoveryKeyVisible ? "text" : "password"}
-                    value={recoveryKeyForm.recovery_key}
-                    onChange={handleRecoveryKeyFormChange}
-                    autoComplete="new-password"
-                    minLength={12}
-                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
-                    required
-                  />
-                  <button
-                    className="parent-layout-page__table-icon-button"
-                    type="button"
-                    onClick={() =>
-                      setIsRecoveryKeyVisible((currentValue) => !currentValue)
-                    }
-                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
-                    aria-label={
-                      isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
-                    }
-                    title={
-                      isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
-                    }
-                  >
-                    {isRecoveryKeyVisible ? (
-                      <EyeOff size={18} aria-hidden="true" />
-                    ) : (
-                      <Eye size={18} aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
-              </label>
+              {!canManageCryptoDevices ? (
+                <button
+                  className="parent-layout-page__modal-submit"
+                  type="button"
+                  onClick={handleRecoveryKeyVerificationRequest}
+                >
+                  <KeyRound size={18} aria-hidden="true" />
+                  <span>Enter recovery key</span>
+                </button>
+              ) : (
+                <>
+                  <label className="parent-layout-page__profile-field">
+                    <span className="parent-layout-page__field-label">
+                      New recovery key
+                      <em className="is-required">Required</em>
+                    </span>
+                    <div className="parent-layout-page__table-input-action">
+                      <input
+                        name="recovery_key"
+                        type={isRecoveryKeyVisible ? "text" : "password"}
+                        value={recoveryKeyForm.recovery_key}
+                        onChange={handleRecoveryKeyFormChange}
+                        autoComplete="new-password"
+                        minLength={12}
+                        disabled={isRecoveryKeySaving}
+                        required
+                      />
+                      <button
+                        className="parent-layout-page__table-icon-button"
+                        type="button"
+                        onClick={() =>
+                          setIsRecoveryKeyVisible((currentValue) => !currentValue)
+                        }
+                        disabled={isRecoveryKeySaving}
+                        aria-label={
+                          isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
+                        }
+                        title={
+                          isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
+                        }
+                      >
+                        {isRecoveryKeyVisible ? (
+                          <EyeOff size={18} aria-hidden="true" />
+                        ) : (
+                          <Eye size={18} aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+                  </label>
 
-              <label className="parent-layout-page__profile-field">
-                <span className="parent-layout-page__field-label">
-                  Confirm new recovery key
-                  <em className="is-required">Required</em>
-                </span>
-                <div className="parent-layout-page__table-input-action">
-                  <input
-                    name="confirm_recovery_key"
-                    type={isConfirmRecoveryKeyVisible ? "text" : "password"}
-                    value={recoveryKeyForm.confirm_recovery_key}
-                    onChange={handleRecoveryKeyFormChange}
-                    autoComplete="new-password"
-                    minLength={12}
-                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
-                    required
-                  />
-                  <button
-                    className="parent-layout-page__table-icon-button"
-                    type="button"
-                    onClick={() =>
-                      setIsConfirmRecoveryKeyVisible(
-                        (currentValue) => !currentValue,
-                      )
-                    }
-                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
-                    aria-label={
-                      isConfirmRecoveryKeyVisible
-                        ? "Hide confirmation recovery key"
-                        : "Show confirmation recovery key"
-                    }
-                    title={
-                      isConfirmRecoveryKeyVisible
-                        ? "Hide confirmation recovery key"
-                        : "Show confirmation recovery key"
-                    }
-                  >
-                    {isConfirmRecoveryKeyVisible ? (
-                      <EyeOff size={18} aria-hidden="true" />
-                    ) : (
-                      <Eye size={18} aria-hidden="true" />
-                    )}
-                  </button>
-                </div>
-              </label>
+                  <label className="parent-layout-page__profile-field">
+                    <span className="parent-layout-page__field-label">
+                      Confirm new recovery key
+                      <em className="is-required">Required</em>
+                    </span>
+                    <div className="parent-layout-page__table-input-action">
+                      <input
+                        name="confirm_recovery_key"
+                        type={isConfirmRecoveryKeyVisible ? "text" : "password"}
+                        value={recoveryKeyForm.confirm_recovery_key}
+                        onChange={handleRecoveryKeyFormChange}
+                        autoComplete="new-password"
+                        minLength={12}
+                        disabled={isRecoveryKeySaving}
+                        required
+                      />
+                      <button
+                        className="parent-layout-page__table-icon-button"
+                        type="button"
+                        onClick={() =>
+                          setIsConfirmRecoveryKeyVisible(
+                            (currentValue) => !currentValue,
+                          )
+                        }
+                        disabled={isRecoveryKeySaving}
+                        aria-label={
+                          isConfirmRecoveryKeyVisible
+                            ? "Hide confirmation recovery key"
+                            : "Show confirmation recovery key"
+                        }
+                        title={
+                          isConfirmRecoveryKeyVisible
+                            ? "Hide confirmation recovery key"
+                            : "Show confirmation recovery key"
+                        }
+                      >
+                        {isConfirmRecoveryKeyVisible ? (
+                          <EyeOff size={18} aria-hidden="true" />
+                        ) : (
+                          <Eye size={18} aria-hidden="true" />
+                        )}
+                      </button>
+                    </div>
+                  </label>
 
-              <button
-                className="parent-layout-page__modal-submit"
-                type="submit"
-                disabled={!canManageCryptoDevices || isRecoveryKeySaving}
-              >
-                <KeyRound size={18} aria-hidden="true" />
-                <span>
-                  {isRecoveryKeySaving ? "Updating..." : "Update recovery key"}
-                </span>
-              </button>
+                  <button
+                    className="parent-layout-page__modal-submit"
+                    type="submit"
+                    disabled={isRecoveryKeySaving}
+                  >
+                    <KeyRound size={18} aria-hidden="true" />
+                    <span>
+                      {isRecoveryKeySaving ? "Updating..." : "Update recovery key"}
+                    </span>
+                  </button>
+                </>
+              )}
             </form>
           ) : null}
         </div>
