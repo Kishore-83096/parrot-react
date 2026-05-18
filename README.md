@@ -103,6 +103,8 @@ src/
 - E2EE device setup
 - recovery setup/restore/verify modals
 
+The logged-in app is keyed by the current Parent account. If a different account logs in on the same browser, React remounts the authenticated app and drops the old account's contacts, rooms, selected conversation, and runtime E2EE caches.
+
 ### First Device
 
 On first login for a new account:

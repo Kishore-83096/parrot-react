@@ -10,6 +10,10 @@ const E2EE_FILE_AAD = "parrot:e2ee.file:v1";
 const decryptedAttachmentBlobCache = new Map();
 let fileAdditionalData = null;
 
+export function clearE2EEFileRuntimeCaches() {
+  decryptedAttachmentBlobCache.clear();
+}
+
 function getUploadResult(response) {
   const result = response?.data?.result || response?.data;
   return result?.file || result || {};

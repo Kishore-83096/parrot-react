@@ -23,6 +23,24 @@ function getCurrentUserId(user) {
   return userId ? Number(userId) : null;
 }
 
+function getCurrentUserCacheScope(user) {
+  const userId = user?.id || user?.user_id;
+
+  if (userId) {
+    return `user:${String(userId)}`;
+  }
+
+  if (user?.account_number) {
+    return `account:${String(user.account_number)}`;
+  }
+
+  return "anonymous";
+}
+
+export function clearE2EEMessageRuntimeCaches() {
+  recipientDeviceCache.clear();
+}
+
 function getDevicesFromResponse(response) {
   const result = response?.data?.result || response?.data;
   return Array.isArray(result?.devices) ? result.devices : [];
@@ -59,13 +77,14 @@ function getMessageAdditionalData() {
   return messageAdditionalData;
 }
 
-async function getCachedRecipientDevices(recipientAccountNumber) {
-  const cacheKey = String(recipientAccountNumber || "").trim();
+async function getCachedRecipientDevices(recipientAccountNumber, user) {
+  const recipientScope = String(recipientAccountNumber || "").trim();
 
-  if (!cacheKey) {
+  if (!recipientScope) {
     return [];
   }
 
+  const cacheKey = `${getCurrentUserCacheScope(user)}:${recipientScope}`;
   const now = Date.now();
   const cachedEntry = recipientDeviceCache.get(cacheKey);
 
@@ -75,7 +94,7 @@ async function getCachedRecipientDevices(recipientAccountNumber) {
 
   const promise = (async () => {
     const recipientResponse =
-      await getMessengerRecipientCryptoDevices(cacheKey);
+      await getMessengerRecipientCryptoDevices(recipientScope);
 
     return getDevicesFromResponse(recipientResponse)
       .map(normalizeDevice)
@@ -227,7 +246,10 @@ export async function encryptMessageText({
     throw new Error("Cannot initialize encrypted messaging without a user identity.");
   }
 
-  const recipientDevices = await getCachedRecipientDevices(recipientAccountNumber);
+  const recipientDevices = await getCachedRecipientDevices(
+    recipientAccountNumber,
+    user,
+  );
 
   if (recipientDevices.length === 0) {
     throw new Error("This contact has not enabled encrypted messaging yet.");
