@@ -1,73 +1,165 @@
-# React + TypeScript + Vite
+# Parrot React Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the browser frontend for Parrot. It handles account login, profile management, contacts, real-time chat, encrypted messages, linked devices, and recovery-key flows.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 19
+- TypeScript
+- Vite
+- Axios
+- React Router
+- Lucide icons
+- Tailwind CSS tooling
+- libsodium-wrappers for browser E2EE
 
-## React Compiler
+## Environment Variables
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Create `React/.env` for local development:
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```env
+VITE_PARENT_API_BASE_URL=http://127.0.0.1:5000/parent
+VITE_MESSENGER_SERVICE_URL=http://127.0.0.1:8000
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Production uses the deployed Parent and Messenger service URLs.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Commands
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Install dependencies:
+
+```powershell
+npm install
 ```
+
+Run local dev server:
+
+```powershell
+npm run dev
+```
+
+Build for production:
+
+```powershell
+npm run build
+```
+
+Preview production build:
+
+```powershell
+npm run preview
+```
+
+Lint:
+
+```powershell
+npm run lint
+```
+
+## Source Layout
+
+```text
+src/
+|-- App.tsx                         # top-level logged-in/logged-out switch
+|-- parent/
+|   |-- api.js                      # Parent API client and parent JWT storage
+|   |-- pages/jsx/WelcomePage.jsx   # registration/login UI
+|   |-- pages/jsx/LayoutPage.jsx    # authenticated app shell
+|   |-- pages/jsx/Header.jsx        # profile/account/linked-device modals
+|   `-- pages/jsx/ContactPanel.jsx  # contact search and management
+|-- messenger/
+|   |-- api.js                      # Messenger API client, JWT refresh, WS URLs
+|   |-- MessengerInboxListener.jsx  # inbox WebSocket listener
+|   |-- e2ee/
+|   |   |-- devices/index.js        # linked-device identity and signed actions
+|   |   |-- messages.js             # message encryption/decryption
+|   |   |-- files.js                # encrypted attachment handling
+|   |   |-- recovery.js             # recovery-key backup and verification
+|   |   |-- RecoverySetupModal.jsx
+|   |   |-- RecoveryRestoreModal.jsx
+|   |   `-- RecoveryVerifyModal.jsx
+|   `-- pages/jsx/
+|       |-- MessengerRoomList.jsx
+|       |-- MessengerConversation.jsx
+|       `-- MessengerRoomHeader.jsx
+`-- components/
+    |-- Layout.jsx
+    `-- ParrotToast.jsx
+```
+
+## Frontend Flow
+
+### Logged Out
+
+`WelcomePage` lets a user register and login. Login stores Parent tokens and the current user. The app clears stale Messenger tokens on login so a new Parent account cannot accidentally reuse a previous account's Messenger token.
+
+### Logged In
+
+`LayoutPage` initializes:
+
+- inbox WebSocket
+- contacts/chats panel
+- room list and active conversation
+- E2EE device setup
+- recovery setup/restore/verify modals
+
+### First Device
+
+On first login for a new account:
+
+1. `ensureMessengerDeviceKey` creates a local browser device keypair.
+2. The device is registered through Messenger.
+3. The app opens linked-device setup because no default device exists.
+4. The user marks this device as default.
+5. The user creates and saves a recovery key.
+
+### Additional Devices
+
+On another browser/device:
+
+1. A new device identity is created and registered.
+2. If a recovery backup exists, the user must enter the recovery key.
+3. The app allows 5 attempts.
+4. On success, old encrypted messages can decrypt.
+5. The device remains non-default until the default device promotes it.
+
+### Recovery-Key Updates
+
+When the default device updates the recovery key:
+
+1. Messenger broadcasts `recovery.key_updated`.
+2. Non-default devices fetch the encrypted backup.
+3. `RecoveryVerifyModal` asks for the new key.
+4. The key is verified locally and discarded.
+5. Only an acknowledgement marker is stored.
+
+## E2EE Storage
+
+Browser E2EE data is scoped per user under localStorage keys beginning with:
+
+```text
+parrot:e2ee:v1
+parrot:e2ee.recovery-key:v1
+parrot:e2ee.recovery-key-ack:v1
+```
+
+The default device may store the plain recovery key locally so it can show it to the owner. Non-default devices clear and do not store the plain recovery key.
+
+## API Clients
+
+`parent/api.js`:
+
+- stores Parent access/refresh tokens
+- refreshes Parent sessions
+- calls profile/contact/account APIs
+
+`messenger/api.js`:
+
+- obtains a short-lived Messenger JWT from Parent
+- rejects stored Messenger tokens belonging to a different current Parent user
+- calls room/message/E2EE APIs
+- builds Messenger WebSocket URLs
+
+## Build Notes
+
+The Vite build loads native Windows packages for Tailwind/Rolldown. In restricted sandboxes the first build attempt can fail with `spawn EPERM`; running the same `npm run build` outside that sandbox succeeds.
