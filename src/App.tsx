@@ -6,6 +6,7 @@ import {
   getStoredParentUser,
   onTokenExpired,
 } from './parent/api.js'
+import { clearMessengerSession } from './messenger/api.js'
 import LayoutPage from './parent/pages/jsx/LayoutPage.jsx'
 import WelcomePage from './parent/pages/jsx/WelcomePage.jsx'
 
@@ -26,6 +27,7 @@ function App() {
   )
 
   const handleLoginSuccess = useCallback((user: ParentUser) => {
+    clearMessengerSession()
     setParentUser(user || (getStoredParentUser() as ParentUser))
   }, [])
 
@@ -38,6 +40,7 @@ function App() {
   }, [])
 
   const handleSessionExpired = useCallback(() => {
+    clearMessengerSession()
     clearParentSession()
     setParentUser(null)
   }, [])

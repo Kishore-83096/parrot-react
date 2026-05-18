@@ -5,6 +5,7 @@ import Layout from "../../../components/Layout.jsx";
 import ParrotToast from "../../../components/ParrotToast.jsx";
 import {
   clearMessengerSession,
+  getMessengerErrorMessage,
   getMessengerUserCryptoDevices,
   MESSENGER_INBOX_EVENT_NAME,
 } from "../../../messenger/api.js";
@@ -211,7 +212,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         if (currentLinkedDevice?.is_default && !backupStatus.exists) {
           setIsRecoverySetupOpen(true);
         }
-      } catch {
+      } catch (error) {
         if (!isMounted) {
           return;
         }
@@ -219,7 +220,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         setToast({
           type: "error",
           title: "Encrypted messaging setup failed",
-          message: "This device could not finish encrypted messaging setup.",
+          message: getMessengerErrorMessage(
+            error,
+            "This device could not finish encrypted messaging setup.",
+          ),
         });
       }
     }

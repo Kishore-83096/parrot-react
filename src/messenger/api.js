@@ -1,6 +1,6 @@
 import axios from "axios";
 
-import { parentAxios } from "../parent/api.js";
+import { getStoredParentUser, parentAxios } from "../parent/api.js";
 
 const runtimeConfig = globalThis.__PARROT_CONFIG__ || {};
 
@@ -26,11 +26,50 @@ export const messengerAxios = axios.create({
   },
 });
 
+function decodeTokenPayload(token) {
+  try {
+    const payload = token.split(".")[1];
+    const normalizedPayload = payload
+      .replace(/-/g, "+")
+      .replace(/_/g, "/")
+      .padEnd(Math.ceil(payload.length / 4) * 4, "=");
+
+    return JSON.parse(window.atob(normalizedPayload));
+  } catch {
+    return null;
+  }
+}
+
+function getCurrentParentUserId() {
+  const user = getStoredParentUser();
+  const userId = user?.id || user?.user_id;
+
+  return userId ? String(userId) : "";
+}
+
+function isMessengerTokenForCurrentUser(token) {
+  const currentUserId = getCurrentParentUserId();
+
+  if (!currentUserId) {
+    return true;
+  }
+
+  const payload = decodeTokenPayload(token);
+  const tokenUserId = payload?.sub || payload?.user_id;
+
+  return tokenUserId ? String(tokenUserId) === currentUserId : false;
+}
+
 export const getStoredMessengerToken = () => {
   const token = localStorage.getItem(MESSENGER_TOKEN_KEY);
   const expiresAt = Number(localStorage.getItem(MESSENGER_TOKEN_EXPIRES_AT_KEY));
 
   if (!token || !expiresAt || Date.now() + TOKEN_EXPIRY_SKEW_MS >= expiresAt) {
+    return "";
+  }
+
+  if (!isMessengerTokenForCurrentUser(token)) {
+    clearMessengerSession();
     return "";
   }
 
