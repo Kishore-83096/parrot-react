@@ -7,6 +7,8 @@ export const E2EE_FILE_TYPE = "e2ee.file";
 export const E2EE_FILE_VERSION = 1;
 
 const E2EE_FILE_AAD = "parrot:e2ee.file:v1";
+const decryptedAttachmentBlobCache = new Map();
+let fileAdditionalData = null;
 
 function getUploadResult(response) {
   const result = response?.data?.result || response?.data;
@@ -15,6 +17,23 @@ function getUploadResult(response) {
 
 function getAttachmentSourceUrl(attachment) {
   return attachment?.encrypted_file_url || attachment?.file_url || "";
+}
+
+function getFileAdditionalData() {
+  if (!fileAdditionalData) {
+    fileAdditionalData = sodium.from_string(E2EE_FILE_AAD);
+  }
+
+  return fileAdditionalData;
+}
+
+function getEncryptedAttachmentCacheKey(attachment) {
+  return [
+    getAttachmentSourceUrl(attachment),
+    attachment?.file_key || "",
+    attachment?.nonce || "",
+    attachment?.mime_type || "",
+  ].join("|");
 }
 
 export function isEncryptedAttachment(attachment) {
@@ -47,7 +66,7 @@ async function encryptSelectedFileForMessage(selectedFile, index) {
   const plaintextBytes = new Uint8Array(await file.arrayBuffer());
   const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     plaintextBytes,
-    sodium.from_string(E2EE_FILE_AAD),
+    getFileAdditionalData(),
     null,
     nonce,
     fileKey,
@@ -97,21 +116,35 @@ export async function decryptEncryptedAttachmentBlob(attachment) {
     throw new Error("Encrypted attachment metadata is incomplete.");
   }
 
-  const response = await fetch(sourceUrl);
-  if (!response.ok) {
-    throw new Error("Unable to fetch encrypted attachment.");
+  const cacheKey = getEncryptedAttachmentCacheKey(attachment);
+
+  if (!decryptedAttachmentBlobCache.has(cacheKey)) {
+    const decryptPromise = fetch(sourceUrl)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Unable to fetch encrypted attachment.");
+        }
+
+        const ciphertext = new Uint8Array(await response.arrayBuffer());
+        const plaintext = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
+          null,
+          ciphertext,
+          getFileAdditionalData(),
+          fromBase64(attachment.nonce),
+          fromBase64(attachment.file_key),
+        );
+
+        return new Blob([plaintext], {
+          type: attachment.mime_type || "application/octet-stream",
+        });
+      })
+      .catch((error) => {
+        decryptedAttachmentBlobCache.delete(cacheKey);
+        throw error;
+      });
+
+    decryptedAttachmentBlobCache.set(cacheKey, decryptPromise);
   }
 
-  const ciphertext = new Uint8Array(await response.arrayBuffer());
-  const plaintext = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
-    null,
-    ciphertext,
-    sodium.from_string(E2EE_FILE_AAD),
-    fromBase64(attachment.nonce),
-    fromBase64(attachment.file_key),
-  );
-
-  return new Blob([plaintext], {
-    type: attachment.mime_type || "application/octet-stream",
-  });
+  return decryptedAttachmentBlobCache.get(cacheKey);
 }

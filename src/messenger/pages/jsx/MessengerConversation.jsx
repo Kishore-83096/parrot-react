@@ -149,6 +149,32 @@ function createSelectedFileId(file) {
   ].join("-");
 }
 
+function createOptimisticAttachmentPreviews(selectedFiles) {
+  return selectedFiles.map((selectedFile, index) => {
+    const localPreviewUrl = URL.createObjectURL(selectedFile.file);
+
+    return {
+      id: selectedFile.id,
+      file_url: localPreviewUrl,
+      local_preview_url: localPreviewUrl,
+      file_name: selectedFile.file.name || `Attachment ${index + 1}`,
+      mime_type: selectedFile.file.type || "application/octet-stream",
+      file_size_bytes: selectedFile.file.size,
+      file_type: selectedFile.fileType || "document",
+      sort_order: index,
+      is_local_preview: true,
+    };
+  });
+}
+
+function releaseOptimisticAttachmentPreviews(attachments) {
+  attachments.forEach((attachment) => {
+    if (attachment?.local_preview_url) {
+      URL.revokeObjectURL(attachment.local_preview_url);
+    }
+  });
+}
+
 function getAttachmentLabel(attachment) {
   return attachment?.file_name || attachment?.file_type || "File";
 }
@@ -541,6 +567,44 @@ function useCachedMediaUrl(attachment) {
     : sourceUrl;
 }
 
+function CachedImage({
+  alt,
+  fallbackClassName,
+  fallbackSize = 24,
+  src,
+}) {
+  const [imageStatus, setImageStatus] = useState(src ? "loading" : "error");
+
+  useEffect(() => {
+    setImageStatus(src ? "loading" : "error");
+  }, [src]);
+
+  const shouldShowImage = Boolean(src) && imageStatus !== "error";
+
+  return (
+    <>
+      {shouldShowImage ? (
+        <img
+          className={
+            imageStatus === "ready"
+              ? undefined
+              : "parent-layout-page__image-loading"
+          }
+          src={src}
+          alt={alt}
+          onLoad={() => setImageStatus("ready")}
+          onError={() => setImageStatus("error")}
+        />
+      ) : null}
+      {imageStatus !== "ready" ? (
+        <span className={fallbackClassName} aria-hidden="true">
+          <ImageIcon size={fallbackSize} />
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function AttachmentPreviewTile({
   attachment,
   index,
@@ -560,7 +624,14 @@ function AttachmentPreviewTile({
       onClick={() => onOpen(attachment)}
       aria-label={`Open ${label}`}
     >
-      {kind === "image" ? <img src={previewUrl} alt={label} /> : null}
+      {kind === "image" ? (
+        <CachedImage
+          src={previewUrl}
+          alt={label}
+          fallbackClassName="parent-layout-page__message-attachment-image-fallback"
+          fallbackSize={24}
+        />
+      ) : null}
       {kind === "video" ? (
         <video src={previewUrl} muted playsInline preload="metadata" />
       ) : null}
@@ -709,11 +780,18 @@ function AttachmentListItem({
     >
       <button
         type="button"
-        className="parent-layout-page__attachment-row-preview"
-        onClick={handlePrimaryAction}
-        aria-label={`${openActionLabel} ${label}`}
-      >
-        {isImage ? <img src={previewUrl} alt={label} /> : null}
+      className="parent-layout-page__attachment-row-preview"
+      onClick={handlePrimaryAction}
+      aria-label={`${openActionLabel} ${label}`}
+    >
+        {isImage ? (
+          <CachedImage
+            src={previewUrl}
+            alt={label}
+            fallbackClassName="parent-layout-page__attachment-image-fallback"
+            fallbackSize={18}
+          />
+        ) : null}
         {kind === "video" ? (
           <video src={previewUrl} muted playsInline preload="metadata" />
         ) : null}
@@ -811,7 +889,13 @@ function AttachmentImageViewer({
             <ChevronLeft size={22} aria-hidden="true" />
           </button>
         ) : null}
-        <img key={getAttachmentKey(selectedImage)} src={imageUrl} alt={label} />
+        <CachedImage
+          key={getAttachmentKey(selectedImage)}
+          src={imageUrl}
+          alt={label}
+          fallbackClassName="parent-layout-page__attachment-image-fallback parent-layout-page__attachment-image-fallback--stage"
+          fallbackSize={42}
+        />
         {hasManyImages ? (
           <button
             type="button"
@@ -874,7 +958,14 @@ function AttachmentImageViewer({
 function AttachmentThumbImage({ attachment }) {
   const imageUrl = useCachedMediaUrl(attachment);
 
-  return <img src={imageUrl} alt="" />;
+  return (
+    <CachedImage
+      src={imageUrl}
+      alt=""
+      fallbackClassName="parent-layout-page__attachment-image-fallback"
+      fallbackSize={16}
+    />
+  );
 }
 
 function useAttachmentTextPreview(sourceUrl, enabled) {
@@ -2421,18 +2512,60 @@ function MessengerConversation({
     }
 
     const replyTargetId = replyTarget?.id;
+    const replyTargetSnapshot = replyTarget;
+    const filesToSend = selectedFiles;
     const clientMessageId = createMessengerClientMessageId();
-    let optimisticMessage = null;
+    const optimisticAttachments =
+      filesToSend.length > 0
+        ? createOptimisticAttachmentPreviews(filesToSend)
+        : [];
+    const optimisticMessage = {
+      id: -Date.now(),
+      room_id: selectedRoom?.id || null,
+      reply_to_message_id: replyTargetId || null,
+      reply_to: replyTargetSnapshot || null,
+      sender_user_id: currentUserId,
+      recipient_user_id: null,
+      text: "",
+      decrypted_text: text,
+      decrypted_attachments: optimisticAttachments,
+      decryption_status: "ok",
+      is_encrypted: true,
+      client_message_id: clientMessageId,
+      status: "sending",
+      attachments: [],
+      created_at: new Date().toISOString(),
+      is_pending: true,
+    };
+    let didReleaseOptimisticAttachments = false;
+    const releaseOptimisticPreviews = () => {
+      if (didReleaseOptimisticAttachments) {
+        return;
+      }
+
+      didReleaseOptimisticAttachments = true;
+      releaseOptimisticAttachmentPreviews(optimisticAttachments);
+    };
 
     isSendingMessageRef.current = true;
     setIsSendingMessage(true);
     setRoomMessage("");
     sendTypingStopped();
+    setRoomMessages((currentMessages) =>
+      upsertMessage(currentMessages, optimisticMessage),
+    );
+    setMessageDraft("");
+    setReplyTarget(null);
+    setSelectedFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    focusMessageDraft();
 
     try {
       const encryptedAttachments =
-        selectedFiles.length > 0
-          ? await encryptSelectedFilesForMessage(selectedFiles)
+        filesToSend.length > 0
+          ? await encryptSelectedFilesForMessage(filesToSend)
           : [];
       const encryptedText = await encryptMessageText({
         attachments: encryptedAttachments,
@@ -2440,34 +2573,6 @@ function MessengerConversation({
         text,
         user,
       });
-      optimisticMessage = {
-        id: -Date.now(),
-        room_id: selectedRoom?.id || null,
-        reply_to_message_id: replyTargetId || null,
-        reply_to: replyTarget || null,
-        sender_user_id: currentUserId,
-        recipient_user_id: null,
-        text: encryptedText,
-        decrypted_text: text,
-        decrypted_attachments: encryptedAttachments,
-        decryption_status: "ok",
-        is_encrypted: true,
-        client_message_id: clientMessageId,
-        status: "sending",
-        attachments: [],
-        created_at: new Date().toISOString(),
-        is_pending: true,
-      };
-      setRoomMessages((currentMessages) =>
-        upsertMessage(currentMessages, optimisticMessage),
-      );
-      setMessageDraft("");
-      setReplyTarget(null);
-      setSelectedFiles([]);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-      focusMessageDraft();
 
       const sendPayload = {
         recipient_account_number: selectedPeerAccountNumber,
@@ -2486,6 +2591,7 @@ function MessengerConversation({
         setRoomMessages((currentMessages) =>
           upsertMessage(currentMessages, sentMessage),
         );
+        releaseOptimisticPreviews();
       }
 
       if (messageResult?.room || sentMessage) {
@@ -2494,13 +2600,19 @@ function MessengerConversation({
         });
       }
     } catch (error) {
-      if (optimisticMessage) {
-        setRoomMessages((currentMessages) =>
-          currentMessages.filter(
-            (message) => message.client_message_id !== clientMessageId,
-          ),
-        );
-      }
+      setRoomMessages((currentMessages) =>
+        currentMessages.filter(
+          (message) => message.client_message_id !== clientMessageId,
+        ),
+      );
+      releaseOptimisticPreviews();
+      setMessageDraft((currentDraft) => currentDraft || text);
+      setReplyTarget((currentReplyTarget) =>
+        currentReplyTarget || replyTargetSnapshot,
+      );
+      setSelectedFiles((currentFiles) =>
+        currentFiles.length > 0 ? currentFiles : filesToSend,
+      );
       setRoomMessage(
         error?.response
           ? getMessengerErrorMessage(error, "Unable to send message.")
@@ -2808,7 +2920,9 @@ function MessengerConversation({
         />
         <button
           type="submit"
-          className="parent-layout-page__message-submit"
+          className={`parent-layout-page__message-submit${
+            isSendingMessage ? " is-sending" : ""
+          }`}
           disabled={
             (!messageDraft.trim() && selectedFiles.length === 0) ||
             isSendingMessage
@@ -2816,14 +2930,13 @@ function MessengerConversation({
           aria-label={isSendingMessage ? "Sending message" : "Send message"}
           title="Send"
         >
+          <Send size={20} aria-hidden="true" />
           {isSendingMessage ? (
             <span
               className="parent-layout-page__send-buffer"
               aria-hidden="true"
             />
-          ) : (
-            <Send size={20} aria-hidden="true" />
-          )}
+          ) : null}
         </button>
       </form>
       {attachmentViewer.attachments.length > 0 ? (

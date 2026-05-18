@@ -14,6 +14,9 @@ export const E2EE_MESSAGE_VERSION = 1;
 const E2EE_MESSAGE_AAD = "parrot:e2ee.message:v1";
 const ENCRYPTED_MESSAGE_PREVIEW = "Encrypted message";
 const DECRYPTION_FAILED_TEXT = "Unable to decrypt message";
+const RECIPIENT_DEVICE_CACHE_TTL_MS = 10000;
+const recipientDeviceCache = new Map();
+let messageAdditionalData = null;
 
 function getCurrentUserId(user) {
   const userId = user?.id || user?.user_id;
@@ -46,6 +49,51 @@ function normalizeDevice(device) {
   } catch {
     return null;
   }
+}
+
+function getMessageAdditionalData() {
+  if (!messageAdditionalData) {
+    messageAdditionalData = sodium.from_string(E2EE_MESSAGE_AAD);
+  }
+
+  return messageAdditionalData;
+}
+
+async function getCachedRecipientDevices(recipientAccountNumber) {
+  const cacheKey = String(recipientAccountNumber || "").trim();
+
+  if (!cacheKey) {
+    return [];
+  }
+
+  const now = Date.now();
+  const cachedEntry = recipientDeviceCache.get(cacheKey);
+
+  if (cachedEntry && cachedEntry.expiresAt > now) {
+    return cachedEntry.promise;
+  }
+
+  const promise = (async () => {
+    const recipientResponse =
+      await getMessengerRecipientCryptoDevices(cacheKey);
+
+    return getDevicesFromResponse(recipientResponse)
+      .map(normalizeDevice)
+      .filter(Boolean);
+  })().catch((error) => {
+    if (recipientDeviceCache.get(cacheKey)?.promise === promise) {
+      recipientDeviceCache.delete(cacheKey);
+    }
+
+    throw error;
+  });
+
+  recipientDeviceCache.set(cacheKey, {
+    expiresAt: now + RECIPIENT_DEVICE_CACHE_TTL_MS,
+    promise,
+  });
+
+  return promise;
 }
 
 function getEnvelopeKey(device) {
@@ -93,6 +141,15 @@ function openMessageKeyForIdentity(keyEnvelopes, identity) {
   }
 
   return null;
+}
+
+async function getMessageDecryptionContext(user) {
+  await sodium.ready;
+
+  return {
+    currentUserId: getCurrentUserId(user),
+    identity: await getStoredMessengerDeviceIdentity(user),
+  };
 }
 
 function buildEncryptedMessagePayload({
@@ -170,12 +227,7 @@ export async function encryptMessageText({
     throw new Error("Cannot initialize encrypted messaging without a user identity.");
   }
 
-  const recipientResponse = await getMessengerRecipientCryptoDevices(
-    recipientAccountNumber,
-  );
-  const recipientDevices = getDevicesFromResponse(recipientResponse)
-    .map(normalizeDevice)
-    .filter(Boolean);
+  const recipientDevices = await getCachedRecipientDevices(recipientAccountNumber);
 
   if (recipientDevices.length === 0) {
     throw new Error("This contact has not enabled encrypted messaging yet.");
@@ -188,7 +240,6 @@ export async function encryptMessageText({
   const nonce = sodium.randombytes_buf(
     sodium.crypto_aead_xchacha20poly1305_ietf_NPUBBYTES,
   );
-  const additionalData = sodium.from_string(E2EE_MESSAGE_AAD);
   const payload = sodium.from_string(
     JSON.stringify({
       text: plaintext,
@@ -197,7 +248,7 @@ export async function encryptMessageText({
   );
   const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
     payload,
-    additionalData,
+    getMessageAdditionalData(),
     null,
     nonce,
     messageKey,
@@ -238,13 +289,13 @@ export async function encryptMessageText({
   );
 }
 
-export async function decryptMessageForUser(message, user) {
+export async function decryptMessageForUser(message, user, decryptionContext) {
   if (!message) {
     return message;
   }
 
   const replyTo = message.reply_to
-    ? await decryptMessageForUser(message.reply_to, user)
+    ? await decryptMessageForUser(message.reply_to, user, decryptionContext)
     : message.reply_to;
   const encryptedPayload = parseEncryptedMessageText(message.text);
 
@@ -259,10 +310,10 @@ export async function decryptMessageForUser(message, user) {
   }
 
   try {
-    await sodium.ready;
-
-    const currentUserId = getCurrentUserId(user);
-    const identity = await getStoredMessengerDeviceIdentity(user);
+    const context =
+      decryptionContext || (await getMessageDecryptionContext(user));
+    const currentUserId = context.currentUserId;
+    const identity = context.identity;
     if (!identity) {
       return {
         ...message,
@@ -293,7 +344,7 @@ export async function decryptMessageForUser(message, user) {
     const plaintextBytes = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
       null,
       fromBase64(encryptedPayload.ciphertext),
-      sodium.from_string(E2EE_MESSAGE_AAD),
+      getMessageAdditionalData(),
       fromBase64(encryptedPayload.nonce),
       messageKey,
     );
@@ -343,13 +394,18 @@ function normalizeDecryptedAttachment(attachment, index) {
 
 export async function decryptMessagesForUser(messages, user) {
   const messageList = Array.isArray(messages) ? messages : [];
+  const decryptionContext = await getMessageDecryptionContext(user);
+
   return Promise.all(
-    messageList.map((message) => decryptMessageForUser(message, user)),
+    messageList.map((message) =>
+      decryptMessageForUser(message, user, decryptionContext),
+    ),
   );
 }
 
 export async function decryptRoomsForUser(rooms, user) {
   const roomList = Array.isArray(rooms) ? rooms : [];
+  const decryptionContext = await getMessageDecryptionContext(user);
 
   return Promise.all(
     roomList.map(async (room) => {
@@ -359,7 +415,11 @@ export async function decryptRoomsForUser(rooms, user) {
 
       return {
         ...room,
-        last_message: await decryptMessageForUser(room.last_message, user),
+        last_message: await decryptMessageForUser(
+          room.last_message,
+          user,
+          decryptionContext,
+        ),
       };
     }),
   );
