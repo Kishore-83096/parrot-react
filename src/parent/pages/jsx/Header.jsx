@@ -417,16 +417,22 @@ function Header({
       const currentDevices = currentDeviceId
         ? nextDevices.filter((device) => device.device_id === currentDeviceId)
         : [];
-      const isCurrentDefault = currentDevices.some(
+      const currentDeviceIsDefault = currentDevices.some(
         (device) => device.is_default,
       );
+      const visibleDevices = currentDeviceIsDefault
+        ? nextDevices
+        : nextDevices.filter(
+            (device) =>
+              device.is_default || device.device_id === currentDeviceId,
+          );
 
       setCurrentCryptoDeviceId(currentDeviceId);
       setHasDefaultCryptoDevice(
         nextDevices.some((device) => device.is_default),
       );
-      setCryptoDevices(currentDevices);
-      if (!isCurrentDefault) {
+      setCryptoDevices(visibleDevices);
+      if (!currentDeviceIsDefault) {
         clearStoredRecoveryKey(user);
         setStoredRecoveryKey("");
         setIsStoredRecoveryKeyVisible(false);
@@ -1550,9 +1556,9 @@ function Header({
               role="tabpanel"
             >
               <div className="parent-layout-page__form-note">
-                <strong>Why this matters:</strong> This screen shows only the
-                browser you are using now. Non-default browsers are removed from
-                Messenger and this browser when they log out.
+                <strong>Why this matters:</strong> The default browser can see
+                active linked devices. A non-default browser shows itself and
+                the current default browser.
                 <ul>
                   <li>Choose only your own trusted device as default.</li>
                   <li>The default browser stays remembered after logout.</li>
