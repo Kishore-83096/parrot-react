@@ -8,16 +8,13 @@
   ExternalLink,
   FileText,
   Image as ImageIcon,
-  KeyRound,
   LoaderCircle,
-  LockKeyhole,
   Music,
   MessageCircle,
   Paperclip,
   Reply,
   Send,
   Trash2,
-  UnlockKeyhole,
   Video,
   X,
 } from "lucide-react";
@@ -141,57 +138,6 @@ function getMessageAttachmentCount(message) {
   }
 
   return Number(message?.attachment_count || 0);
-}
-
-function getMessageEncryptionStatus(message, isMine) {
-  if (!message?.is_encrypted) {
-    return null;
-  }
-
-  if (isMine && message.status === "sending") {
-    return {
-      icon: "key",
-      label: "Encrypting message",
-      state: "encrypting",
-    };
-  }
-
-  if (isMine) {
-    return {
-      icon: "key",
-      label: "Encrypted message",
-      state: "encrypted",
-    };
-  }
-
-  if (message.decryption_status === "ok") {
-    return {
-      icon: "unlock",
-      label: "Decrypted message",
-      state: "decrypted",
-    };
-  }
-
-  return {
-    icon: "lock",
-    label:
-      message.decryption_status === "missing_key"
-        ? "Encrypted message key unavailable"
-        : "Unable to decrypt message",
-    state: "locked",
-  };
-}
-
-function renderEncryptionIcon(icon) {
-  if (icon === "unlock") {
-    return <UnlockKeyhole size={13} aria-hidden="true" />;
-  }
-
-  if (icon === "lock") {
-    return <LockKeyhole size={13} aria-hidden="true" />;
-  }
-
-  return <KeyRound size={13} aria-hidden="true" />;
 }
 
 function createSelectedFileId(file) {
@@ -2760,13 +2706,6 @@ function MessengerConversation({
               ({ dateLabel, message, shouldShowDateDivider }) => {
             const isMine = Number(message.sender_user_id) === currentUserId;
             const messageStatus = getMessageStatusLabel(message.status);
-            const encryptionStatus = getMessageEncryptionStatus(message, isMine);
-            const statusLabel = [
-              encryptionStatus?.label,
-              isMine ? messageStatus : "",
-            ]
-              .filter(Boolean)
-              .join(". ");
             const sentWhileBlocked = Boolean(message.sent_while_blocked);
             const replyPreview = getReplyPreview(message);
             const isReplyDragging = replyDrag.messageId === message.id;
@@ -2848,37 +2787,20 @@ function MessengerConversation({
                           <Ban size={13} aria-hidden="true" />
                         </span>
                       ) : null}
-                      {encryptionStatus || isMine ? (
+                      {isMine ? (
                         <span
-                          className="parent-layout-page__message-status-group"
-                          aria-label={statusLabel}
-                          title={statusLabel}
+                          className={`parent-layout-page__message-status is-${
+                            message.status || "sent"
+                          }`}
+                          aria-label={messageStatus}
+                          title={messageStatus}
                         >
-                          {encryptionStatus ? (
-                            <span
-                              className={`parent-layout-page__message-security is-${encryptionStatus.state}`}
-                              aria-hidden="true"
-                            >
-                              {renderEncryptionIcon(encryptionStatus.icon)}
-                            </span>
-                          ) : null}
-                          {isMine ? (
-                            <span
-                              className={`parent-layout-page__message-status is-${
-                                message.status || "sent"
-                              }`}
-                              aria-hidden="true"
-                            >
-                              {message.status === "sending" ? (
-                                <LoaderCircle size={13} aria-hidden="true" />
-                              ) : message.status === "read" ||
-                              message.status === "delivered" ? (
-                                <CheckCheck size={14} aria-hidden="true" />
-                              ) : (
-                                <Check size={14} aria-hidden="true" />
-                              )}
-                            </span>
-                          ) : null}
+                          {message.status === "read" ||
+                          message.status === "delivered" ? (
+                            <CheckCheck size={14} aria-hidden="true" />
+                          ) : (
+                            <Check size={14} aria-hidden="true" />
+                          )}
                         </span>
                       ) : null}
                     </footer>

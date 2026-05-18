@@ -1558,45 +1558,6 @@
   color: rgba(255, 255, 255, 0.76);
 }
 
-.parent-layout-page__message-status-group {
-  min-height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px;
-  flex: 0 0 auto;
-}
-
-.parent-layout-page__message-security {
-  width: 16px;
-  height: 14px;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 16px;
-  color: rgba(92, 82, 106, 0.82);
-}
-
-.parent-layout-page__message-security svg {
-  display: block;
-  stroke-width: 2.55;
-}
-
-.parent-layout-page__message-security.is-encrypting svg {
-  animation: parentMessageSpinner 0.9s linear infinite;
-}
-
-.parent-layout-page__message-security.is-decrypted {
-  color: #168457;
-}
-
-.parent-layout-page__message-security.is-locked {
-  color: #b42318;
-}
-
-.parent-layout-page__message.is-mine .parent-layout-page__message-security {
-  color: rgba(255, 255, 255, 0.82);
-}
-
 .parent-layout-page__message-status {
   width: 18px;
   height: 14px;
@@ -1612,7 +1573,7 @@
 }
 
 .parent-layout-page__message-status.is-sending svg {
-  animation: parentMessageSpinner 0.8s linear infinite;
+  animation: parentMessageTickHeartbeat 1.05s ease-in-out infinite;
 }
 
 .parent-layout-page__message-blocked-marker {
@@ -3559,6 +3520,29 @@
 @keyframes parentMessageSpinner {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes parentMessageTickHeartbeat {
+  0%,
+  100% {
+    opacity: 0.56;
+    transform: scale(1);
+  }
+
+  18% {
+    opacity: 1;
+    transform: scale(1.22);
+  }
+
+  36% {
+    opacity: 0.72;
+    transform: scale(0.94);
+  }
+
+  56% {
+    opacity: 1;
+    transform: scale(1.12);
   }
 }
 
