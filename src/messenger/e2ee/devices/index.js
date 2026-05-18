@@ -449,6 +449,47 @@ export async function revokeMessengerDevice(user, deviceId) {
   return revokeMessengerCryptoDevice(deviceId, payload);
 }
 
+export async function logoutCurrentMessengerDevice(user) {
+  const identity = await getStoredMessengerDeviceIdentity(user);
+
+  if (!identity?.device_id) {
+    return {
+      device_id: "",
+      deleted: false,
+      revoked: false,
+      retained_default: false,
+      local_device_should_clear: false,
+    };
+  }
+
+  try {
+    const response = await revokeMessengerDevice(user, identity.device_id);
+    const result = response.data?.result || response.data || {};
+
+    return {
+      device_id: identity.device_id,
+      deleted: Boolean(result.deleted),
+      revoked: Boolean(result.revoked),
+      retained_default: Boolean(result.retained_default),
+      local_device_should_clear: Boolean(result.local_device_should_clear),
+    };
+  } catch (error) {
+    const responseStatus = Number(error?.response?.status || 0);
+
+    if (responseStatus === 403 || responseStatus === 404) {
+      return {
+        device_id: identity.device_id,
+        deleted: false,
+        revoked: false,
+        retained_default: false,
+        local_device_should_clear: true,
+      };
+    }
+
+    throw error;
+  }
+}
+
 export async function saveDefaultDeviceRecoveryBackup(user, backupPayload) {
   const actionPayload = await createSignedDeviceActionPayload(
     user,

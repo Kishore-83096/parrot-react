@@ -13,6 +13,7 @@ import {
   clearStoredMessengerDeviceIdentity,
   ensureMessengerDeviceKey,
   getStoredMessengerDeviceIdentity,
+  logoutCurrentMessengerDevice,
 } from "../../../messenger/e2ee/devices/index.js";
 import { decryptMessageForUser } from "../../../messenger/e2ee/messages.js";
 import RecoveryRestoreModal from "../../../messenger/e2ee/RecoveryRestoreModal.jsx";
@@ -81,6 +82,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [isRecoveryVerifyRequired, setIsRecoveryVerifyRequired] = useState(false);
   const [toast, setToast] = useState(null);
   const onlineUserTimeoutsRef = useRef(new Map());
+  const isLogoutInProgressRef = useRef(false);
   const currentUserId = getCurrentUserId(user);
 
   const loadLinkedDevices = useCallback(async () => {
@@ -344,17 +346,29 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     promptForMissingDefaultDevice({ showToast: true }).catch(() => {});
   }, [promptForMissingDefaultDevice]);
 
-  const handleRecoveryRestoreFailed = useCallback(() => {
-    clearStoredMessengerDeviceIdentity(user)
+  const finishLogout = useCallback(() => {
+    clearMessengerSession();
+    clearParentSession();
+    onLogout?.();
+  }, [onLogout]);
+
+  const clearLocalEncryptedDeviceState = useCallback(async () => {
+    await clearStoredMessengerDeviceIdentity(user);
+    clearStoredRecoveryKey(user);
+    clearRecoveryKeyBackupAcknowledgement(user);
+  }, [user]);
+
+  const logoutAndClearLocalEncryptedDeviceState = useCallback(() => {
+    logoutCurrentMessengerDevice(user)
+      .catch(() => ({ local_device_should_clear: true }))
+      .then(() => clearLocalEncryptedDeviceState())
       .catch(() => {})
-      .finally(() => {
-        clearStoredRecoveryKey(user);
-        clearRecoveryKeyBackupAcknowledgement(user);
-        clearMessengerSession();
-        clearParentSession();
-        onLogout?.();
-      });
-  }, [onLogout, user]);
+      .finally(finishLogout);
+  }, [clearLocalEncryptedDeviceState, finishLogout, user]);
+
+  const handleRecoveryRestoreFailed = useCallback(() => {
+    logoutAndClearLocalEncryptedDeviceState();
+  }, [logoutAndClearLocalEncryptedDeviceState]);
 
   const handleRecoveryVerifyComplete = useCallback(() => {
     setIsRecoveryVerifyOpen(false);
@@ -377,16 +391,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   }, [isRecoveryVerifyRequired]);
 
   const handleRecoveryVerifyFailed = useCallback(() => {
-    clearStoredMessengerDeviceIdentity(user)
-      .catch(() => {})
-      .finally(() => {
-        clearStoredRecoveryKey(user);
-        clearRecoveryKeyBackupAcknowledgement(user);
-        clearMessengerSession();
-        clearParentSession();
-        onLogout?.();
-      });
-  }, [onLogout, user]);
+    logoutAndClearLocalEncryptedDeviceState();
+  }, [logoutAndClearLocalEncryptedDeviceState]);
 
   const handleRecoveryKeyRequested = useCallback(() => {
     openRecoveryKeyVerification({ required: false, showToast: true }).catch(
@@ -420,11 +426,23 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     [user],
   );
 
-  const handleLogout = () => {
-    clearMessengerSession();
-    clearParentSession();
-    onLogout?.();
-  };
+  const handleLogout = useCallback(() => {
+    if (isLogoutInProgressRef.current) {
+      return;
+    }
+
+    isLogoutInProgressRef.current = true;
+    logoutCurrentMessengerDevice(user)
+      .then((result) => {
+        if (result.local_device_should_clear) {
+          return clearLocalEncryptedDeviceState();
+        }
+
+        return null;
+      })
+      .catch(() => {})
+      .finally(finishLogout);
+  }, [clearLocalEncryptedDeviceState, finishLogout, user]);
 
   const closeToast = useCallback(() => {
     setToast(null);
@@ -730,11 +748,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
               return;
             }
 
-            await clearStoredMessengerDeviceIdentity(user);
-            clearStoredRecoveryKey(user);
-            clearMessengerSession();
-            clearParentSession();
-            onLogout?.();
+            await clearLocalEncryptedDeviceState();
+            finishLogout();
           })
           .catch(() => {});
       }
@@ -813,12 +828,13 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     };
   }, [
     currentUserId,
+    clearLocalEncryptedDeviceState,
+    finishLogout,
     handleMaybeEncryptedRoomMessage,
     handleRoomRead,
     loadLinkedDevices,
     markOnlineUser,
     maybePromptForRecoveryKeyUpdate,
-    onLogout,
     removeOnlineUser,
     replaceOnlineUsers,
     user,

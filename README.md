@@ -122,6 +122,9 @@ On another browser/device:
 3. The app allows 5 attempts.
 4. On success, old encrypted messages can decrypt.
 5. The device remains non-default until the default device promotes it.
+6. On logout, a non-default device signs a logout request, clears its E2EE localStorage keys, and lets Messenger delete its device row.
+
+The linked-device modal intentionally shows only the currently logged-in browser. It still knows whether the account already has a default device, so a non-default browser cannot promote itself while a default exists.
 
 ### Recovery-Key Updates
 
@@ -144,6 +147,11 @@ parrot:e2ee.recovery-key-ack:v1
 ```
 
 The default device may store the plain recovery key locally so it can show it to the owner. Non-default devices clear and do not store the plain recovery key.
+
+Logout cleanup follows the device role:
+
+- default device: clear Parent/Messenger session tokens only; keep local E2EE device identity, recovery key state, and the Messenger default-device row
+- non-default device: clear Parent/Messenger session tokens, local E2EE identity, recovery key state, and recovery acknowledgement; Messenger deletes the device row
 
 ## API Clients
 

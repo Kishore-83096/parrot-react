@@ -22,13 +22,11 @@ import {
   getMessengerUserCryptoDevices,
 } from "../../../messenger/api.js";
 import {
-  clearStoredMessengerDeviceIdentity,
   getStoredMessengerDeviceIdentity,
   revokeMessengerDevice,
   setDefaultMessengerDevice,
 } from "../../../messenger/e2ee/devices/index.js";
 import {
-  clearRecoveryKeyBackupAcknowledgement,
   clearStoredRecoveryKey,
   getStoredRecoveryKey,
   saveRecoveryKeyBackup,
@@ -325,6 +323,7 @@ function Header({
   const [recoveryKeyMessage, setRecoveryKeyMessage] = useState(null);
   const [storedRecoveryKey, setStoredRecoveryKey] = useState("");
   const [cryptoDevices, setCryptoDevices] = useState([]);
+  const [hasDefaultCryptoDevice, setHasDefaultCryptoDevice] = useState(false);
   const [currentCryptoDeviceId, setCurrentCryptoDeviceId] = useState("");
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
@@ -354,7 +353,6 @@ function Header({
   const currentCryptoDevice = cryptoDevices.find(
     (device) => device.device_id === currentCryptoDeviceId,
   );
-  const hasDefaultCryptoDevice = cryptoDevices.some((device) => device.is_default);
   const canManageCryptoDevices = Boolean(currentCryptoDevice?.is_default);
 
   const syncProfile = useCallback(
@@ -395,6 +393,7 @@ function Header({
 
     if (!userId) {
       setCryptoDevices([]);
+      setHasDefaultCryptoDevice(false);
       setLinkedDevicesMessage({
         type: "error",
         text: "Unable to load devices without a user id.",
@@ -414,12 +413,19 @@ function Header({
       ]);
       const result = response.data?.result || response.data;
       const nextDevices = Array.isArray(result?.devices) ? result.devices : [];
-      const isCurrentDefault = nextDevices.some(
-        (device) => device.device_id === identity?.device_id && device.is_default,
+      const currentDeviceId = identity?.device_id || "";
+      const currentDevices = currentDeviceId
+        ? nextDevices.filter((device) => device.device_id === currentDeviceId)
+        : [];
+      const isCurrentDefault = currentDevices.some(
+        (device) => device.is_default,
       );
 
-      setCurrentCryptoDeviceId(identity?.device_id || "");
-      setCryptoDevices(nextDevices);
+      setCurrentCryptoDeviceId(currentDeviceId);
+      setHasDefaultCryptoDevice(
+        nextDevices.some((device) => device.is_default),
+      );
+      setCryptoDevices(currentDevices);
       if (!isCurrentDefault) {
         clearStoredRecoveryKey(user);
         setStoredRecoveryKey("");
@@ -508,6 +514,8 @@ function Header({
     setIsRecoveryKeySaving(false);
     setRevokingDeviceId("");
     setDefaultingDeviceId("");
+    setCryptoDevices([]);
+    setHasDefaultCryptoDevice(false);
     setRecoveryKeyForm({
       recovery_key: "",
       confirm_recovery_key: "",
@@ -777,26 +785,14 @@ function Header({
 
     setRevokingDeviceId(deviceId);
     setLinkedDevicesMessage(null);
-    let didLogoutCurrentDevice = false;
 
     try {
-      await revokeMessengerDevice(user, deviceId);
       if (isCurrent) {
-        await clearStoredMessengerDeviceIdentity(user);
-        clearStoredRecoveryKey(user);
-        clearRecoveryKeyBackupAcknowledgement(user);
-        setStoredRecoveryKey("");
-        setIsStoredRecoveryKeyVisible(false);
-        didLogoutCurrentDevice = true;
-        onToast?.({
-          type: "success",
-          title: "Device logged out",
-          message: "This device was removed from linked devices.",
-        });
         onLogout?.();
         return;
       }
 
+      await revokeMessengerDevice(user, deviceId);
       setCryptoDevices((currentDevices) =>
         currentDevices.filter(
           (currentDevice) => currentDevice.device_id !== deviceId,
@@ -813,9 +809,7 @@ function Header({
         text: getMessengerErrorMessage(error, "Unable to revoke this device."),
       });
     } finally {
-      if (!didLogoutCurrentDevice) {
-        setRevokingDeviceId("");
-      }
+      setRevokingDeviceId("");
     }
   };
 
@@ -848,6 +842,7 @@ function Header({
           is_default: currentDevice.device_id === deviceId,
         })),
       );
+      setHasDefaultCryptoDevice(true);
       if (deviceId !== currentCryptoDeviceId) {
         clearStoredRecoveryKey(user);
         setStoredRecoveryKey("");
@@ -1555,13 +1550,13 @@ function Header({
               role="tabpanel"
             >
               <div className="parent-layout-page__form-note">
-                <strong>Why this matters:</strong> Linked devices are phones or
-                browsers that can use your messages. The default device controls
-                which devices stay connected.
+                <strong>Why this matters:</strong> This screen shows only the
+                browser you are using now. Non-default browsers are removed from
+                Messenger and this browser when they log out.
                 <ul>
                   <li>Choose only your own trusted device as default.</li>
-                  <li>Remove old, lost, or shared devices.</li>
-                  <li>Do not use a public or borrowed device as default.</li>
+                  <li>The default browser stays remembered after logout.</li>
+                  <li>Do not make a public or borrowed browser default.</li>
                 </ul>
               </div>
 
@@ -1648,7 +1643,7 @@ function Header({
                             disabled={!canRevoke || isRevoking}
                             title={
                               isCurrent
-                                ? "Remove this device and log out"
+                                ? "Log out this browser"
                                 : isDefault
                                   ? "Default device cannot be revoked"
                                   : canManageCryptoDevices
