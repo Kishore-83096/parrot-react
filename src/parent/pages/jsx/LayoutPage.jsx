@@ -414,6 +414,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
   const handleRoomMessage = useCallback(
     (room, message, { selectRoom = false } = {}) => {
+      const messageRoomId = Number(message?.room_id || room?.id || 0);
+
       if (!message?.room_id) {
         if (room?.id && selectRoom) {
           setSelectedRoom(room);
@@ -439,11 +441,14 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       });
 
       const matchingContact = getRoomContact(room, contacts, user);
-      if (matchingContact) {
+      const shouldSyncSelectedContact =
+        selectRoom || Number(selectedRoom?.id) === messageRoomId;
+
+      if (matchingContact && shouldSyncSelectedContact) {
         setSelectedContact(matchingContact);
       }
     },
-    [contacts, mergeRoomMessage, user],
+    [contacts, mergeRoomMessage, selectedRoom?.id, user],
   );
 
   const handleMaybeEncryptedRoomMessage = useCallback(

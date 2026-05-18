@@ -1590,9 +1590,12 @@
 }
 
 .parent-layout-page__message-attachment-grid {
+  --message-attachment-tile-height: 74px;
+
   width: fit-content;
   max-width: 100%;
   display: grid;
+  grid-auto-rows: var(--message-attachment-tile-height);
   gap: 4px;
   overflow: hidden;
   border-radius: 12px;
@@ -1600,10 +1603,14 @@
 }
 
 .parent-layout-page__message-attachment-grid.is-count-1 {
+  --message-attachment-tile-height: 176px;
+
   grid-template-columns: minmax(0, 224px);
 }
 
 .parent-layout-page__message-attachment-grid.is-count-2 {
+  --message-attachment-tile-height: 118px;
+
   grid-template-columns: repeat(2, minmax(0, 116px));
 }
 
@@ -1617,7 +1624,9 @@
 
 .parent-layout-page__message-attachment-tile {
   min-width: 0;
-  height: 74px;
+  width: 100%;
+  height: var(--message-attachment-tile-height);
+  max-height: var(--message-attachment-tile-height);
   padding: 0;
   position: relative;
   display: grid;
@@ -1630,17 +1639,23 @@
 }
 
 .parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile {
-  height: 176px;
+  height: var(--message-attachment-tile-height);
+  max-height: var(--message-attachment-tile-height);
 }
 
 .parent-layout-page__message-attachment-grid.is-count-2 .parent-layout-page__message-attachment-tile {
-  height: 118px;
+  height: var(--message-attachment-tile-height);
+  max-height: var(--message-attachment-tile-height);
 }
 
 .parent-layout-page__message-attachment-tile img,
 .parent-layout-page__message-attachment-tile video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  max-width: none;
+  max-height: none;
   display: block;
   object-fit: cover;
   transition: transform 180ms ease;
