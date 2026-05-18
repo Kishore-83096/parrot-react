@@ -63,13 +63,12 @@ function RecoverySetupModal({ onComplete, onSkip, user }) {
 
         <form className="parent-layout-page__modal-form" onSubmit={handleSubmit}>
           <div className="parent-layout-page__form-note">
-            <strong>Why this matters:</strong> Parrot encrypts messages before
-            they leave this device. This recovery key protects the private key
-            backup that can decrypt old messages on a new device.
+            <strong>Why this matters:</strong> This key helps you get old
+            messages back if you use a new phone or browser.
             <ul>
-              <li>Do save this key somewhere outside the browser.</li>
-              <li>Do use a private device when creating or viewing it.</li>
-              <li>Don't share it or rely only on browser storage.</li>
+              <li>Save this key somewhere safe outside this browser.</li>
+              <li>Use only your own trusted device for this step.</li>
+              <li>Do not share this key with anyone.</li>
             </ul>
           </div>
 

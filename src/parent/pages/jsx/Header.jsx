@@ -70,6 +70,42 @@ function pushLoggedInHistoryView(nextView) {
   );
 }
 
+function replaceLoggedInHistoryView(nextView) {
+  const currentState = window.history.state || {};
+  const currentView = currentState[LOGGED_IN_HISTORY_KEY] || {};
+
+  window.history.replaceState(
+    {
+      ...currentState,
+      [LOGGED_IN_HISTORY_KEY]: {
+        ...currentView,
+        ...nextView,
+      },
+    },
+    "",
+    window.location.href,
+  );
+}
+
+function clearLoggedInHistoryModal() {
+  const currentState = window.history.state || {};
+  const currentView = currentState[LOGGED_IN_HISTORY_KEY] || {};
+  const nextView = { ...currentView };
+
+  delete nextView.accountTab;
+  delete nextView.modal;
+  delete nextView.profileTab;
+
+  window.history.replaceState(
+    {
+      ...currentState,
+      [LOGGED_IN_HISTORY_KEY]: nextView,
+    },
+    "",
+    window.location.href,
+  );
+}
+
 function isCurrentHistoryModal(modalName) {
   return getLoggedInHistoryView()?.modal === modalName;
 }
@@ -130,12 +166,8 @@ function getApiErrorMessage(error, fallbackMessage) {
   return error.response?.data?.message || fallbackMessage;
 }
 
-function getAccountForm(account) {
-  return {
-    ...accountInitialForm,
-    username: account?.username || "",
-    email: account?.email || "",
-  };
+function getEmptyAccountForm() {
+  return { ...accountInitialForm };
 }
 
 function getAccountToastDetails(account) {
@@ -279,7 +311,7 @@ function Header({
   const [activeLinkedDevicesTab, setActiveLinkedDevicesTab] = useState("devices");
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState(() => getProfileForm(user));
-  const [accountForm, setAccountForm] = useState(() => getAccountForm(user));
+  const [accountForm, setAccountForm] = useState(() => getEmptyAccountForm());
   const [recoveryKeyForm, setRecoveryKeyForm] = useState({
     recovery_key: "",
     confirm_recovery_key: "",
@@ -407,7 +439,7 @@ function Header({
     pushLoggedInHistoryView({ modal: "account", accountTab: "password" });
     setIsMenuOpen(false);
     setActiveAccountTab("password");
-    setAccountForm(getAccountForm(user));
+    setAccountForm(getEmptyAccountForm());
     setAccountMessage(null);
     setIsAccountModalOpen(true);
   };
@@ -450,8 +482,8 @@ function Header({
     setAccountMessage(null);
     setIsPasswordChanging(false);
     setIsAccountDeleting(false);
-    setAccountForm(getAccountForm(user));
-  }, [user]);
+    setAccountForm(getEmptyAccountForm());
+  }, []);
 
   const resetLinkedDevicesModal = useCallback(() => {
     setIsLinkedDevicesModalOpen(false);
@@ -475,8 +507,7 @@ function Header({
 
   const closeProfileModal = useCallback(() => {
     if (isCurrentHistoryModal("profile")) {
-      window.history.back();
-      return;
+      clearLoggedInHistoryModal();
     }
 
     resetProfileModal();
@@ -484,8 +515,7 @@ function Header({
 
   const closeAccountModal = useCallback(() => {
     if (isCurrentHistoryModal("account")) {
-      window.history.back();
-      return;
+      clearLoggedInHistoryModal();
     }
 
     resetAccountModal();
@@ -497,8 +527,7 @@ function Header({
     }
 
     if (isCurrentHistoryModal("linkedDevices")) {
-      window.history.back();
-      return;
+      clearLoggedInHistoryModal();
     }
 
     resetLinkedDevicesModal();
@@ -590,7 +619,7 @@ function Header({
             ? historyView.accountTab
             : "password",
         );
-        setAccountForm(getAccountForm(user));
+        setAccountForm(getEmptyAccountForm());
         setAccountMessage(null);
         return;
       }
@@ -658,7 +687,7 @@ function Header({
 
   const openEditProfileTab = () => {
     if (activeProfileTab !== "edit") {
-      pushLoggedInHistoryView({ modal: "profile", profileTab: "edit" });
+      replaceLoggedInHistoryView({ modal: "profile", profileTab: "edit" });
     }
 
     setActiveProfileTab("edit");
@@ -668,7 +697,7 @@ function Header({
 
   const openViewProfileTab = () => {
     if (activeProfileTab !== "view") {
-      pushLoggedInHistoryView({ modal: "profile", profileTab: "view" });
+      replaceLoggedInHistoryView({ modal: "profile", profileTab: "view" });
     }
 
     setActiveProfileTab("view");
@@ -677,21 +706,21 @@ function Header({
 
   const openChangePasswordTab = () => {
     if (activeAccountTab !== "password") {
-      pushLoggedInHistoryView({ modal: "account", accountTab: "password" });
+      replaceLoggedInHistoryView({ modal: "account", accountTab: "password" });
     }
 
     setActiveAccountTab("password");
-    setAccountForm(getAccountForm(user));
+    setAccountForm(getEmptyAccountForm());
     setAccountMessage(null);
   };
 
   const openDeleteAccountTab = () => {
     if (activeAccountTab !== "delete") {
-      pushLoggedInHistoryView({ modal: "account", accountTab: "delete" });
+      replaceLoggedInHistoryView({ modal: "account", accountTab: "delete" });
     }
 
     setActiveAccountTab("delete");
-    setAccountForm(getAccountForm(user));
+    setAccountForm(getEmptyAccountForm());
     setAccountMessage(null);
   };
 
@@ -1494,13 +1523,13 @@ function Header({
               role="tabpanel"
             >
               <div className="parent-layout-page__form-note">
-                <strong>Why this matters:</strong> Each linked browser has its
-                own encryption key. The default device is trusted to manage
-                linked devices and recovery-key changes.
+                <strong>Why this matters:</strong> Linked devices are phones or
+                browsers that can use your messages. The default device controls
+                which devices stay connected.
                 <ul>
-                  <li>Do make only your personal trusted device the default.</li>
-                  <li>Do revoke old, lost, or shared devices.</li>
-                  <li>Don't make a public or borrowed browser the default.</li>
+                  <li>Choose only your own trusted device as default.</li>
+                  <li>Remove old, lost, or shared devices.</li>
+                  <li>Do not use a public or borrowed device as default.</li>
                 </ul>
               </div>
 
@@ -1634,20 +1663,20 @@ function Header({
               onSubmit={handleRecoveryKeyUpdateSubmit}
             >
               <div className="parent-layout-page__form-note">
-                <strong>Why this matters:</strong> The recovery key decrypts
-                the private-key backup for old messages. The server cannot show
-                this key back to you.
+                <strong>Why this matters:</strong> This key helps you get old
+                messages back on another device. Parrot cannot show it again
+                unless this device saved it.
                 <ul>
-                  <li>Do save it outside this browser before clearing data.</li>
-                  <li>Do update it if someone else may know it.</li>
-                  <li>Don't share it or enter it on an untrusted device.</li>
+                  <li>Save it somewhere safe before clearing browser data.</li>
+                  <li>Change it if someone else may know it.</li>
+                  <li>Do not share it or type it on a device you do not trust.</li>
                 </ul>
               </div>
 
               {!canManageCryptoDevices ? (
                 <p className="parent-layout-page__account-danger">
-                  Only this account's current default device can view or update
-                  the recovery key.
+                  Only the current default device can view or change the
+                  recovery key.
                 </p>
               ) : null}
 
@@ -1701,8 +1730,8 @@ function Header({
 
               {canManageCryptoDevices && !storedRecoveryKey ? (
                 <p className="parent-layout-page__form-note">
-                  This device can only show recovery keys created, updated, or
-                  restored here. Update the key once to make it visible here.
+                  This device can only show a key that was made, changed, or
+                  used here. If you cannot see it, set a new key and save it.
                 </p>
               ) : null}
 

@@ -66,13 +66,12 @@ function RecoveryRestoreModal({
 
         <form className="parent-layout-page__modal-form" onSubmit={handleSubmit}>
           <div className="parent-layout-page__form-note">
-            <strong>Why this matters:</strong> This device does not have your
-            private key yet. The recovery key unlocks the encrypted backup so
-            old messages can decrypt here.
+            <strong>Why this matters:</strong> This device needs your recovery
+            key before it can show old messages.
             <ul>
-              <li>Do enter the exact key saved from your default device.</li>
-              <li>Do retry carefully if there is a typo.</li>
-              <li>Don't guess. After 5 wrong tries, this login is closed.</li>
+              <li>Enter the exact key you saved earlier.</li>
+              <li>Check carefully for typing mistakes.</li>
+              <li>Do not guess. After 5 wrong tries, you will be logged out.</li>
             </ul>
           </div>
 
