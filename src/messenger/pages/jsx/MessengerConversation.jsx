@@ -2821,26 +2821,27 @@ function MessengerConversation({
             )}
           </>
         )}
-        {typingIndicatorText ? (
-          <div
-            className="parent-layout-page__typing-indicator"
-            role="status"
-            aria-live="polite"
-          >
-            <span aria-hidden="true">
-              <i />
-              <i />
-              <i />
-            </span>
-            <p>{typingIndicatorText}</p>
-          </div>
-        ) : null}
         <div
           className="parent-layout-page__messages-end"
           ref={messagesEndRef}
           aria-hidden="true"
         />
       </div>
+
+      {typingIndicatorText ? (
+        <div
+          className="parent-layout-page__typing-indicator"
+          role="status"
+          aria-live="polite"
+        >
+          <span aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          <p>{typingIndicatorText}</p>
+        </div>
+      ) : null}
 
       <form
         className="parent-layout-page__message-form"
