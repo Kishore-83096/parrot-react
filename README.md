@@ -124,7 +124,7 @@ On another browser/device:
 5. The device remains non-default until the default device promotes it.
 6. On logout, a non-default device signs a logout request, clears its E2EE localStorage keys, and lets Messenger delete its device row.
 
-The linked-device modal shows all active linked devices on the default browser. On a non-default browser, it shows the current browser and the current default browser, so the user can see which device owns recovery and device-management permissions.
+The linked-device modal separates the default device into a top section and active devices into a second section. It shows all active linked devices on the default browser. On a non-default browser, it shows the current browser and the current default browser, so the user can see which device owns recovery and device-management permissions.
 
 ### Recovery-Key Updates
 

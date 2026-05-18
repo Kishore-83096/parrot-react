@@ -2976,7 +2976,62 @@
 .parent-layout-page__crypto-device-list {
   min-width: 0;
   display: grid;
+  gap: 14px;
+}
+
+.parent-layout-page__crypto-device-section {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.parent-layout-page__crypto-device-section + .parent-layout-page__crypto-device-section {
+  padding-top: 14px;
+  border-top: 1px solid rgba(28, 22, 38, 0.08);
+}
+
+.parent-layout-page__crypto-device-section-header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+}
+
+.parent-layout-page__crypto-device-section-header > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.parent-layout-page__crypto-device-section-header h3 {
+  margin: 0;
+  color: var(--layout-text);
+  font-size: 12px;
+  line-height: 1.15;
+  font-weight: 900;
+}
+
+.parent-layout-page__crypto-device-section-header p {
+  margin: 0;
+  color: var(--layout-muted);
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+
+.parent-layout-page__crypto-device-section-header > span,
+.parent-layout-page__crypto-device-section-header > svg {
+  flex: 0 0 auto;
+  min-width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--layout-purple);
+  background: rgba(244, 239, 255, 0.94);
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .parent-layout-page__crypto-device {
@@ -2989,6 +3044,12 @@
   border: 1px solid rgba(124, 60, 255, 0.12);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.68);
+}
+
+.parent-layout-page__crypto-device--default {
+  border-color: rgba(37, 165, 106, 0.28);
+  background: rgba(240, 253, 246, 0.92);
+  box-shadow: inset 3px 0 0 rgba(37, 165, 106, 0.78);
 }
 
 .parent-layout-page__crypto-device > div {

@@ -353,6 +353,10 @@ function Header({
   const currentCryptoDevice = cryptoDevices.find(
     (device) => device.device_id === currentCryptoDeviceId,
   );
+  const defaultCryptoDevice = cryptoDevices.find((device) => device.is_default);
+  const activeCryptoDevices = cryptoDevices.filter(
+    (device) => !device.is_default,
+  );
   const canManageCryptoDevices = Boolean(currentCryptoDevice?.is_default);
 
   const syncProfile = useCallback(
@@ -974,6 +978,89 @@ function Header({
     }
   };
 
+  const renderCryptoDeviceCard = (device, { isPrimaryDefault = false } = {}) => {
+    const isCurrent = device.device_id === currentCryptoDeviceId;
+    const isDefault = Boolean(device.is_default);
+    const isRevoking = revokingDeviceId === device.device_id;
+    const isDefaulting = defaultingDeviceId === device.device_id;
+    const deviceName =
+      device.device_name || (isCurrent ? "This device" : "Linked device");
+    const canSetDefault =
+      !isDefault &&
+      Boolean(currentCryptoDeviceId) &&
+      ((!hasDefaultCryptoDevice && isCurrent) || canManageCryptoDevices);
+    const canRevoke = isCurrent || (canManageCryptoDevices && !isDefault);
+    const showDefaultAction = canSetDefault || isDefaulting;
+    const showRevokeAction = canRevoke || isRevoking;
+    const hasActions = showDefaultAction || showRevokeAction;
+
+    return (
+      <article
+        className={`parent-layout-page__crypto-device${
+          isPrimaryDefault
+            ? " parent-layout-page__crypto-device--default"
+            : ""
+        }`}
+        key={device.device_id}
+      >
+        <div>
+          <div className="parent-layout-page__crypto-device-title">
+            <strong>{deviceName}</strong>
+            {isCurrent ? (
+              <span className="parent-layout-page__crypto-device-badge parent-layout-page__crypto-device-badge--current">
+                This device
+              </span>
+            ) : null}
+            {isDefault ? (
+              <span className="parent-layout-page__crypto-device-badge">
+                Default
+              </span>
+            ) : null}
+          </div>
+          <small>Last seen {formatDeviceTime(device.last_seen_at)}</small>
+        </div>
+
+        {hasActions ? (
+          <div className="parent-layout-page__crypto-device-actions">
+            {showDefaultAction ? (
+              <button
+                type="button"
+                className="parent-layout-page__crypto-device-default"
+                onClick={() => handleSetDefaultCryptoDevice(device)}
+                disabled={isDefaulting}
+                title="Make default"
+              >
+                <ShieldCheck size={15} aria-hidden="true" />
+                <span>{isDefaulting ? "Saving" : "Make default"}</span>
+              </button>
+            ) : null}
+
+            {showRevokeAction ? (
+              <button
+                type="button"
+                className="parent-layout-page__crypto-device-revoke"
+                onClick={() => handleRevokeCryptoDevice(device)}
+                disabled={isRevoking}
+                title={isCurrent ? "Log out this browser" : "Revoke device"}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                <span>
+                  {isRevoking
+                    ? isCurrent
+                      ? "Logging out"
+                      : "Revoking"
+                    : isCurrent
+                      ? "Logout"
+                      : "Revoke"}
+                </span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+    );
+  };
+
   const handleDeleteAccountSubmit = async (event) => {
     event.preventDefault();
 
@@ -1576,102 +1663,49 @@ function Header({
                 </div>
               ) : (
                 <div className="parent-layout-page__crypto-device-list">
-                  {cryptoDevices.map((device) => {
-                    const isCurrent = device.device_id === currentCryptoDeviceId;
-                    const isDefault = Boolean(device.is_default);
-                    const isRevoking = revokingDeviceId === device.device_id;
-                    const isDefaulting = defaultingDeviceId === device.device_id;
-                    const deviceName =
-                      device.device_name ||
-                      (isCurrent ? "This device" : "Linked device");
-                    const canSetDefault =
-                      !isDefault &&
-                      Boolean(currentCryptoDeviceId) &&
-                      ((!hasDefaultCryptoDevice && isCurrent) ||
-                        canManageCryptoDevices);
-                    const canRevoke =
-                      isCurrent || (canManageCryptoDevices && !isDefault);
+                  <section className="parent-layout-page__crypto-device-section">
+                    <div className="parent-layout-page__crypto-device-section-header">
+                      <div>
+                        <h3>Default device</h3>
+                        <p>Controls recovery key and device permissions.</p>
+                      </div>
+                      <ShieldCheck size={18} aria-hidden="true" />
+                    </div>
 
-                    return (
-                      <article
-                        className="parent-layout-page__crypto-device"
-                        key={device.device_id}
-                      >
-                        <div>
-                          <div className="parent-layout-page__crypto-device-title">
-                            <strong>{deviceName}</strong>
-                            {isCurrent ? (
-                              <span className="parent-layout-page__crypto-device-badge parent-layout-page__crypto-device-badge--current">
-                                This device
-                              </span>
-                            ) : null}
-                            {isDefault ? (
-                              <span className="parent-layout-page__crypto-device-badge">
-                                Default
-                              </span>
-                            ) : null}
-                          </div>
-                          <small>
-                            Last seen {formatDeviceTime(device.last_seen_at)}
-                          </small>
-                        </div>
+                    {defaultCryptoDevice ? (
+                      renderCryptoDeviceCard(defaultCryptoDevice, {
+                        isPrimaryDefault: true,
+                      })
+                    ) : (
+                      <div className="parent-layout-page__crypto-device-empty parent-layout-page__crypto-device-empty--section">
+                        No default device selected.
+                      </div>
+                    )}
+                  </section>
 
-                        <div className="parent-layout-page__crypto-device-actions">
-                          <button
-                            type="button"
-                            className="parent-layout-page__crypto-device-default"
-                            onClick={() => handleSetDefaultCryptoDevice(device)}
-                            disabled={!canSetDefault || isDefaulting}
-                            title={
-                              isDefault
-                                ? "Already default"
-                                : canSetDefault
-                                  ? "Make default"
-                                  : !hasDefaultCryptoDevice
-                                    ? "Only this device can become default first"
-                                    : "Only the default device can change this"
-                            }
-                          >
-                            <ShieldCheck size={15} aria-hidden="true" />
-                            <span>
-                              {isDefault
-                                ? "Default"
-                                : isDefaulting
-                                  ? "Saving"
-                                  : "Make default"}
-                            </span>
-                          </button>
+                  <section className="parent-layout-page__crypto-device-section">
+                    <div className="parent-layout-page__crypto-device-section-header">
+                      <div>
+                        <h3>Active devices</h3>
+                        <p>
+                          {canManageCryptoDevices
+                            ? "Other browsers currently linked to this account."
+                            : "This browser is linked but does not manage recovery."}
+                        </p>
+                      </div>
+                      <span>{activeCryptoDevices.length}</span>
+                    </div>
 
-                          <button
-                            type="button"
-                            className="parent-layout-page__crypto-device-revoke"
-                            onClick={() => handleRevokeCryptoDevice(device)}
-                            disabled={!canRevoke || isRevoking}
-                            title={
-                              isCurrent
-                                ? "Log out this browser"
-                                : isDefault
-                                  ? "Default device cannot be revoked"
-                                  : canManageCryptoDevices
-                                    ? "Revoke device"
-                                    : "Only the default device can revoke devices"
-                            }
-                          >
-                            <Trash2 size={15} aria-hidden="true" />
-                            <span>
-                              {isRevoking
-                                ? isCurrent
-                                  ? "Logging out"
-                                  : "Revoking"
-                                : isCurrent
-                                  ? "Logout"
-                                  : "Revoke"}
-                            </span>
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
+                    {activeCryptoDevices.length > 0 ? (
+                      activeCryptoDevices.map((device) =>
+                        renderCryptoDeviceCard(device),
+                      )
+                    ) : (
+                      <div className="parent-layout-page__crypto-device-empty parent-layout-page__crypto-device-empty--section">
+                        No other active devices.
+                      </div>
+                    )}
+                  </section>
                 </div>
               )}
 
