@@ -9,6 +9,7 @@ import {
   MESSENGER_INBOX_EVENT_NAME,
 } from "../../../messenger/api.js";
 import {
+  adoptRecoveredDefaultMessengerDevice,
   clearStoredMessengerDeviceIdentity,
   ensureMessengerDeviceKey,
   getStoredMessengerDeviceIdentity,
@@ -133,7 +134,23 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             return;
           }
 
-          const linkedDevices = await loadLinkedDevices();
+          let linkedDevices = await loadLinkedDevices();
+
+          if (!isMounted) {
+            return;
+          }
+
+          const adoptedIdentity = await adoptRecoveredDefaultMessengerDevice(
+            user,
+            linkedDevices,
+          );
+          if (
+            adoptedIdentity?.device_id &&
+            adoptedIdentity.device_id !== localIdentity.device_id
+          ) {
+            localIdentity = adoptedIdentity;
+            linkedDevices = await loadLinkedDevices();
+          }
 
           if (!isMounted) {
             return;
