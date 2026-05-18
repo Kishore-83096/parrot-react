@@ -1,10 +1,18 @@
-import { KeyRound, LoaderCircle, X } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 
 import { restoreRecoveryKeyBackup } from "./recovery.js";
 
-function RecoveryRestoreModal({ backup, onRestore, onUseNewKey, user }) {
+function RecoveryRestoreModal({
+  backup,
+  maxAttempts = 5,
+  onFailedAttemptsExceeded,
+  onRestore,
+  user,
+}) {
   const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [isRecoveryKeyVisible, setIsRecoveryKeyVisible] = useState(false);
   const [message, setMessage] = useState("");
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -18,7 +26,23 @@ function RecoveryRestoreModal({ backup, onRestore, onUseNewKey, user }) {
       const result = await restoreRecoveryKeyBackup(user, backup, recoveryPassword);
       onRestore?.(result);
     } catch {
-      setMessage("Recovery password is incorrect or this backup is damaged.");
+      const nextFailedAttempts = failedAttempts + 1;
+      const remainingAttempts = Math.max(maxAttempts - nextFailedAttempts, 0);
+
+      setFailedAttempts(nextFailedAttempts);
+      setRecoveryPassword("");
+
+      if (remainingAttempts <= 0) {
+        setMessage("Recovery key is not correct. Logging out.");
+        onFailedAttemptsExceeded?.();
+        return;
+      }
+
+      setMessage(
+        `Recovery key is not correct. ${remainingAttempts} ${
+          remainingAttempts === 1 ? "try" : "tries"
+        } left.`,
+      );
     } finally {
       setIsRestoring(false);
     }
@@ -32,16 +56,6 @@ function RecoveryRestoreModal({ backup, onRestore, onUseNewKey, user }) {
         aria-modal="true"
         aria-labelledby="e2ee-restore-title"
       >
-        <button
-          type="button"
-          className="parent-layout-page__modal-close"
-          onClick={onUseNewKey}
-          aria-label="Skip recovery"
-          title="Skip recovery"
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-
         <div className="parent-layout-page__modal-header">
           <KeyRound size={28} aria-hidden="true" />
           <div>
@@ -51,19 +65,45 @@ function RecoveryRestoreModal({ backup, onRestore, onUseNewKey, user }) {
         </div>
 
         <form className="parent-layout-page__modal-form" onSubmit={handleSubmit}>
-          <p className="parent-layout-page__form-note">
-            Enter your recovery password to decrypt old messages on this device.
-          </p>
+          <div className="parent-layout-page__form-note">
+            <strong>Why this matters:</strong> This device does not have your
+            private key yet. The recovery key unlocks the encrypted backup so
+            old messages can decrypt here.
+            <ul>
+              <li>Do enter the exact key saved from your default device.</li>
+              <li>Do retry carefully if there is a typo.</li>
+              <li>Don't guess. After 5 wrong tries, this login is closed.</li>
+            </ul>
+          </div>
 
           <label>
-            Recovery password
-            <input
-              type="password"
-              value={recoveryPassword}
-              onChange={(event) => setRecoveryPassword(event.target.value)}
-              autoComplete="current-password"
-              required
-            />
+            Recovery key
+            <div className="parent-layout-page__table-input-action">
+              <input
+                type={isRecoveryKeyVisible ? "text" : "password"}
+                value={recoveryPassword}
+                onChange={(event) => setRecoveryPassword(event.target.value)}
+                autoComplete="current-password"
+                required
+              />
+              <button
+                className="parent-layout-page__table-icon-button"
+                type="button"
+                onClick={() =>
+                  setIsRecoveryKeyVisible((currentValue) => !currentValue)
+                }
+                aria-label={
+                  isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
+                }
+                title={isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"}
+              >
+                {isRecoveryKeyVisible ? (
+                  <EyeOff size={18} aria-hidden="true" />
+                ) : (
+                  <Eye size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </label>
 
           {message ? (
@@ -79,15 +119,6 @@ function RecoveryRestoreModal({ backup, onRestore, onUseNewKey, user }) {
           >
             {isRestoring ? <LoaderCircle size={16} aria-hidden="true" /> : null}
             <span>{isRestoring ? "Recovering" : "Recover messages"}</span>
-          </button>
-
-          <button
-            type="button"
-            className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
-            onClick={onUseNewKey}
-            disabled={isRestoring}
-          >
-            <span>Use new key</span>
           </button>
         </form>
       </section>

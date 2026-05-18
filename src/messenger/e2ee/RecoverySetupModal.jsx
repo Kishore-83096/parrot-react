@@ -1,4 +1,4 @@
-import { KeyRound, LoaderCircle, X } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LoaderCircle, X } from "lucide-react";
 import { useState } from "react";
 
 import { saveRecoveryKeyBackup } from "./recovery.js";
@@ -6,6 +6,9 @@ import { saveRecoveryKeyBackup } from "./recovery.js";
 function RecoverySetupModal({ onComplete, onSkip, user }) {
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isRecoveryKeyVisible, setIsRecoveryKeyVisible] = useState(false);
+  const [isConfirmRecoveryKeyVisible, setIsConfirmRecoveryKeyVisible] =
+    useState(false);
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
@@ -13,7 +16,7 @@ function RecoverySetupModal({ onComplete, onSkip, user }) {
     event.preventDefault();
 
     if (recoveryPassword !== confirmPassword) {
-      setMessage("Recovery passwords do not match.");
+      setMessage("Recovery keys do not match.");
       return;
     }
 
@@ -38,52 +41,104 @@ function RecoverySetupModal({ onComplete, onSkip, user }) {
         aria-modal="true"
         aria-labelledby="e2ee-recovery-title"
       >
-        <button
-          type="button"
-          className="parent-layout-page__modal-close"
-          onClick={onSkip}
-          aria-label="Close recovery setup"
-          title="Close"
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
+        {onSkip ? (
+          <button
+            type="button"
+            className="parent-layout-page__modal-close"
+            onClick={onSkip}
+            aria-label="Close recovery setup"
+            title="Close"
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        ) : null}
 
         <div className="parent-layout-page__modal-header">
           <KeyRound size={28} aria-hidden="true" />
           <div>
             <p>Encrypted messages</p>
-            <h2 id="e2ee-recovery-title">Recovery password</h2>
+            <h2 id="e2ee-recovery-title">Recovery key</h2>
           </div>
         </div>
 
         <form className="parent-layout-page__modal-form" onSubmit={handleSubmit}>
-          <p className="parent-layout-page__form-note">
-            This password is not stored. Losing it means old messages cannot be
-            recovered on a new device.
-          </p>
+          <div className="parent-layout-page__form-note">
+            <strong>Why this matters:</strong> Parrot encrypts messages before
+            they leave this device. This recovery key protects the private key
+            backup that can decrypt old messages on a new device.
+            <ul>
+              <li>Do save this key somewhere outside the browser.</li>
+              <li>Do use a private device when creating or viewing it.</li>
+              <li>Don't share it or rely only on browser storage.</li>
+            </ul>
+          </div>
 
           <label>
-            Recovery password
-            <input
-              type="password"
-              value={recoveryPassword}
-              onChange={(event) => setRecoveryPassword(event.target.value)}
-              minLength={12}
-              autoComplete="new-password"
-              required
-            />
+            Recovery key
+            <div className="parent-layout-page__table-input-action">
+              <input
+                type={isRecoveryKeyVisible ? "text" : "password"}
+                value={recoveryPassword}
+                onChange={(event) => setRecoveryPassword(event.target.value)}
+                minLength={12}
+                autoComplete="new-password"
+                required
+              />
+              <button
+                className="parent-layout-page__table-icon-button"
+                type="button"
+                onClick={() =>
+                  setIsRecoveryKeyVisible((currentValue) => !currentValue)
+                }
+                aria-label={
+                  isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
+                }
+                title={isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"}
+              >
+                {isRecoveryKeyVisible ? (
+                  <EyeOff size={18} aria-hidden="true" />
+                ) : (
+                  <Eye size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </label>
 
           <label>
-            Confirm recovery password
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(event) => setConfirmPassword(event.target.value)}
-              minLength={12}
-              autoComplete="new-password"
-              required
-            />
+            Confirm recovery key
+            <div className="parent-layout-page__table-input-action">
+              <input
+                type={isConfirmRecoveryKeyVisible ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                minLength={12}
+                autoComplete="new-password"
+                required
+              />
+              <button
+                className="parent-layout-page__table-icon-button"
+                type="button"
+                onClick={() =>
+                  setIsConfirmRecoveryKeyVisible((currentValue) => !currentValue)
+                }
+                aria-label={
+                  isConfirmRecoveryKeyVisible
+                    ? "Hide confirmation recovery key"
+                    : "Show confirmation recovery key"
+                }
+                title={
+                  isConfirmRecoveryKeyVisible
+                    ? "Hide confirmation recovery key"
+                    : "Show confirmation recovery key"
+                }
+              >
+                {isConfirmRecoveryKeyVisible ? (
+                  <EyeOff size={18} aria-hidden="true" />
+                ) : (
+                  <Eye size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
           </label>
 
           {message ? (
@@ -101,14 +156,16 @@ function RecoverySetupModal({ onComplete, onSkip, user }) {
             <span>{isSaving ? "Creating backup" : "Create backup"}</span>
           </button>
 
-          <button
-            type="button"
-            className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
-            onClick={onSkip}
-            disabled={isSaving}
-          >
-            <span>Later</span>
-          </button>
+          {onSkip ? (
+            <button
+              type="button"
+              className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
+              onClick={onSkip}
+              disabled={isSaving}
+            >
+              <span>Later</span>
+            </button>
+          ) : null}
         </form>
       </section>
     </div>

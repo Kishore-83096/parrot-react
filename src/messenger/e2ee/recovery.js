@@ -21,6 +21,7 @@ const BACKUP_KDF_ITERATIONS = 600000;
 const BACKUP_SALT_BYTES = 16;
 const BACKUP_KEY_BYTES = 32;
 const MIN_RECOVERY_PASSWORD_LENGTH = 12;
+const RECOVERY_KEY_STORAGE_PREFIX = "parrot:e2ee.recovery-key:v1";
 
 function getResult(response) {
   return response?.data?.result || response?.data || {};
@@ -28,6 +29,65 @@ function getResult(response) {
 
 function encodeText(value) {
   return new TextEncoder().encode(String(value || ""));
+}
+
+function getUserStorageScope(user) {
+  const userId = user?.id || user?.user_id;
+  const accountNumber = user?.account_number;
+
+  if (userId) {
+    return `user:${userId}`;
+  }
+
+  if (accountNumber) {
+    return `account:${accountNumber}`;
+  }
+
+  return "";
+}
+
+function getRecoveryKeyStorageKey(user) {
+  const scope = getUserStorageScope(user);
+
+  return scope ? `${RECOVERY_KEY_STORAGE_PREFIX}:${scope}` : "";
+}
+
+function getLocalStorage() {
+  try {
+    return globalThis.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function storeRecoveryKey(user, recoveryPassword) {
+  const storageKey = getRecoveryKeyStorageKey(user);
+  const storage = getLocalStorage();
+
+  if (!storageKey || !storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(storageKey, String(recoveryPassword || ""));
+  } catch {
+    // The encrypted backup is still valid if the browser blocks local storage.
+  }
+}
+
+export function getStoredRecoveryKey(user) {
+  const storageKey = getRecoveryKeyStorageKey(user);
+  const storage = getLocalStorage();
+
+  if (!storageKey || !storage) {
+    return "";
+  }
+
+  try {
+    return storage.getItem(storageKey) || "";
+  } catch {
+    return "";
+  }
 }
 
 async function deriveBackupKey(recoveryPassword, salt, iterations) {
@@ -66,7 +126,7 @@ export async function createRecoveryKeyBackup(user, recoveryPassword) {
 
   if (normalizedPassword.length < MIN_RECOVERY_PASSWORD_LENGTH) {
     throw new Error(
-      `Recovery password must be at least ${MIN_RECOVERY_PASSWORD_LENGTH} characters.`,
+      `Recovery key must be at least ${MIN_RECOVERY_PASSWORD_LENGTH} characters.`,
     );
   }
 
@@ -109,9 +169,14 @@ export async function createRecoveryKeyBackup(user, recoveryPassword) {
 }
 
 export async function saveRecoveryKeyBackup(user, recoveryPassword) {
-  const backupPayload = await createRecoveryKeyBackup(user, recoveryPassword);
+  const normalizedPassword = String(recoveryPassword || "");
+  const backupPayload = await createRecoveryKeyBackup(user, normalizedPassword);
   const response = await saveMessengerCryptoKeyBackup(backupPayload);
-  return getResult(response);
+  const result = getResult(response);
+
+  storeRecoveryKey(user, normalizedPassword);
+
+  return result;
 }
 
 export async function decryptRecoveryKeyBackup(backup, recoveryPassword) {
@@ -149,5 +214,9 @@ export async function restoreRecoveryKeyBackup(user, backup, recoveryPassword) {
     private_key: restoredIdentity.private_key,
   });
 
-  return registerMessengerDeviceIdentity(identity);
+  const result = await registerMessengerDeviceIdentity(identity);
+
+  storeRecoveryKey(user, recoveryPassword);
+
+  return result;
 }

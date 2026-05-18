@@ -15,7 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import ParrotToast from "../../../components/ParrotToast.jsx";
 import { loginParent, registerParent } from "../../api.js";
 import parrotIcon from "../../../assets/favicon.svg";
-import "../css/desktop/WelcomePage.css";
+import "../css/WelcomePage.css";
 
 const featureCards = [
   {

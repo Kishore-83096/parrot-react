@@ -73,19 +73,22 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const onlineUserTimeoutsRef = useRef(new Map());
   const currentUserId = getCurrentUserId(user);
 
+  const loadLinkedDevices = useCallback(async () => {
+    const userId = user?.id || user?.user_id;
+
+    if (!userId) {
+      return [];
+    }
+
+    const devicesResponse = await getMessengerUserCryptoDevices(userId);
+    const devicesResult = devicesResponse.data?.result || devicesResponse.data;
+
+    return Array.isArray(devicesResult?.devices) ? devicesResult.devices : [];
+  }, [user]);
+
   const promptForMissingDefaultDevice = useCallback(
     async ({ showToast = false } = {}) => {
-      const userId = user?.id || user?.user_id;
-
-      if (!userId) {
-        return false;
-      }
-
-      const devicesResponse = await getMessengerUserCryptoDevices(userId);
-      const devicesResult = devicesResponse.data?.result || devicesResponse.data;
-      const linkedDevices = Array.isArray(devicesResult?.devices)
-        ? devicesResult.devices
-        : [];
+      const linkedDevices = await loadLinkedDevices();
       const hasDefaultDevice = linkedDevices.some((device) => device.is_default);
 
       if (linkedDevices.length === 0 || hasDefaultDevice) {
@@ -104,7 +107,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
       return true;
     },
-    [user],
+    [loadLinkedDevices],
   );
 
   useEffect(() => {
@@ -116,62 +119,93 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
     async function setupEncryptedMessaging() {
       try {
-        const localIdentity = await getStoredMessengerDeviceIdentity(user);
         const backupStatus = await getRecoveryKeyBackupStatus();
+        let localIdentity = await getStoredMessengerDeviceIdentity(user);
 
         if (!isMounted) {
           return;
         }
 
         if (localIdentity) {
-          const userId = user?.id || user?.user_id;
+          await ensureMessengerDeviceKey(user);
 
-          if (userId) {
-            const devicesResponse = await getMessengerUserCryptoDevices(userId);
-
-            if (!isMounted) {
-              return;
-            }
-
-            const devicesResult = devicesResponse.data?.result || devicesResponse.data;
-            const linkedDevices = Array.isArray(devicesResult?.devices)
-              ? devicesResult.devices
-              : [];
-            const isLinkedDevice = linkedDevices.some(
-              (device) => device.device_id === localIdentity.device_id,
-            );
-            const hasDefaultDevice = linkedDevices.some(
-              (device) => device.is_default,
-            );
-
-            if (linkedDevices.length > 0 && !isLinkedDevice) {
-              await clearStoredMessengerDeviceIdentity(user);
-              clearMessengerSession();
-              clearParentSession();
-              onLogout?.();
-              return;
-            }
-
-            if (linkedDevices.length > 0 && !hasDefaultDevice) {
-              setDefaultDevicePromptVersion((currentVersion) => currentVersion + 1);
-              setToast({
-                type: "error",
-                title: "Select default device",
-                message: "Choose which linked device can manage your devices.",
-              });
-            }
+          if (!isMounted) {
+            return;
           }
 
-          await ensureMessengerDeviceKey(user);
-        } else if (backupStatus.exists && backupStatus.backup) {
+          const linkedDevices = await loadLinkedDevices();
+
+          if (!isMounted) {
+            return;
+          }
+
+          const currentLinkedDevice = linkedDevices.find(
+            (device) => device.device_id === localIdentity.device_id,
+          );
+          const hasDefaultDevice = linkedDevices.some(
+            (device) => device.is_default,
+          );
+
+          if (linkedDevices.length > 0 && !currentLinkedDevice) {
+            await clearStoredMessengerDeviceIdentity(user);
+            clearMessengerSession();
+            clearParentSession();
+            onLogout?.();
+            return;
+          }
+
+          if (linkedDevices.length > 0 && !hasDefaultDevice) {
+            setDefaultDevicePromptVersion((currentVersion) => currentVersion + 1);
+            setToast({
+              type: "error",
+              title: "Select default device",
+              message: "Make this device the default before setting a recovery key.",
+            });
+            return;
+          }
+
+          if (currentLinkedDevice?.is_default && !backupStatus.exists) {
+            setIsRecoverySetupOpen(true);
+          }
+
+          return;
+        }
+
+        if (backupStatus.exists && backupStatus.backup) {
           setRecoveryBackup(backupStatus.backup);
           setIsRecoveryRestoreOpen(true);
           return;
-        } else {
-          await ensureMessengerDeviceKey(user);
         }
 
-        if (!backupStatus.exists) {
+        const createdIdentity = await ensureMessengerDeviceKey(user);
+
+        if (!isMounted) {
+          return;
+        }
+
+        localIdentity = createdIdentity || (await getStoredMessengerDeviceIdentity(user));
+        const linkedDevices = await loadLinkedDevices();
+
+        if (!isMounted) {
+          return;
+        }
+
+        const currentLinkedDevice = linkedDevices.find(
+          (device) => device.device_id === localIdentity?.device_id,
+        );
+        const hasDefaultDevice = linkedDevices.some((device) => device.is_default);
+
+        if (linkedDevices.length > 0 && !hasDefaultDevice) {
+          setDefaultDevicePromptVersion((currentVersion) => currentVersion + 1);
+          setToast({
+            type: "error",
+            title: "Select default device",
+            message: "Make this device the default before setting a recovery key.",
+          });
+          return;
+        }
+
+        if (currentLinkedDevice?.is_default && !backupStatus.exists) {
           setIsRecoverySetupOpen(true);
         }
       } catch {
@@ -192,7 +226,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     return () => {
       isMounted = false;
     };
-  }, [onLogout, user]);
+  }, [loadLinkedDevices, onLogout, user]);
 
   const handleRecoverySetupComplete = useCallback(() => {
     setIsRecoverySetupOpen(false);
@@ -201,10 +235,6 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       title: "Recovery backup created",
       message: "This device can now be used to recover encrypted messages later.",
     });
-  }, []);
-
-  const handleRecoverySetupSkip = useCallback(() => {
-    setIsRecoverySetupOpen(false);
   }, []);
 
   const handleRecoveryRestoreComplete = useCallback(() => {
@@ -220,26 +250,28 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     promptForMissingDefaultDevice({ showToast: true }).catch(() => {});
   }, [promptForMissingDefaultDevice]);
 
-  const handleRecoveryUseNewKey = useCallback(() => {
-    ensureMessengerDeviceKey(user)
-      .then(async () => {
-        setIsRecoveryRestoreOpen(false);
-        setRecoveryBackup(null);
-        setToast({
-          type: "error",
-          title: "Recovery skipped",
-          message: "Old messages may not decrypt on this device.",
-        });
-        await promptForMissingDefaultDevice({ showToast: true });
-      })
-      .catch(() => {
-        setToast({
-          type: "error",
-          title: "Encrypted messaging setup failed",
-          message: "This device could not create a new encryption key.",
-        });
-      });
-  }, [promptForMissingDefaultDevice, user]);
+  const handleRecoveryRestoreFailed = useCallback(() => {
+    clearMessengerSession();
+    clearParentSession();
+    onLogout?.();
+  }, [onLogout]);
+
+  const handleDefaultDeviceChanged = useCallback(
+    async (device) => {
+      const identity = await getStoredMessengerDeviceIdentity(user);
+
+      if (identity?.device_id !== device?.device_id) {
+        return;
+      }
+
+      const backupStatus = await getRecoveryKeyBackupStatus();
+
+      if (!backupStatus.exists) {
+        setIsRecoverySetupOpen(true);
+      }
+    },
+    [user],
+  );
 
   const handleLogout = () => {
     clearMessengerSession();
@@ -664,6 +696,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
           <Header
             user={user}
             defaultDevicePromptVersion={defaultDevicePromptVersion}
+            onDefaultDeviceChanged={handleDefaultDeviceChanged}
             onLogout={handleLogout}
             onUserUpdate={onUserUpdate}
             onToast={setToast}
@@ -704,7 +737,6 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         <RecoverySetupModal
           user={user}
           onComplete={handleRecoverySetupComplete}
-          onSkip={handleRecoverySetupSkip}
         />
       ) : null}
 
@@ -712,8 +744,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         <RecoveryRestoreModal
           backup={recoveryBackup}
           user={user}
+          onFailedAttemptsExceeded={handleRecoveryRestoreFailed}
           onRestore={handleRecoveryRestoreComplete}
-          onUseNewKey={handleRecoveryUseNewKey}
         />
       ) : null}
 

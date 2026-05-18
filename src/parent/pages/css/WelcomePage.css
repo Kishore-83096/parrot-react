@@ -1,0 +1,2 @@
+@import url("./desktop/WelcomePage.css") screen and (min-width: 901px);
+@import url("./mobile/WelcomePage.css") screen and (max-width: 900px);

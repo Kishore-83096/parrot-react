@@ -1,6 +1,8 @@
 import {
   AlertCircle,
   CheckCircle2,
+  Eye,
+  EyeOff,
   KeyRound,
   LogOut,
   Menu,
@@ -25,6 +27,10 @@ import {
   clearStoredMessengerDeviceIdentity,
   getStoredMessengerDeviceIdentity,
 } from "../../../messenger/e2ee/device.js";
+import {
+  getStoredRecoveryKey,
+  saveRecoveryKeyBackup,
+} from "../../../messenger/e2ee/recovery.js";
 import {
   changeParentPassword,
   deleteParentAccount,
@@ -257,6 +263,7 @@ function buildProfilePayload(form) {
 function Header({
   user,
   defaultDevicePromptVersion = 0,
+  onDefaultDeviceChanged,
   onLogout,
   onUserUpdate,
   onToast,
@@ -265,14 +272,23 @@ function Header({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isLinkedDevicesModalOpen, setIsLinkedDevicesModalOpen] = useState(false);
+  const [isDefaultDeviceSelectionRequired, setIsDefaultDeviceSelectionRequired] =
+    useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("view");
   const [activeAccountTab, setActiveAccountTab] = useState("password");
+  const [activeLinkedDevicesTab, setActiveLinkedDevicesTab] = useState("devices");
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState(() => getProfileForm(user));
   const [accountForm, setAccountForm] = useState(() => getAccountForm(user));
+  const [recoveryKeyForm, setRecoveryKeyForm] = useState({
+    recovery_key: "",
+    confirm_recovery_key: "",
+  });
   const [profileMessage, setProfileMessage] = useState(null);
   const [accountMessage, setAccountMessage] = useState(null);
   const [linkedDevicesMessage, setLinkedDevicesMessage] = useState(null);
+  const [recoveryKeyMessage, setRecoveryKeyMessage] = useState(null);
+  const [storedRecoveryKey, setStoredRecoveryKey] = useState("");
   const [cryptoDevices, setCryptoDevices] = useState([]);
   const [currentCryptoDeviceId, setCurrentCryptoDeviceId] = useState("");
   const [isProfileLoading, setIsProfileLoading] = useState(false);
@@ -280,8 +296,14 @@ function Header({
   const [isPasswordChanging, setIsPasswordChanging] = useState(false);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
   const [isDevicesLoading, setIsDevicesLoading] = useState(false);
+  const [isRecoveryKeySaving, setIsRecoveryKeySaving] = useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState("");
   const [defaultingDeviceId, setDefaultingDeviceId] = useState("");
+  const [isStoredRecoveryKeyVisible, setIsStoredRecoveryKeyVisible] =
+    useState(false);
+  const [isRecoveryKeyVisible, setIsRecoveryKeyVisible] = useState(false);
+  const [isConfirmRecoveryKeyVisible, setIsConfirmRecoveryKeyVisible] =
+    useState(false);
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
   const username = accountDisplay?.username || user?.username || "parrot_user";
@@ -369,6 +391,10 @@ function Header({
     }
   }, [user]);
 
+  const refreshStoredRecoveryKey = useCallback(() => {
+    setStoredRecoveryKey(getStoredRecoveryKey(user));
+  }, [user]);
+
   const openProfileModal = () => {
     pushLoggedInHistoryView({ modal: "profile", profileTab: "view" });
     setIsMenuOpen(false);
@@ -389,7 +415,10 @@ function Header({
   const openLinkedDevicesModal = () => {
     pushLoggedInHistoryView({ modal: "linkedDevices" });
     setIsMenuOpen(false);
+    setIsDefaultDeviceSelectionRequired(false);
+    setActiveLinkedDevicesTab("devices");
     setLinkedDevicesMessage(null);
+    setRecoveryKeyMessage(null);
     setIsLinkedDevicesModalOpen(true);
     loadCryptoDevices();
   };
@@ -400,10 +429,12 @@ function Header({
     }
 
     setIsMenuOpen(false);
+    setIsDefaultDeviceSelectionRequired(true);
+    setActiveLinkedDevicesTab("devices");
     setIsLinkedDevicesModalOpen(true);
     setLinkedDevicesMessage({
       type: "error",
-      text: "Select a default device to manage linked devices.",
+      text: "Make this device the default to continue.",
     });
     loadCryptoDevices({ preserveMessage: true });
   }, [defaultDevicePromptVersion, loadCryptoDevices]);
@@ -424,10 +455,22 @@ function Header({
 
   const resetLinkedDevicesModal = useCallback(() => {
     setIsLinkedDevicesModalOpen(false);
+    setIsDefaultDeviceSelectionRequired(false);
+    setActiveLinkedDevicesTab("devices");
     setLinkedDevicesMessage(null);
+    setRecoveryKeyMessage(null);
+    setStoredRecoveryKey("");
     setIsDevicesLoading(false);
+    setIsRecoveryKeySaving(false);
     setRevokingDeviceId("");
     setDefaultingDeviceId("");
+    setRecoveryKeyForm({
+      recovery_key: "",
+      confirm_recovery_key: "",
+    });
+    setIsStoredRecoveryKeyVisible(false);
+    setIsRecoveryKeyVisible(false);
+    setIsConfirmRecoveryKeyVisible(false);
   }, []);
 
   const closeProfileModal = useCallback(() => {
@@ -449,13 +492,21 @@ function Header({
   }, [resetAccountModal]);
 
   const closeLinkedDevicesModal = useCallback(() => {
+    if (isDefaultDeviceSelectionRequired && !hasDefaultCryptoDevice) {
+      return;
+    }
+
     if (isCurrentHistoryModal("linkedDevices")) {
       window.history.back();
       return;
     }
 
     resetLinkedDevicesModal();
-  }, [resetLinkedDevicesModal]);
+  }, [
+    hasDefaultCryptoDevice,
+    isDefaultDeviceSelectionRequired,
+    resetLinkedDevicesModal,
+  ]);
 
   useEffect(() => {
     if (!isProfileModalOpen) {
@@ -548,7 +599,9 @@ function Header({
         resetProfileModal();
         resetAccountModal();
         setIsLinkedDevicesModalOpen(true);
+        setActiveLinkedDevicesTab("devices");
         setLinkedDevicesMessage(null);
+        setRecoveryKeyMessage(null);
         loadCryptoDevices();
         return;
       }
@@ -581,6 +634,16 @@ function Header({
       [name]: value,
     }));
     setAccountMessage(null);
+  };
+
+  const handleRecoveryKeyFormChange = (event) => {
+    const { name, value } = event.target;
+
+    setRecoveryKeyForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+    setRecoveryKeyMessage(null);
   };
 
   const handleProfileFormChange = (event) => {
@@ -630,6 +693,18 @@ function Header({
     setActiveAccountTab("delete");
     setAccountForm(getAccountForm(user));
     setAccountMessage(null);
+  };
+
+  const openLinkedDevicesTab = () => {
+    setActiveLinkedDevicesTab("devices");
+    setLinkedDevicesMessage(null);
+  };
+
+  const openRecoveryKeyTab = () => {
+    setActiveLinkedDevicesTab("recovery");
+    setRecoveryKeyMessage(null);
+    setIsStoredRecoveryKeyVisible(false);
+    refreshStoredRecoveryKey();
   };
 
   const handleRevokeCryptoDevice = async (device) => {
@@ -693,6 +768,7 @@ function Header({
       !deviceId ||
       !currentCryptoDeviceId ||
       device?.is_default ||
+      (!hasDefaultCryptoDevice && deviceId !== currentCryptoDeviceId) ||
       (hasDefaultCryptoDevice && !canManageCryptoDevices)
     ) {
       return;
@@ -702,6 +778,11 @@ function Header({
     setLinkedDevicesMessage(null);
 
     try {
+      const shouldCloseRequiredPrompt =
+        isDefaultDeviceSelectionRequired &&
+        !hasDefaultCryptoDevice &&
+        deviceId === currentCryptoDeviceId;
+
       await setMessengerDefaultCryptoDevice(deviceId, {
         acting_device_id: currentCryptoDeviceId,
       });
@@ -716,6 +797,14 @@ function Header({
         title: "Default device updated",
         message: "Only the selected device can manage linked devices now.",
       });
+      setIsDefaultDeviceSelectionRequired(false);
+      if (shouldCloseRequiredPrompt) {
+        resetLinkedDevicesModal();
+      }
+      onDefaultDeviceChanged?.({
+        ...device,
+        is_default: true,
+      });
     } catch (error) {
       setLinkedDevicesMessage({
         type: "error",
@@ -723,6 +812,55 @@ function Header({
       });
     } finally {
       setDefaultingDeviceId("");
+    }
+  };
+
+  const handleRecoveryKeyUpdateSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!canManageCryptoDevices) {
+      setRecoveryKeyMessage({
+        type: "error",
+        text: "Only the current default device can update the recovery key.",
+      });
+      return;
+    }
+
+    if (recoveryKeyForm.recovery_key !== recoveryKeyForm.confirm_recovery_key) {
+      setRecoveryKeyMessage({
+        type: "error",
+        text: "Recovery keys do not match.",
+      });
+      return;
+    }
+
+    setIsRecoveryKeySaving(true);
+    setRecoveryKeyMessage(null);
+
+    try {
+      await saveRecoveryKeyBackup(user, recoveryKeyForm.recovery_key);
+      setStoredRecoveryKey(recoveryKeyForm.recovery_key);
+      setIsStoredRecoveryKeyVisible(false);
+      setRecoveryKeyForm({
+        recovery_key: "",
+        confirm_recovery_key: "",
+      });
+      setRecoveryKeyMessage({
+        type: "success",
+        text: "Recovery key updated.",
+      });
+      onToast?.({
+        type: "success",
+        title: "Recovery key updated",
+        message: "This key can recover old encrypted messages on another device.",
+      });
+    } catch (error) {
+      setRecoveryKeyMessage({
+        type: "error",
+        text: error?.message || "Unable to update recovery key.",
+      });
+    } finally {
+      setIsRecoveryKeySaving(false);
     }
   };
 
@@ -1286,15 +1424,17 @@ function Header({
         aria-labelledby="parent-linked-devices-title"
         role="dialog"
       >
-        <button
-          className="parent-layout-page__modal-close"
-          type="button"
-          onClick={closeLinkedDevicesModal}
-          aria-label="Close linked devices"
-          title="Close"
-        >
-          <X size={28} strokeWidth={3} aria-hidden="true" />
-        </button>
+        {isDefaultDeviceSelectionRequired && !hasDefaultCryptoDevice ? null : (
+          <button
+            className="parent-layout-page__modal-close"
+            type="button"
+            onClick={closeLinkedDevicesModal}
+            aria-label="Close linked devices"
+            title="Close"
+          >
+            <X size={28} strokeWidth={3} aria-hidden="true" />
+          </button>
+        )}
 
         <div className="parent-layout-page__modal-header">
           <img src={parrotIcon} alt="" aria-hidden="true" />
@@ -1303,8 +1443,37 @@ function Header({
           </div>
         </div>
 
+        <nav
+          className="parent-layout-page__profile-tabs"
+          aria-label="Linked device tabs"
+          role="tablist"
+        >
+          <button
+            className={activeLinkedDevicesTab === "devices" ? "is-active" : ""}
+            type="button"
+            onClick={openLinkedDevicesTab}
+            role="tab"
+            aria-controls="parent-linked-devices-list"
+            aria-selected={activeLinkedDevicesTab === "devices"}
+          >
+            <ShieldCheck size={16} aria-hidden="true" />
+            <span>Devices</span>
+          </button>
+          <button
+            className={activeLinkedDevicesTab === "recovery" ? "is-active" : ""}
+            type="button"
+            onClick={openRecoveryKeyTab}
+            role="tab"
+            aria-controls="parent-linked-devices-recovery"
+            aria-selected={activeLinkedDevicesTab === "recovery"}
+          >
+            <KeyRound size={16} aria-hidden="true" />
+            <span>Recovery key</span>
+          </button>
+        </nav>
+
         <div className="parent-layout-page__profile-content">
-          {linkedDevicesMessage ? (
+          {activeLinkedDevicesTab === "devices" && linkedDevicesMessage ? (
             <p
               className={`parent-layout-page__form-message parent-layout-page__form-message--${linkedDevicesMessage.type}`}
               role="alert"
@@ -1318,127 +1487,335 @@ function Header({
             </p>
           ) : null}
 
-          <section className="parent-layout-page__crypto-devices">
-            <p className="parent-layout-page__form-note">
-              Only the default device can change defaults or revoke another
-              linked device.
-            </p>
-
-            {isDevicesLoading ? (
-              <div className="parent-layout-page__crypto-device-loading">
-                Loading devices...
-              </div>
-            ) : cryptoDevices.length === 0 ? (
-              <div className="parent-layout-page__crypto-device-empty">
-                No encrypted devices registered.
-              </div>
-            ) : (
-              <div className="parent-layout-page__crypto-device-list">
-                {cryptoDevices.map((device) => {
-                  const isCurrent = device.device_id === currentCryptoDeviceId;
-                  const isDefault = Boolean(device.is_default);
-                  const isRevoking = revokingDeviceId === device.device_id;
-                  const isDefaulting = defaultingDeviceId === device.device_id;
-                  const deviceName =
-                    device.device_name ||
-                    (isCurrent ? "This device" : "Linked device");
-                  const canSetDefault =
-                    !isDefault &&
-                    Boolean(currentCryptoDeviceId) &&
-                    (!hasDefaultCryptoDevice || canManageCryptoDevices);
-                  const canRevoke =
-                    isCurrent || (canManageCryptoDevices && !isDefault);
-
-                  return (
-                    <article
-                      className="parent-layout-page__crypto-device"
-                      key={device.device_id}
-                    >
-                      <div>
-                        <div className="parent-layout-page__crypto-device-title">
-                          <strong>{deviceName}</strong>
-                          {isCurrent ? (
-                            <span className="parent-layout-page__crypto-device-badge parent-layout-page__crypto-device-badge--current">
-                              This device
-                            </span>
-                          ) : null}
-                          {isDefault ? (
-                            <span className="parent-layout-page__crypto-device-badge">
-                              Default
-                            </span>
-                          ) : null}
-                        </div>
-                        <small>
-                          Last seen {formatDeviceTime(device.last_seen_at)}
-                        </small>
-                      </div>
-
-                      <div className="parent-layout-page__crypto-device-actions">
-                        <button
-                          type="button"
-                          className="parent-layout-page__crypto-device-default"
-                          onClick={() => handleSetDefaultCryptoDevice(device)}
-                          disabled={!canSetDefault || isDefaulting}
-                          title={
-                            isDefault
-                              ? "Already default"
-                              : canSetDefault
-                                ? "Make default"
-                                : "Only the default device can change this"
-                          }
-                        >
-                          <ShieldCheck size={15} aria-hidden="true" />
-                          <span>
-                            {isDefault
-                              ? "Default"
-                              : isDefaulting
-                                ? "Saving"
-                                : "Make default"}
-                          </span>
-                        </button>
-
-                        <button
-                          type="button"
-                          className="parent-layout-page__crypto-device-revoke"
-                          onClick={() => handleRevokeCryptoDevice(device)}
-                          disabled={!canRevoke || isRevoking}
-                          title={
-                            isCurrent
-                              ? "Remove this device and log out"
-                              : isDefault
-                                ? "Default device cannot be revoked"
-                                : canManageCryptoDevices
-                                  ? "Revoke device"
-                                  : "Only the default device can revoke devices"
-                          }
-                        >
-                          <Trash2 size={15} aria-hidden="true" />
-                          <span>
-                            {isRevoking
-                              ? isCurrent
-                                ? "Logging out"
-                                : "Revoking"
-                              : isCurrent
-                                ? "Logout"
-                                : "Revoke"}
-                          </span>
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-
-            <button
-              type="button"
-              className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
-              onClick={() => loadCryptoDevices()}
-              disabled={isDevicesLoading}
+          {activeLinkedDevicesTab === "devices" ? (
+            <section
+              className="parent-layout-page__crypto-devices"
+              id="parent-linked-devices-list"
+              role="tabpanel"
             >
-              <span>{isDevicesLoading ? "Refreshing" : "Refresh devices"}</span>
-            </button>
-          </section>
+              <div className="parent-layout-page__form-note">
+                <strong>Why this matters:</strong> Each linked browser has its
+                own encryption key. The default device is trusted to manage
+                linked devices and recovery-key changes.
+                <ul>
+                  <li>Do make only your personal trusted device the default.</li>
+                  <li>Do revoke old, lost, or shared devices.</li>
+                  <li>Don't make a public or borrowed browser the default.</li>
+                </ul>
+              </div>
+
+              {isDevicesLoading ? (
+                <div className="parent-layout-page__crypto-device-loading">
+                  Loading devices...
+                </div>
+              ) : cryptoDevices.length === 0 ? (
+                <div className="parent-layout-page__crypto-device-empty">
+                  No encrypted devices registered.
+                </div>
+              ) : (
+                <div className="parent-layout-page__crypto-device-list">
+                  {cryptoDevices.map((device) => {
+                    const isCurrent = device.device_id === currentCryptoDeviceId;
+                    const isDefault = Boolean(device.is_default);
+                    const isRevoking = revokingDeviceId === device.device_id;
+                    const isDefaulting = defaultingDeviceId === device.device_id;
+                    const deviceName =
+                      device.device_name ||
+                      (isCurrent ? "This device" : "Linked device");
+                    const canSetDefault =
+                      !isDefault &&
+                      Boolean(currentCryptoDeviceId) &&
+                      ((!hasDefaultCryptoDevice && isCurrent) ||
+                        canManageCryptoDevices);
+                    const canRevoke =
+                      isCurrent || (canManageCryptoDevices && !isDefault);
+
+                    return (
+                      <article
+                        className="parent-layout-page__crypto-device"
+                        key={device.device_id}
+                      >
+                        <div>
+                          <div className="parent-layout-page__crypto-device-title">
+                            <strong>{deviceName}</strong>
+                            {isCurrent ? (
+                              <span className="parent-layout-page__crypto-device-badge parent-layout-page__crypto-device-badge--current">
+                                This device
+                              </span>
+                            ) : null}
+                            {isDefault ? (
+                              <span className="parent-layout-page__crypto-device-badge">
+                                Default
+                              </span>
+                            ) : null}
+                          </div>
+                          <small>
+                            Last seen {formatDeviceTime(device.last_seen_at)}
+                          </small>
+                        </div>
+
+                        <div className="parent-layout-page__crypto-device-actions">
+                          <button
+                            type="button"
+                            className="parent-layout-page__crypto-device-default"
+                            onClick={() => handleSetDefaultCryptoDevice(device)}
+                            disabled={!canSetDefault || isDefaulting}
+                            title={
+                              isDefault
+                                ? "Already default"
+                                : canSetDefault
+                                  ? "Make default"
+                                  : !hasDefaultCryptoDevice
+                                    ? "Only this device can become default first"
+                                    : "Only the default device can change this"
+                            }
+                          >
+                            <ShieldCheck size={15} aria-hidden="true" />
+                            <span>
+                              {isDefault
+                                ? "Default"
+                                : isDefaulting
+                                  ? "Saving"
+                                  : "Make default"}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="parent-layout-page__crypto-device-revoke"
+                            onClick={() => handleRevokeCryptoDevice(device)}
+                            disabled={!canRevoke || isRevoking}
+                            title={
+                              isCurrent
+                                ? "Remove this device and log out"
+                                : isDefault
+                                  ? "Default device cannot be revoked"
+                                  : canManageCryptoDevices
+                                    ? "Revoke device"
+                                    : "Only the default device can revoke devices"
+                            }
+                          >
+                            <Trash2 size={15} aria-hidden="true" />
+                            <span>
+                              {isRevoking
+                                ? isCurrent
+                                  ? "Logging out"
+                                  : "Revoking"
+                                : isCurrent
+                                  ? "Logout"
+                                  : "Revoke"}
+                            </span>
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
+                onClick={() => loadCryptoDevices()}
+                disabled={isDevicesLoading}
+              >
+                <span>
+                  {isDevicesLoading ? "Refreshing" : "Refresh devices"}
+                </span>
+              </button>
+            </section>
+          ) : null}
+
+          {activeLinkedDevicesTab === "recovery" ? (
+            <form
+              className="parent-layout-page__profile-form"
+              id="parent-linked-devices-recovery"
+              role="tabpanel"
+              onSubmit={handleRecoveryKeyUpdateSubmit}
+            >
+              <div className="parent-layout-page__form-note">
+                <strong>Why this matters:</strong> The recovery key decrypts
+                the private-key backup for old messages. The server cannot show
+                this key back to you.
+                <ul>
+                  <li>Do save it outside this browser before clearing data.</li>
+                  <li>Do update it if someone else may know it.</li>
+                  <li>Don't share it or enter it on an untrusted device.</li>
+                </ul>
+              </div>
+
+              {!canManageCryptoDevices ? (
+                <p className="parent-layout-page__account-danger">
+                  Only this account's current default device can view or update
+                  the recovery key.
+                </p>
+              ) : null}
+
+              {canManageCryptoDevices ? (
+                <label className="parent-layout-page__profile-field">
+                  <span className="parent-layout-page__field-label">
+                    Current recovery key
+                    <em>{storedRecoveryKey ? "Saved" : "Not saved"}</em>
+                  </span>
+                  <div className="parent-layout-page__table-input-action">
+                    <input
+                      type={
+                        storedRecoveryKey
+                          ? isStoredRecoveryKeyVisible
+                            ? "text"
+                            : "password"
+                          : "text"
+                      }
+                      value={storedRecoveryKey || "Not saved on this device"}
+                      readOnly
+                    />
+                    <button
+                      className="parent-layout-page__table-icon-button"
+                      type="button"
+                      onClick={() =>
+                        setIsStoredRecoveryKeyVisible(
+                          (currentValue) => !currentValue,
+                        )
+                      }
+                      disabled={!storedRecoveryKey}
+                      aria-label={
+                        isStoredRecoveryKeyVisible
+                          ? "Hide current recovery key"
+                          : "Show current recovery key"
+                      }
+                      title={
+                        isStoredRecoveryKeyVisible
+                          ? "Hide current recovery key"
+                          : "Show current recovery key"
+                      }
+                    >
+                      {isStoredRecoveryKeyVisible ? (
+                        <EyeOff size={18} aria-hidden="true" />
+                      ) : (
+                        <Eye size={18} aria-hidden="true" />
+                      )}
+                    </button>
+                  </div>
+                </label>
+              ) : null}
+
+              {canManageCryptoDevices && !storedRecoveryKey ? (
+                <p className="parent-layout-page__form-note">
+                  This device can only show recovery keys created, updated, or
+                  restored here. Update the key once to make it visible here.
+                </p>
+              ) : null}
+
+              {recoveryKeyMessage ? (
+                <p
+                  className={`parent-layout-page__form-message parent-layout-page__form-message--${recoveryKeyMessage.type}`}
+                  role="alert"
+                >
+                  {recoveryKeyMessage.type === "success" ? (
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                  ) : (
+                    <AlertCircle size={18} aria-hidden="true" />
+                  )}
+                  <span>{recoveryKeyMessage.text}</span>
+                </p>
+              ) : null}
+
+              <label className="parent-layout-page__profile-field">
+                <span className="parent-layout-page__field-label">
+                  New recovery key
+                  <em className="is-required">Required</em>
+                </span>
+                <div className="parent-layout-page__table-input-action">
+                  <input
+                    name="recovery_key"
+                    type={isRecoveryKeyVisible ? "text" : "password"}
+                    value={recoveryKeyForm.recovery_key}
+                    onChange={handleRecoveryKeyFormChange}
+                    autoComplete="new-password"
+                    minLength={12}
+                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
+                    required
+                  />
+                  <button
+                    className="parent-layout-page__table-icon-button"
+                    type="button"
+                    onClick={() =>
+                      setIsRecoveryKeyVisible((currentValue) => !currentValue)
+                    }
+                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
+                    aria-label={
+                      isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
+                    }
+                    title={
+                      isRecoveryKeyVisible ? "Hide recovery key" : "Show recovery key"
+                    }
+                  >
+                    {isRecoveryKeyVisible ? (
+                      <EyeOff size={18} aria-hidden="true" />
+                    ) : (
+                      <Eye size={18} aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              </label>
+
+              <label className="parent-layout-page__profile-field">
+                <span className="parent-layout-page__field-label">
+                  Confirm new recovery key
+                  <em className="is-required">Required</em>
+                </span>
+                <div className="parent-layout-page__table-input-action">
+                  <input
+                    name="confirm_recovery_key"
+                    type={isConfirmRecoveryKeyVisible ? "text" : "password"}
+                    value={recoveryKeyForm.confirm_recovery_key}
+                    onChange={handleRecoveryKeyFormChange}
+                    autoComplete="new-password"
+                    minLength={12}
+                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
+                    required
+                  />
+                  <button
+                    className="parent-layout-page__table-icon-button"
+                    type="button"
+                    onClick={() =>
+                      setIsConfirmRecoveryKeyVisible(
+                        (currentValue) => !currentValue,
+                      )
+                    }
+                    disabled={!canManageCryptoDevices || isRecoveryKeySaving}
+                    aria-label={
+                      isConfirmRecoveryKeyVisible
+                        ? "Hide confirmation recovery key"
+                        : "Show confirmation recovery key"
+                    }
+                    title={
+                      isConfirmRecoveryKeyVisible
+                        ? "Hide confirmation recovery key"
+                        : "Show confirmation recovery key"
+                    }
+                  >
+                    {isConfirmRecoveryKeyVisible ? (
+                      <EyeOff size={18} aria-hidden="true" />
+                    ) : (
+                      <Eye size={18} aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              </label>
+
+              <button
+                className="parent-layout-page__modal-submit"
+                type="submit"
+                disabled={!canManageCryptoDevices || isRecoveryKeySaving}
+              >
+                <KeyRound size={18} aria-hidden="true" />
+                <span>
+                  {isRecoveryKeySaving ? "Updating..." : "Update recovery key"}
+                </span>
+              </button>
+            </form>
+          ) : null}
         </div>
       </section>
     </div>
