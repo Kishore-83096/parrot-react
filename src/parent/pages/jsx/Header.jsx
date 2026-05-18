@@ -20,14 +20,15 @@ import parrotIcon from "../../../assets/favicon.svg";
 import {
   getMessengerErrorMessage,
   getMessengerUserCryptoDevices,
-  revokeMessengerCryptoDevice,
-  setMessengerDefaultCryptoDevice,
 } from "../../../messenger/api.js";
 import {
   clearStoredMessengerDeviceIdentity,
   getStoredMessengerDeviceIdentity,
-} from "../../../messenger/e2ee/device.js";
+  revokeMessengerDevice,
+  setDefaultMessengerDevice,
+} from "../../../messenger/e2ee/devices/index.js";
 import {
+  clearStoredRecoveryKey,
   getStoredRecoveryKey,
   saveRecoveryKeyBackup,
 } from "../../../messenger/e2ee/recovery.js";
@@ -352,14 +353,6 @@ function Header({
     (device) => device.device_id === currentCryptoDeviceId,
   );
   const hasDefaultCryptoDevice = cryptoDevices.some((device) => device.is_default);
-  const defaultCryptoDevice = cryptoDevices.find((device) => device.is_default);
-  const canRecoverDefaultCryptoDevice = Boolean(
-    currentCryptoDevice &&
-      defaultCryptoDevice &&
-      currentCryptoDevice.device_id !== defaultCryptoDevice.device_id &&
-      currentCryptoDevice.public_key &&
-      currentCryptoDevice.public_key === defaultCryptoDevice.public_key,
-  );
   const canManageCryptoDevices = Boolean(currentCryptoDevice?.is_default);
 
   const syncProfile = useCallback(
@@ -418,9 +411,18 @@ function Header({
         getMessengerUserCryptoDevices(userId),
       ]);
       const result = response.data?.result || response.data;
+      const nextDevices = Array.isArray(result?.devices) ? result.devices : [];
+      const isCurrentDefault = nextDevices.some(
+        (device) => device.device_id === identity?.device_id && device.is_default,
+      );
 
       setCurrentCryptoDeviceId(identity?.device_id || "");
-      setCryptoDevices(Array.isArray(result?.devices) ? result.devices : []);
+      setCryptoDevices(nextDevices);
+      if (!isCurrentDefault) {
+        clearStoredRecoveryKey(user);
+        setStoredRecoveryKey("");
+        setIsStoredRecoveryKeyVisible(false);
+      }
     } catch (error) {
       setLinkedDevicesMessage({
         type: "error",
@@ -741,6 +743,12 @@ function Header({
     setActiveLinkedDevicesTab("recovery");
     setRecoveryKeyMessage(null);
     setIsStoredRecoveryKeyVisible(false);
+    if (!canManageCryptoDevices) {
+      clearStoredRecoveryKey(user);
+      setStoredRecoveryKey("");
+      return;
+    }
+
     refreshStoredRecoveryKey();
   };
 
@@ -761,11 +769,12 @@ function Header({
     let didLogoutCurrentDevice = false;
 
     try {
-      await revokeMessengerCryptoDevice(deviceId, {
-        acting_device_id: currentCryptoDeviceId,
-      });
+      await revokeMessengerDevice(user, deviceId);
       if (isCurrent) {
         await clearStoredMessengerDeviceIdentity(user);
+        clearStoredRecoveryKey(user);
+        setStoredRecoveryKey("");
+        setIsStoredRecoveryKeyVisible(false);
         didLogoutCurrentDevice = true;
         onToast?.({
           type: "success",
@@ -806,9 +815,7 @@ function Header({
       !currentCryptoDeviceId ||
       device?.is_default ||
       (!hasDefaultCryptoDevice && deviceId !== currentCryptoDeviceId) ||
-      (hasDefaultCryptoDevice &&
-        !canManageCryptoDevices &&
-        !(deviceId === currentCryptoDeviceId && canRecoverDefaultCryptoDevice))
+      (hasDefaultCryptoDevice && !canManageCryptoDevices)
     ) {
       return;
     }
@@ -820,17 +827,20 @@ function Header({
       const shouldCloseRequiredPrompt =
         isDefaultDeviceSelectionRequired &&
         deviceId === currentCryptoDeviceId &&
-        (!hasDefaultCryptoDevice || canRecoverDefaultCryptoDevice);
+        !hasDefaultCryptoDevice;
 
-      await setMessengerDefaultCryptoDevice(deviceId, {
-        acting_device_id: currentCryptoDeviceId,
-      });
+      await setDefaultMessengerDevice(user, deviceId);
       setCryptoDevices((currentDevices) =>
         currentDevices.map((currentDevice) => ({
           ...currentDevice,
           is_default: currentDevice.device_id === deviceId,
         })),
       );
+      if (deviceId !== currentCryptoDeviceId) {
+        clearStoredRecoveryKey(user);
+        setStoredRecoveryKey("");
+        setIsStoredRecoveryKeyVisible(false);
+      }
       onToast?.({
         type: "success",
         title: "Default device updated",
@@ -1565,8 +1575,7 @@ function Header({
                       !isDefault &&
                       Boolean(currentCryptoDeviceId) &&
                       ((!hasDefaultCryptoDevice && isCurrent) ||
-                        canManageCryptoDevices ||
-                        (isCurrent && canRecoverDefaultCryptoDevice));
+                        canManageCryptoDevices);
                     const canRevoke =
                       isCurrent || (canManageCryptoDevices && !isDefault);
 

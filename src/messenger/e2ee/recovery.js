@@ -2,16 +2,16 @@ import sodium from "libsodium-wrappers";
 
 import {
   getMessengerCryptoKeyBackup,
-  saveMessengerCryptoKeyBackup,
 } from "../api.js";
 import {
   createMessengerDeviceId,
   fromBase64,
   getOrCreateMessengerDeviceIdentity,
   registerMessengerDeviceIdentity,
+  saveDefaultDeviceRecoveryBackup,
   saveMessengerDeviceIdentity,
   toBase64,
-} from "./device.js";
+} from "./devices/index.js";
 
 export const E2EE_KEY_BACKUP_VERSION = 1;
 
@@ -87,6 +87,21 @@ export function getStoredRecoveryKey(user) {
     return storage.getItem(storageKey) || "";
   } catch {
     return "";
+  }
+}
+
+export function clearStoredRecoveryKey(user) {
+  const storageKey = getRecoveryKeyStorageKey(user);
+  const storage = getLocalStorage();
+
+  if (!storageKey || !storage) {
+    return;
+  }
+
+  try {
+    storage.removeItem(storageKey);
+  } catch {
+    // Clearing local recovery state is best effort.
   }
 }
 
@@ -171,7 +186,7 @@ export async function createRecoveryKeyBackup(user, recoveryPassword) {
 export async function saveRecoveryKeyBackup(user, recoveryPassword) {
   const normalizedPassword = String(recoveryPassword || "");
   const backupPayload = await createRecoveryKeyBackup(user, normalizedPassword);
-  const response = await saveMessengerCryptoKeyBackup(backupPayload);
+  const response = await saveDefaultDeviceRecoveryBackup(user, backupPayload);
   const result = getResult(response);
 
   storeRecoveryKey(user, normalizedPassword);
@@ -215,8 +230,6 @@ export async function restoreRecoveryKeyBackup(user, backup, recoveryPassword) {
   });
 
   const result = await registerMessengerDeviceIdentity(identity);
-
-  storeRecoveryKey(user, recoveryPassword);
 
   return result;
 }

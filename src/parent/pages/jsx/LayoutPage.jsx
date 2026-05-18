@@ -12,11 +12,14 @@ import {
   clearStoredMessengerDeviceIdentity,
   ensureMessengerDeviceKey,
   getStoredMessengerDeviceIdentity,
-} from "../../../messenger/e2ee/device.js";
+} from "../../../messenger/e2ee/devices/index.js";
 import { decryptMessageForUser } from "../../../messenger/e2ee/messages.js";
 import RecoveryRestoreModal from "../../../messenger/e2ee/RecoveryRestoreModal.jsx";
 import RecoverySetupModal from "../../../messenger/e2ee/RecoverySetupModal.jsx";
-import { getRecoveryKeyBackupStatus } from "../../../messenger/e2ee/recovery.js";
+import {
+  clearStoredRecoveryKey,
+  getRecoveryKeyBackupStatus,
+} from "../../../messenger/e2ee/recovery.js";
 import MessengerInboxListener from "../../../messenger/MessengerInboxListener.jsx";
 import MessengerConversation from "../../../messenger/pages/jsx/MessengerConversation.jsx";
 import MessengerRoomHeader from "../../../messenger/pages/jsx/MessengerRoomHeader.jsx";
@@ -90,25 +93,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     async ({ showToast = false } = {}) => {
       const linkedDevices = await loadLinkedDevices();
       const hasDefaultDevice = linkedDevices.some((device) => device.is_default);
-      const localIdentity = await getStoredMessengerDeviceIdentity(user);
-      const currentLinkedDevice = linkedDevices.find(
-        (device) => device.device_id === localIdentity?.device_id,
-      );
-      const defaultLinkedDevice = linkedDevices.find(
-        (device) => device.is_default,
-      );
-      const canRecoverDefaultDevice = Boolean(
-        currentLinkedDevice &&
-          defaultLinkedDevice &&
-          currentLinkedDevice.device_id !== defaultLinkedDevice.device_id &&
-          currentLinkedDevice.public_key &&
-          currentLinkedDevice.public_key === defaultLinkedDevice.public_key,
-      );
 
-      if (
-        linkedDevices.length === 0 ||
-        (hasDefaultDevice && !canRecoverDefaultDevice)
-      ) {
+      if (linkedDevices.length === 0 || hasDefaultDevice) {
         return false;
       }
 
@@ -118,9 +104,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         setToast({
           type: "error",
           title: "Select default device",
-          message: canRecoverDefaultDevice
-            ? "Make this recovered device the default to manage linked devices."
-            : "Choose which linked device can manage your devices.",
+          message: "Choose which linked device can manage your devices.",
         });
       }
 
@@ -270,10 +254,15 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   }, [promptForMissingDefaultDevice]);
 
   const handleRecoveryRestoreFailed = useCallback(() => {
-    clearMessengerSession();
-    clearParentSession();
-    onLogout?.();
-  }, [onLogout]);
+    clearStoredMessengerDeviceIdentity(user)
+      .catch(() => {})
+      .finally(() => {
+        clearStoredRecoveryKey(user);
+        clearMessengerSession();
+        clearParentSession();
+        onLogout?.();
+      });
+  }, [onLogout, user]);
 
   const handleDefaultDeviceChanged = useCallback(
     async (device) => {
@@ -603,9 +592,23 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             }
 
             await clearStoredMessengerDeviceIdentity(user);
+            clearStoredRecoveryKey(user);
             clearMessengerSession();
             clearParentSession();
             onLogout?.();
+          })
+          .catch(() => {});
+      }
+
+      if (eventPayload?.type === "device.default_changed") {
+        getStoredMessengerDeviceIdentity(user)
+          .then((identity) => {
+            const defaultDeviceId = eventPayload.device?.device_id;
+            if (!identity?.device_id || identity.device_id === defaultDeviceId) {
+              return;
+            }
+
+            clearStoredRecoveryKey(user);
           })
           .catch(() => {});
       }

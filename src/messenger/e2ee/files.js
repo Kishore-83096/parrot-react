@@ -1,7 +1,7 @@
 import sodium from "libsodium-wrappers";
 
 import { uploadMessengerEncryptedFile } from "../api.js";
-import { fromBase64, toBase64 } from "./device.js";
+import { fromBase64, toBase64 } from "./devices/index.js";
 
 export const E2EE_FILE_TYPE = "e2ee.file";
 export const E2EE_FILE_VERSION = 1;

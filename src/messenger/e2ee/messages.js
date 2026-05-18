@@ -6,7 +6,7 @@ import {
   fromBase64,
   getStoredMessengerDeviceIdentity,
   toBase64,
-} from "./device.js";
+} from "./devices/index.js";
 
 export const E2EE_MESSAGE_TYPE = "e2ee.message";
 export const E2EE_MESSAGE_VERSION = 1;

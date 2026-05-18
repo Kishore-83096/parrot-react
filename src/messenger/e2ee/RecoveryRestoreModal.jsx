@@ -24,6 +24,7 @@ function RecoveryRestoreModal({
 
     try {
       const result = await restoreRecoveryKeyBackup(user, backup, recoveryPassword);
+      setRecoveryPassword("");
       onRestore?.(result);
     } catch {
       const nextFailedAttempts = failedAttempts + 1;
