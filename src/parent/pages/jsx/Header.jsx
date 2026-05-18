@@ -352,6 +352,14 @@ function Header({
     (device) => device.device_id === currentCryptoDeviceId,
   );
   const hasDefaultCryptoDevice = cryptoDevices.some((device) => device.is_default);
+  const defaultCryptoDevice = cryptoDevices.find((device) => device.is_default);
+  const canRecoverDefaultCryptoDevice = Boolean(
+    currentCryptoDevice &&
+      defaultCryptoDevice &&
+      currentCryptoDevice.device_id !== defaultCryptoDevice.device_id &&
+      currentCryptoDevice.public_key &&
+      currentCryptoDevice.public_key === defaultCryptoDevice.public_key,
+  );
   const canManageCryptoDevices = Boolean(currentCryptoDevice?.is_default);
 
   const syncProfile = useCallback(
@@ -798,7 +806,9 @@ function Header({
       !currentCryptoDeviceId ||
       device?.is_default ||
       (!hasDefaultCryptoDevice && deviceId !== currentCryptoDeviceId) ||
-      (hasDefaultCryptoDevice && !canManageCryptoDevices)
+      (hasDefaultCryptoDevice &&
+        !canManageCryptoDevices &&
+        !(deviceId === currentCryptoDeviceId && canRecoverDefaultCryptoDevice))
     ) {
       return;
     }
@@ -809,8 +819,8 @@ function Header({
     try {
       const shouldCloseRequiredPrompt =
         isDefaultDeviceSelectionRequired &&
-        !hasDefaultCryptoDevice &&
-        deviceId === currentCryptoDeviceId;
+        deviceId === currentCryptoDeviceId &&
+        (!hasDefaultCryptoDevice || canRecoverDefaultCryptoDevice);
 
       await setMessengerDefaultCryptoDevice(deviceId, {
         acting_device_id: currentCryptoDeviceId,
@@ -1555,7 +1565,8 @@ function Header({
                       !isDefault &&
                       Boolean(currentCryptoDeviceId) &&
                       ((!hasDefaultCryptoDevice && isCurrent) ||
-                        canManageCryptoDevices);
+                        canManageCryptoDevices ||
+                        (isCurrent && canRecoverDefaultCryptoDevice));
                     const canRevoke =
                       isCurrent || (canManageCryptoDevices && !isDefault);
 

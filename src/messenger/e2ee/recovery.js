@@ -208,9 +208,8 @@ export async function restoreRecoveryKeyBackup(user, backup, recoveryPassword) {
     throw new Error("This recovery backup is not supported.");
   }
 
-  const restoredDeviceId = String(restoredIdentity.device_id || "").trim();
   const identity = await saveMessengerDeviceIdentity(user, {
-    device_id: restoredDeviceId || createMessengerDeviceId(),
+    device_id: createMessengerDeviceId(),
     public_key: restoredIdentity.public_key,
     private_key: restoredIdentity.private_key,
   });

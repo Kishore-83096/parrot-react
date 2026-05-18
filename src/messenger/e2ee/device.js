@@ -1,9 +1,6 @@
 import sodium from "libsodium-wrappers";
 
-import {
-  registerMessengerCryptoDevice,
-  revokeMessengerCryptoDevice,
-} from "../api.js";
+import { registerMessengerCryptoDevice } from "../api.js";
 
 const E2EE_STORAGE_PREFIX = "parrot:e2ee:v1";
 const DEVICE_ID_KEY = "device_id";
@@ -247,69 +244,6 @@ export async function registerMessengerDeviceIdentity(identity) {
     ...identity,
     registered_device: response.data?.result?.device || null,
   };
-}
-
-export async function adoptRecoveredDefaultMessengerDevice(user, devices) {
-  const scope = getUserStorageScope(user);
-
-  if (!scope) {
-    return null;
-  }
-
-  await sodium.ready;
-
-  const storedIdentity = readStoredDeviceIdentity(scope);
-  if (!storedIdentity) {
-    return null;
-  }
-
-  const deviceList = Array.isArray(devices) ? devices : [];
-  const defaultDevice = deviceList.find(
-    (device) => device?.is_default && device.device_id && device.public_key,
-  );
-
-  if (
-    !defaultDevice ||
-    String(defaultDevice.device_id) === String(storedIdentity.device_id) ||
-    defaultDevice.public_key !== storedIdentity.public_key
-  ) {
-    return storedIdentity;
-  }
-
-  const duplicateDevice = deviceList.find(
-    (device) =>
-      String(device?.device_id || "") === String(storedIdentity.device_id),
-  );
-
-  if (
-    duplicateDevice?.public_key &&
-    duplicateDevice.public_key !== storedIdentity.public_key
-  ) {
-    return storedIdentity;
-  }
-
-  const adoptedIdentity = {
-    ...storedIdentity,
-    device_id: String(defaultDevice.device_id),
-    public_key: defaultDevice.public_key,
-  };
-
-  pendingDeviceSetupByUser.delete(scope);
-  storeDeviceIdentity(scope, adoptedIdentity);
-  await registerMessengerDeviceIdentity(adoptedIdentity);
-
-  if (duplicateDevice?.device_id) {
-    try {
-      await revokeMessengerCryptoDevice(duplicateDevice.device_id, {
-        acting_device_id: adoptedIdentity.device_id,
-      });
-    } catch {
-      // The current browser has already adopted the default identity.
-      // A failed duplicate cleanup should not block recovery.
-    }
-  }
-
-  return adoptedIdentity;
 }
 
 export async function ensureMessengerDeviceKey(user) {

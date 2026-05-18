@@ -9,7 +9,6 @@ import {
   MESSENGER_INBOX_EVENT_NAME,
 } from "../../../messenger/api.js";
 import {
-  adoptRecoveredDefaultMessengerDevice,
   clearStoredMessengerDeviceIdentity,
   ensureMessengerDeviceKey,
   getStoredMessengerDeviceIdentity,
@@ -91,8 +90,25 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     async ({ showToast = false } = {}) => {
       const linkedDevices = await loadLinkedDevices();
       const hasDefaultDevice = linkedDevices.some((device) => device.is_default);
+      const localIdentity = await getStoredMessengerDeviceIdentity(user);
+      const currentLinkedDevice = linkedDevices.find(
+        (device) => device.device_id === localIdentity?.device_id,
+      );
+      const defaultLinkedDevice = linkedDevices.find(
+        (device) => device.is_default,
+      );
+      const canRecoverDefaultDevice = Boolean(
+        currentLinkedDevice &&
+          defaultLinkedDevice &&
+          currentLinkedDevice.device_id !== defaultLinkedDevice.device_id &&
+          currentLinkedDevice.public_key &&
+          currentLinkedDevice.public_key === defaultLinkedDevice.public_key,
+      );
 
-      if (linkedDevices.length === 0 || hasDefaultDevice) {
+      if (
+        linkedDevices.length === 0 ||
+        (hasDefaultDevice && !canRecoverDefaultDevice)
+      ) {
         return false;
       }
 
@@ -102,7 +118,9 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         setToast({
           type: "error",
           title: "Select default device",
-          message: "Choose which linked device can manage your devices.",
+          message: canRecoverDefaultDevice
+            ? "Make this recovered device the default to manage linked devices."
+            : "Choose which linked device can manage your devices.",
         });
       }
 
@@ -134,23 +152,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             return;
           }
 
-          let linkedDevices = await loadLinkedDevices();
-
-          if (!isMounted) {
-            return;
-          }
-
-          const adoptedIdentity = await adoptRecoveredDefaultMessengerDevice(
-            user,
-            linkedDevices,
-          );
-          if (
-            adoptedIdentity?.device_id &&
-            adoptedIdentity.device_id !== localIdentity.device_id
-          ) {
-            localIdentity = adoptedIdentity;
-            linkedDevices = await loadLinkedDevices();
-          }
+          const linkedDevices = await loadLinkedDevices();
 
           if (!isMounted) {
             return;
