@@ -12,10 +12,14 @@
   Music,
   MessageCircle,
   Paperclip,
+  Pause,
+  Play,
   Reply,
   Send,
   Trash2,
   Video,
+  Volume1,
+  Volume2,
   X,
 } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -300,6 +304,22 @@ function getDocumentPreviewMode(attachment) {
 
 function isHttpUrl(url) {
   return /^https?:\/\//i.test(String(url || ""));
+}
+
+function formatMediaTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return "0:00";
+  }
+
+  const roundedSeconds = Math.floor(seconds);
+  const minutes = Math.floor(roundedSeconds / 60);
+  const remainingSeconds = String(roundedSeconds % 60).padStart(2, "0");
+
+  return `${minutes}:${remainingSeconds}`;
+}
+
+function clampMediaVolume(volume) {
+  return Math.min(Math.max(Number(volume) || 0, 0), 1);
 }
 
 function getOfficePreviewUrl(fileUrl) {
@@ -630,33 +650,208 @@ function PdfAttachmentThumbnail({ label, sourceUrl }) {
   );
 }
 
-function CachedVideo({ attachment, className }) {
+function AttachmentMediaPlayer({ attachment, label, type }) {
   const sourceUrl = useCachedMediaUrl(attachment);
+  const mediaRef = useRef(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(1);
 
-  return (
-    <video
-      controls
-      playsInline
-      preload="metadata"
-      src={sourceUrl}
-      className={className || "parent-layout-page__message-attachment-player"}
-    >
-      <a href={attachment.file_url}>{getAttachmentLabel(attachment)}</a>
-    </video>
+  const isVideo = type === "video";
+  const mediaClassName = isVideo
+    ? "parent-layout-page__attachment-modal-media"
+    : "parent-layout-page__attachment-modal-audio-source";
+
+  useEffect(() => {
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
+  }, [sourceUrl]);
+
+  const syncMediaState = useCallback(() => {
+    const media = mediaRef.current;
+
+    if (!media) {
+      return;
+    }
+
+    setCurrentTime(Number.isFinite(media.currentTime) ? media.currentTime : 0);
+    setDuration(Number.isFinite(media.duration) ? media.duration : 0);
+    setIsPlaying(!media.paused && !media.ended);
+    setVolume(media.muted ? 0 : clampMediaVolume(media.volume));
+  }, []);
+
+  const handleTogglePlay = useCallback(() => {
+    const media = mediaRef.current;
+
+    if (!media) {
+      return;
+    }
+
+    if (media.paused || media.ended) {
+      media.play().catch(() => {
+        setIsPlaying(false);
+      });
+    } else {
+      media.pause();
+    }
+  }, []);
+
+  const handleSeek = useCallback((event) => {
+    const media = mediaRef.current;
+    const nextTime = Number(event.target.value);
+
+    if (!media || !Number.isFinite(nextTime)) {
+      return;
+    }
+
+    media.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  }, []);
+
+  const applyVolume = useCallback((nextVolume) => {
+    const media = mediaRef.current;
+    const normalizedVolume = clampMediaVolume(nextVolume);
+
+    if (media) {
+      media.volume = normalizedVolume;
+      media.muted = normalizedVolume === 0;
+    }
+
+    setVolume(normalizedVolume);
+  }, []);
+
+  const handleVolumeChange = useCallback(
+    (event) => {
+      applyVolume(event.target.value);
+    },
+    [applyVolume],
   );
-}
 
-function CachedAudio({ attachment, className }) {
-  const sourceUrl = useCachedMediaUrl(attachment);
+  const handleVolumeStep = useCallback(
+    (step) => {
+      applyVolume(volume + step);
+    },
+    [applyVolume, volume],
+  );
+
+  const progressValue = duration
+    ? Math.min(currentTime, duration)
+    : currentTime;
 
   return (
-    <audio
-      controls
-      src={sourceUrl}
-      className={className || "parent-layout-page__message-attachment-audio"}
+    <div
+      className={`parent-layout-page__attachment-player is-${type}`}
+      onClick={(event) => event.stopPropagation()}
     >
-      <a href={attachment.file_url}>{getAttachmentLabel(attachment)}</a>
-    </audio>
+      {isVideo ? (
+        <video
+          ref={mediaRef}
+          playsInline
+          preload="metadata"
+          src={sourceUrl}
+          className={mediaClassName}
+          onClick={handleTogglePlay}
+          onDurationChange={syncMediaState}
+          onEnded={syncMediaState}
+          onLoadedMetadata={syncMediaState}
+          onPause={syncMediaState}
+          onPlay={syncMediaState}
+          onTimeUpdate={syncMediaState}
+          onVolumeChange={syncMediaState}
+        >
+          <a href={attachment.file_url}>{label}</a>
+        </video>
+      ) : (
+        <div className="parent-layout-page__attachment-audio-visual">
+          <AttachmentIcon fileType="audio" size={38} />
+          <strong>{label}</strong>
+          <audio
+            ref={mediaRef}
+            preload="metadata"
+            src={sourceUrl}
+            className={mediaClassName}
+            onDurationChange={syncMediaState}
+            onEnded={syncMediaState}
+            onLoadedMetadata={syncMediaState}
+            onPause={syncMediaState}
+            onPlay={syncMediaState}
+            onTimeUpdate={syncMediaState}
+            onVolumeChange={syncMediaState}
+          >
+            <a href={attachment.file_url}>{label}</a>
+          </audio>
+        </div>
+      )}
+
+      <div className="parent-layout-page__attachment-player-controls">
+        <button
+          type="button"
+          className="parent-layout-page__attachment-player-button"
+          onClick={handleTogglePlay}
+          aria-label={isPlaying ? "Pause attachment" : "Play attachment"}
+          title={isPlaying ? "Pause" : "Play"}
+        >
+          {isPlaying ? (
+            <Pause size={18} aria-hidden="true" />
+          ) : (
+            <Play size={18} aria-hidden="true" />
+          )}
+        </button>
+
+        <span className="parent-layout-page__attachment-player-time">
+          {formatMediaTime(currentTime)}
+        </span>
+
+        <input
+          className="parent-layout-page__attachment-player-progress"
+          type="range"
+          min="0"
+          max={duration || 0}
+          step="0.1"
+          value={progressValue}
+          onChange={handleSeek}
+          disabled={!duration}
+          aria-label="Seek attachment"
+        />
+
+        <span className="parent-layout-page__attachment-player-time">
+          {formatMediaTime(duration)}
+        </span>
+
+        <div className="parent-layout-page__attachment-player-volume">
+          <button
+            type="button"
+            className="parent-layout-page__attachment-player-button"
+            onClick={() => handleVolumeStep(-0.1)}
+            aria-label="Decrease volume"
+            title="Decrease volume"
+          >
+            <Volume1 size={17} aria-hidden="true" />
+          </button>
+          <input
+            className="parent-layout-page__attachment-player-volume-range"
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            value={volume}
+            onChange={handleVolumeChange}
+            aria-label="Volume"
+          />
+          <button
+            type="button"
+            className="parent-layout-page__attachment-player-button"
+            onClick={() => handleVolumeStep(0.1)}
+            aria-label="Increase volume"
+            title="Increase volume"
+          >
+            <Volume2 size={17} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -793,20 +988,20 @@ function AttachmentDocumentPreview({ attachment }) {
   } else if (kind === "video") {
     stageContent = (
       <div className="parent-layout-page__attachment-media-preview">
-        <CachedVideo
+        <AttachmentMediaPlayer
           attachment={attachment}
-          className="parent-layout-page__attachment-modal-media"
+          label={label}
+          type="video"
         />
       </div>
     );
   } else if (kind === "audio") {
     stageContent = (
-      <div className="parent-layout-page__attachment-audio-preview">
-        <AttachmentIcon fileType="audio" size={34} />
-        <strong>{label}</strong>
-        <CachedAudio
+      <div className="parent-layout-page__attachment-media-preview">
+        <AttachmentMediaPlayer
           attachment={attachment}
-          className="parent-layout-page__attachment-modal-audio"
+          label={label}
+          type="audio"
         />
       </div>
     );
@@ -880,7 +1075,12 @@ function AttachmentViewerModal({
 
   useEffect(() => {
     const handleKeyDown = (event) => {
-      if (["AUDIO", "VIDEO"].includes(event.target?.tagName)) {
+      if (
+        ["AUDIO", "VIDEO"].includes(event.target?.tagName) ||
+        event.target?.closest?.(
+          ".parent-layout-page__attachment-player-controls",
+        )
+      ) {
         return;
       }
 
