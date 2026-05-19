@@ -159,6 +159,12 @@ The default-device password is sent only when making a device default or updatin
 
 The conversation composer stays usable while a send is in progress. Each submitted draft is added to an in-memory FIFO queue with an optimistic message and unique `client_message_id`. React encrypts and sends one queued message at a time, which keeps first-come-first-serve order for rapid sends. Messenger treats repeated `client_message_id` values from the same sender as duplicates, so retry behavior remains safe.
 
+## Encrypted Attachments
+
+React encrypts attachments in the browser before upload. For each queued message with files, React asks Messenger for signed Cloudinary upload intents bound to the authenticated sender, recipient account, and `client_message_id`. It then uploads the encrypted blobs directly to Cloudinary as `raw` resources, completes each intent with Messenger, and sends the completed intent ids with the encrypted message envelope.
+
+Cloudinary API secrets stay only on Messenger. React receives only short-lived signed params for server-generated public ids, and pending/local blob previews are not stored in the UI cache.
+
 ## Realtime Updates
 
 React keeps two Messenger websocket paths active while logged in:

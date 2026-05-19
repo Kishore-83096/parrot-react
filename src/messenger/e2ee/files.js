@@ -1,6 +1,9 @@
 import sodium from "libsodium-wrappers";
 
-import { uploadMessengerEncryptedFile } from "../api.js";
+import {
+  completeMessengerEncryptedFileUploadIntent,
+  createMessengerEncryptedFileUploadIntents,
+} from "../api.js";
 import { fromBase64, toBase64 } from "./devices/index.js";
 
 export const E2EE_FILE_TYPE = "e2ee.file";
@@ -48,18 +51,54 @@ export function isEncryptedAttachment(attachment) {
   );
 }
 
-export async function encryptSelectedFilesForMessage(selectedFiles) {
+export async function encryptSelectedFilesForMessage(
+  selectedFiles,
+  { clientMessageId, recipientAccountNumber } = {},
+) {
   const files = Array.isArray(selectedFiles) ? selectedFiles : [];
+  if (files.length === 0) {
+    return [];
+  }
+
+  if (!clientMessageId || !recipientAccountNumber) {
+    throw new Error("Attachment upload authorization is incomplete.");
+  }
+
   await sodium.ready;
 
+  const encryptedFiles = await Promise.all(
+    files.map((selectedFile, index) => encryptSelectedFile(selectedFile, index)),
+  );
+  const uploadIntentResponse = await createMessengerEncryptedFileUploadIntents({
+    recipient_account_number: recipientAccountNumber,
+    client_message_id: clientMessageId,
+    attachments: encryptedFiles.map((encryptedFile) => ({
+      id: encryptedFile.id,
+      file_name: encryptedFile.file_name,
+      mime_type: encryptedFile.mime_type,
+      file_size_bytes: encryptedFile.file_size_bytes,
+      encrypted_file_size_bytes: encryptedFile.encryptedBlob.size,
+      sort_order: encryptedFile.sort_order,
+    })),
+  });
+  const uploadIntentResult =
+    uploadIntentResponse?.data?.result || uploadIntentResponse?.data || {};
+  const uploadIntents = Array.isArray(uploadIntentResult.upload_intents)
+    ? uploadIntentResult.upload_intents
+    : [];
+
+  if (uploadIntents.length !== encryptedFiles.length) {
+    throw new Error("Attachment upload authorization did not match selected files.");
+  }
+
   return Promise.all(
-    files.map((selectedFile, index) =>
-      encryptSelectedFileForMessage(selectedFile, index),
+    encryptedFiles.map((encryptedFile, index) =>
+      uploadEncryptedFileWithIntent(encryptedFile, uploadIntents[index]),
     ),
   );
 }
 
-async function encryptSelectedFileForMessage(selectedFile, index) {
+async function encryptSelectedFile(selectedFile, index) {
   const file = selectedFile.file;
   const fileKey = sodium.randombytes_buf(
     sodium.crypto_aead_xchacha20poly1305_ietf_KEYBYTES,
@@ -78,26 +117,13 @@ async function encryptSelectedFileForMessage(selectedFile, index) {
   const encryptedBlob = new Blob([ciphertext], {
     type: "application/octet-stream",
   });
-  const formData = new FormData();
-
-  formData.append("file", encryptedBlob, `${selectedFile.id}.txt`);
-
-  const response = await uploadMessengerEncryptedFile(formData);
-  const uploadedFile = getUploadResult(response);
-  const encryptedFileUrl = uploadedFile.encrypted_file_url;
-
-  if (!encryptedFileUrl) {
-    throw new Error("Encrypted attachment upload did not return a file URL.");
-  }
 
   return {
     id: selectedFile.id,
     v: E2EE_FILE_VERSION,
     type: E2EE_FILE_TYPE,
     e2ee: true,
-    encrypted_file_url: encryptedFileUrl,
-    encrypted_file_size_bytes:
-      uploadedFile.encrypted_file_size_bytes || ciphertext.length,
+    encryptedBlob,
     file_key: toBase64(fileKey),
     nonce: toBase64(nonce),
     file_name: file.name || `Attachment ${index + 1}`,
@@ -105,6 +131,55 @@ async function encryptSelectedFileForMessage(selectedFile, index) {
     file_size_bytes: file.size,
     file_type: selectedFile.fileType || "document",
     sort_order: index,
+  };
+}
+
+async function uploadEncryptedFileWithIntent(encryptedFile, uploadIntent) {
+  if (!uploadIntent?.id || !uploadIntent?.upload_url || !uploadIntent?.parameters) {
+    throw new Error("Attachment upload authorization is invalid.");
+  }
+
+  const formData = new FormData();
+  Object.entries(uploadIntent.parameters).forEach(([key, value]) => {
+    formData.append(key, value);
+  });
+  formData.append("file", encryptedFile.encryptedBlob, `${encryptedFile.id}.bin`);
+
+  const uploadResponse = await fetch(uploadIntent.upload_url, {
+    method: "POST",
+    body: formData,
+  });
+  const uploadResult = await uploadResponse.json().catch(() => null);
+
+  if (!uploadResponse.ok || !uploadResult) {
+    throw new Error(
+      uploadResult?.error?.message || "Encrypted attachment upload failed.",
+    );
+  }
+
+  const completionResponse = await completeMessengerEncryptedFileUploadIntent(
+    uploadIntent.id,
+    uploadResult,
+  );
+  const completedFile = getUploadResult(completionResponse);
+  const encryptedFileUrl = completedFile.encrypted_file_url;
+
+  if (!encryptedFileUrl) {
+    throw new Error("Encrypted attachment upload did not return a file URL.");
+  }
+
+  const { encryptedBlob, ...attachment } = encryptedFile;
+
+  return {
+    ...attachment,
+    upload_intent_id: completedFile.upload_intent_id || uploadIntent.id,
+    encrypted_file_url: encryptedFileUrl,
+    encrypted_file_size_bytes:
+      completedFile.encrypted_file_size_bytes || encryptedBlob.size,
+    cloudinary_public_id: completedFile.cloudinary_public_id || "",
+    cloudinary_asset_id: completedFile.cloudinary_asset_id || "",
+    cloudinary_resource_type: completedFile.cloudinary_resource_type || "raw",
+    cloudinary_folder: completedFile.cloudinary_folder || "",
   };
 }
 

@@ -246,6 +246,18 @@ export const revokeMessengerCryptoDevice = (deviceId, data = {}) =>
 export const uploadMessengerEncryptedFile = (data) =>
   messengerAxios.post("/crypto/files/", data);
 
+export const createMessengerEncryptedFileUploadIntents = (data) =>
+  messengerAxios.post("/crypto/files/upload-intents/", data);
+
+export const completeMessengerEncryptedFileUploadIntent = (
+  uploadIntentId,
+  data,
+) =>
+  messengerAxios.post(
+    `/crypto/files/upload-intents/${encodeURIComponent(uploadIntentId)}/complete/`,
+    data,
+  );
+
 export const getMessengerCryptoKeyBackup = () =>
   messengerAxios.get("/crypto/key-backup/");
 

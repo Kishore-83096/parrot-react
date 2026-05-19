@@ -2731,7 +2731,10 @@ function MessengerConversation({
         try {
           const encryptedAttachments =
             queuedMessage.filesToSend.length > 0
-              ? await encryptSelectedFilesForMessage(queuedMessage.filesToSend)
+              ? await encryptSelectedFilesForMessage(queuedMessage.filesToSend, {
+                  clientMessageId: queuedMessage.clientMessageId,
+                  recipientAccountNumber: queuedMessage.recipientAccountNumber,
+                })
               : [];
           const encryptedText = await encryptMessageText({
             attachments: encryptedAttachments,
@@ -2747,6 +2750,9 @@ function MessengerConversation({
               ? { reply_to_message_id: queuedMessage.replyTargetId }
               : {}),
             client_message_id: queuedMessage.clientMessageId,
+            encrypted_upload_intent_ids: encryptedAttachments
+              .map((attachment) => attachment.upload_intent_id)
+              .filter(Boolean),
           };
 
           const response = await sendMessengerMessage(sendPayload);
