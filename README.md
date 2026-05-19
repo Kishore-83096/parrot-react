@@ -112,7 +112,7 @@ On first login for a new account:
 1. `ensureMessengerDeviceKey` creates a local browser device keypair.
 2. The device is registered through Messenger.
 3. The app opens linked-device setup because no default device exists.
-4. The user marks this device as default.
+4. The user creates the default-device password and marks this device as default.
 5. The user creates and saves a recovery key.
 
 ### Additional Devices
@@ -123,10 +123,10 @@ On another browser/device:
 2. If a recovery backup exists, the user must enter the recovery key.
 3. The app allows 5 attempts.
 4. On success, old encrypted messages can decrypt.
-5. The device remains non-default until the default device promotes it.
+5. The device remains non-default unless the user verifies the default-device password to make this current device default, or the current default browser makes it default.
 6. On logout, a non-default device signs a logout request, clears its E2EE localStorage keys, and lets Messenger delete its device row.
 
-The linked-device modal separates the default device into a top section and active devices into a second section. It shows all active linked devices on the default browser. On a non-default browser, it shows the current browser and the current default browser, so the user can see which device owns recovery and device-management permissions.
+The linked-device modal separates the default device into a top section and active devices into a second section. It shows all active linked devices on the default browser. On a non-default browser, it shows the current browser and the current default browser, so the user can see which device owns recovery and device-management permissions. Any default-device change opens a password prompt; non-default devices can only make themselves default.
 
 ### Recovery-Key Updates
 
@@ -149,6 +149,8 @@ parrot:e2ee.recovery-key-ack:v1
 ```
 
 The default device may store the plain recovery key locally so it can show it to the owner. Non-default devices clear and do not store the plain recovery key.
+
+The default-device password is sent only when making a device default. Messenger stores a password hash, and React does not persist the plain password.
 
 Logout cleanup follows the device role:
 

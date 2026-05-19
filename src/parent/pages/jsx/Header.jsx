@@ -47,6 +47,13 @@ const accountInitialForm = {
   password: "",
 };
 
+const DEFAULT_DEVICE_PASSWORD_MIN_LENGTH = 8;
+
+const defaultDevicePasswordInitialForm = {
+  password: "",
+  confirm_password: "",
+};
+
 const LOGGED_IN_HISTORY_KEY = "parrotLoggedInView";
 
 function getLoggedInHistoryView() {
@@ -317,20 +324,31 @@ function Header({
     recovery_key: "",
     confirm_recovery_key: "",
   });
+  const [defaultDevicePasswordForm, setDefaultDevicePasswordForm] = useState(
+    () => ({ ...defaultDevicePasswordInitialForm }),
+  );
   const [profileMessage, setProfileMessage] = useState(null);
   const [accountMessage, setAccountMessage] = useState(null);
   const [linkedDevicesMessage, setLinkedDevicesMessage] = useState(null);
   const [recoveryKeyMessage, setRecoveryKeyMessage] = useState(null);
+  const [defaultDevicePasswordMessage, setDefaultDevicePasswordMessage] =
+    useState(null);
   const [storedRecoveryKey, setStoredRecoveryKey] = useState("");
   const [cryptoDevices, setCryptoDevices] = useState([]);
   const [hasDefaultCryptoDevice, setHasDefaultCryptoDevice] = useState(false);
+  const [isDefaultPasswordConfigured, setIsDefaultPasswordConfigured] =
+    useState(false);
   const [currentCryptoDeviceId, setCurrentCryptoDeviceId] = useState("");
+  const [defaultPasswordTargetDevice, setDefaultPasswordTargetDevice] =
+    useState(null);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [isPasswordChanging, setIsPasswordChanging] = useState(false);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
   const [isDevicesLoading, setIsDevicesLoading] = useState(false);
   const [isRecoveryKeySaving, setIsRecoveryKeySaving] = useState(false);
+  const [isDefaultDevicePasswordSaving, setIsDefaultDevicePasswordSaving] =
+    useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState("");
   const [defaultingDeviceId, setDefaultingDeviceId] = useState("");
   const [isStoredRecoveryKeyVisible, setIsStoredRecoveryKeyVisible] =
@@ -338,6 +356,12 @@ function Header({
   const [isRecoveryKeyVisible, setIsRecoveryKeyVisible] = useState(false);
   const [isConfirmRecoveryKeyVisible, setIsConfirmRecoveryKeyVisible] =
     useState(false);
+  const [isDefaultDevicePasswordVisible, setIsDefaultDevicePasswordVisible] =
+    useState(false);
+  const [
+    isConfirmDefaultDevicePasswordVisible,
+    setIsConfirmDefaultDevicePasswordVisible,
+  ] = useState(false);
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
   const username = accountDisplay?.username || user?.username || "parrot_user";
@@ -398,6 +422,7 @@ function Header({
     if (!userId) {
       setCryptoDevices([]);
       setHasDefaultCryptoDevice(false);
+      setIsDefaultPasswordConfigured(false);
       setLinkedDevicesMessage({
         type: "error",
         text: "Unable to load devices without a user id.",
@@ -434,6 +459,9 @@ function Header({
       setCurrentCryptoDeviceId(currentDeviceId);
       setHasDefaultCryptoDevice(
         nextDevices.some((device) => device.is_default),
+      );
+      setIsDefaultPasswordConfigured(
+        Boolean(result?.default_password_configured),
       );
       setCryptoDevices(visibleDevices);
       if (!currentDeviceIsDefault) {
@@ -526,6 +554,11 @@ function Header({
     setDefaultingDeviceId("");
     setCryptoDevices([]);
     setHasDefaultCryptoDevice(false);
+    setIsDefaultPasswordConfigured(false);
+    setDefaultPasswordTargetDevice(null);
+    setDefaultDevicePasswordForm({ ...defaultDevicePasswordInitialForm });
+    setDefaultDevicePasswordMessage(null);
+    setIsDefaultDevicePasswordSaving(false);
     setRecoveryKeyForm({
       recovery_key: "",
       confirm_recovery_key: "",
@@ -533,6 +566,8 @@ function Header({
     setIsStoredRecoveryKeyVisible(false);
     setIsRecoveryKeyVisible(false);
     setIsConfirmRecoveryKeyVisible(false);
+    setIsDefaultDevicePasswordVisible(false);
+    setIsConfirmDefaultDevicePasswordVisible(false);
   }, []);
 
   const closeProfileModal = useCallback(() => {
@@ -609,7 +644,7 @@ function Header({
     }
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !defaultPasswordTargetDevice) {
         closeLinkedDevicesModal();
       }
     };
@@ -619,7 +654,11 @@ function Header({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeLinkedDevicesModal, isLinkedDevicesModalOpen]);
+  }, [
+    closeLinkedDevicesModal,
+    defaultPasswordTargetDevice,
+    isLinkedDevicesModalOpen,
+  ]);
 
   useEffect(() => {
     const handlePopState = (event) => {
@@ -703,6 +742,16 @@ function Header({
       [name]: value,
     }));
     setRecoveryKeyMessage(null);
+  };
+
+  const handleDefaultDevicePasswordFormChange = (event) => {
+    const { name, value } = event.target;
+
+    setDefaultDevicePasswordForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+    setDefaultDevicePasswordMessage(null);
   };
 
   const handleProfileFormChange = (event) => {
@@ -823,21 +872,90 @@ function Header({
     }
   };
 
-  const handleSetDefaultCryptoDevice = async (device) => {
+  const canMakeCryptoDeviceDefault = (device) => {
+    const deviceId = device?.device_id;
+    const isCurrent = deviceId === currentCryptoDeviceId;
+
+    if (!deviceId || !currentCryptoDeviceId) {
+      return false;
+    }
+
+    if (device?.is_default) {
+      return isCurrent && canManageCryptoDevices && !isDefaultPasswordConfigured;
+    }
+
+    if (!hasDefaultCryptoDevice) {
+      return isCurrent;
+    }
+
+    return canManageCryptoDevices || (isCurrent && isDefaultPasswordConfigured);
+  };
+
+  const closeDefaultDevicePasswordPrompt = ({ force = false } = {}) => {
+    if (isDefaultDevicePasswordSaving && !force) {
+      return;
+    }
+
+    setDefaultPasswordTargetDevice(null);
+    setDefaultDevicePasswordForm({ ...defaultDevicePasswordInitialForm });
+    setDefaultDevicePasswordMessage(null);
+    setIsDefaultDevicePasswordVisible(false);
+    setIsConfirmDefaultDevicePasswordVisible(false);
+  };
+
+  const handleSetDefaultCryptoDevice = (device) => {
+    if (!canMakeCryptoDeviceDefault(device)) {
+      return;
+    }
+
+    setDefaultPasswordTargetDevice(device);
+    setDefaultDevicePasswordForm({ ...defaultDevicePasswordInitialForm });
+    setDefaultDevicePasswordMessage(null);
+    setIsDefaultDevicePasswordVisible(false);
+    setIsConfirmDefaultDevicePasswordVisible(false);
+    setLinkedDevicesMessage(null);
+  };
+
+  const handleDefaultDevicePasswordSubmit = async (event) => {
+    event.preventDefault();
+
+    const device = defaultPasswordTargetDevice;
     const deviceId = device?.device_id;
 
+    if (!canMakeCryptoDeviceDefault(device)) {
+      setDefaultDevicePasswordMessage({
+        type: "error",
+        text: "This device cannot perform that default-device change.",
+      });
+      return;
+    }
+
     if (
-      !deviceId ||
-      !currentCryptoDeviceId ||
-      device?.is_default ||
-      (!hasDefaultCryptoDevice && deviceId !== currentCryptoDeviceId) ||
-      (hasDefaultCryptoDevice && !canManageCryptoDevices)
+      defaultDevicePasswordForm.password.length <
+      DEFAULT_DEVICE_PASSWORD_MIN_LENGTH
     ) {
+      setDefaultDevicePasswordMessage({
+        type: "error",
+        text: `Default device password must be at least ${DEFAULT_DEVICE_PASSWORD_MIN_LENGTH} characters.`,
+      });
+      return;
+    }
+
+    if (
+      !isDefaultPasswordConfigured &&
+      defaultDevicePasswordForm.password !==
+        defaultDevicePasswordForm.confirm_password
+    ) {
+      setDefaultDevicePasswordMessage({
+        type: "error",
+        text: "Default device passwords do not match.",
+      });
       return;
     }
 
     setDefaultingDeviceId(deviceId);
-    setLinkedDevicesMessage(null);
+    setDefaultDevicePasswordMessage(null);
+    setIsDefaultDevicePasswordSaving(true);
 
     try {
       const shouldCloseRequiredPrompt =
@@ -845,7 +963,9 @@ function Header({
         deviceId === currentCryptoDeviceId &&
         !hasDefaultCryptoDevice;
 
-      await setDefaultMessengerDevice(user, deviceId);
+      await setDefaultMessengerDevice(user, deviceId, {
+        defaultPassword: defaultDevicePasswordForm.password,
+      });
       setCryptoDevices((currentDevices) =>
         currentDevices.map((currentDevice) => ({
           ...currentDevice,
@@ -853,6 +973,7 @@ function Header({
         })),
       );
       setHasDefaultCryptoDevice(true);
+      setIsDefaultPasswordConfigured(true);
       if (deviceId !== currentCryptoDeviceId) {
         clearStoredRecoveryKey(user);
         setStoredRecoveryKey("");
@@ -866,18 +987,21 @@ function Header({
       setIsDefaultDeviceSelectionRequired(false);
       if (shouldCloseRequiredPrompt) {
         resetLinkedDevicesModal();
+      } else {
+        closeDefaultDevicePasswordPrompt({ force: true });
       }
       onDefaultDeviceChanged?.({
         ...device,
         is_default: true,
       });
     } catch (error) {
-      setLinkedDevicesMessage({
+      setDefaultDevicePasswordMessage({
         type: "error",
         text: getMessengerErrorMessage(error, "Unable to update the default device."),
       });
     } finally {
       setDefaultingDeviceId("");
+      setIsDefaultDevicePasswordSaving(false);
     }
   };
 
@@ -983,12 +1107,11 @@ function Header({
     const isDefault = Boolean(device.is_default);
     const isRevoking = revokingDeviceId === device.device_id;
     const isDefaulting = defaultingDeviceId === device.device_id;
+    const isCreatingDefaultPasswordForCurrentDefault =
+      isDefault && isCurrent && !isDefaultPasswordConfigured;
     const deviceName =
       device.device_name || (isCurrent ? "This device" : "Linked device");
-    const canSetDefault =
-      !isDefault &&
-      Boolean(currentCryptoDeviceId) &&
-      ((!hasDefaultCryptoDevice && isCurrent) || canManageCryptoDevices);
+    const canSetDefault = canMakeCryptoDeviceDefault(device);
     const canRevoke = isCurrent || (canManageCryptoDevices && !isDefault);
     const showDefaultAction = canSetDefault || isDefaulting;
     const showRevokeAction = canRevoke || isRevoking;
@@ -1028,10 +1151,20 @@ function Header({
                 className="parent-layout-page__crypto-device-default"
                 onClick={() => handleSetDefaultCryptoDevice(device)}
                 disabled={isDefaulting}
-                title="Make default"
+                title={
+                  isCreatingDefaultPasswordForCurrentDefault
+                    ? "Set default password"
+                    : "Make default"
+                }
               >
                 <ShieldCheck size={15} aria-hidden="true" />
-                <span>{isDefaulting ? "Saving" : "Make default"}</span>
+                <span>
+                  {isDefaulting
+                    ? "Saving"
+                    : isCreatingDefaultPasswordForCurrentDefault
+                      ? "Set password"
+                      : "Make default"}
+                </span>
               </button>
             ) : null}
 
@@ -1565,6 +1698,186 @@ function Header({
     </div>
   ) : null;
 
+  const isCreatingDefaultDevicePassword = !isDefaultPasswordConfigured;
+  const isDefaultPasswordTargetAlreadyDefault = Boolean(
+    defaultPasswordTargetDevice?.is_default,
+  );
+  const defaultPasswordTargetName =
+    defaultPasswordTargetDevice?.device_name ||
+    (defaultPasswordTargetDevice?.device_id === currentCryptoDeviceId
+      ? "This device"
+      : "Linked device");
+  const defaultDevicePasswordModal = defaultPasswordTargetDevice ? (
+    <div className="parent-layout-page__modal-backdrop" role="presentation">
+      <section
+        className="parent-layout-page__modal"
+        aria-modal="true"
+        aria-labelledby="parent-default-device-password-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close"
+          type="button"
+          onClick={closeDefaultDevicePasswordPrompt}
+          aria-label="Close default device password"
+          title="Close"
+          disabled={isDefaultDevicePasswordSaving}
+        >
+          <X size={28} strokeWidth={3} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__modal-header">
+          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <div>
+            <h2 id="parent-default-device-password-title">
+              {isCreatingDefaultDevicePassword
+                ? "Create default password"
+                : "Verify default password"}
+            </h2>
+          </div>
+        </div>
+
+        <form
+          className="parent-layout-page__profile-form"
+          onSubmit={handleDefaultDevicePasswordSubmit}
+        >
+          <p className="parent-layout-page__form-note">
+            {isCreatingDefaultDevicePassword
+              ? "Create this password before making the first default device. You will use it later to move default permission to another trusted browser."
+              : `Enter the default-device password to make ${defaultPasswordTargetName} the default.`}
+          </p>
+
+          {defaultDevicePasswordMessage ? (
+            <p
+              className={`parent-layout-page__form-message parent-layout-page__form-message--${defaultDevicePasswordMessage.type}`}
+              role="alert"
+            >
+              {defaultDevicePasswordMessage.type === "success" ? (
+                <CheckCircle2 size={18} aria-hidden="true" />
+              ) : (
+                <AlertCircle size={18} aria-hidden="true" />
+              )}
+              <span>{defaultDevicePasswordMessage.text}</span>
+            </p>
+          ) : null}
+
+          <label className="parent-layout-page__profile-field">
+            <span className="parent-layout-page__field-label">
+              Default device password
+              <em className="is-required">Required</em>
+            </span>
+            <div className="parent-layout-page__table-input-action">
+              <input
+                name="password"
+                type={isDefaultDevicePasswordVisible ? "text" : "password"}
+                value={defaultDevicePasswordForm.password}
+                onChange={handleDefaultDevicePasswordFormChange}
+                autoComplete={
+                  isCreatingDefaultDevicePassword ? "new-password" : "current-password"
+                }
+                minLength={DEFAULT_DEVICE_PASSWORD_MIN_LENGTH}
+                disabled={isDefaultDevicePasswordSaving}
+                required
+              />
+              <button
+                className="parent-layout-page__table-icon-button"
+                type="button"
+                onClick={() =>
+                  setIsDefaultDevicePasswordVisible(
+                    (currentValue) => !currentValue,
+                  )
+                }
+                disabled={isDefaultDevicePasswordSaving}
+                aria-label={
+                  isDefaultDevicePasswordVisible
+                    ? "Hide default device password"
+                    : "Show default device password"
+                }
+                title={
+                  isDefaultDevicePasswordVisible
+                    ? "Hide default device password"
+                    : "Show default device password"
+                }
+              >
+                {isDefaultDevicePasswordVisible ? (
+                  <EyeOff size={18} aria-hidden="true" />
+                ) : (
+                  <Eye size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </label>
+
+          {isCreatingDefaultDevicePassword ? (
+            <label className="parent-layout-page__profile-field">
+              <span className="parent-layout-page__field-label">
+                Confirm password
+                <em className="is-required">Required</em>
+              </span>
+              <div className="parent-layout-page__table-input-action">
+                <input
+                  name="confirm_password"
+                  type={
+                    isConfirmDefaultDevicePasswordVisible ? "text" : "password"
+                  }
+                  value={defaultDevicePasswordForm.confirm_password}
+                  onChange={handleDefaultDevicePasswordFormChange}
+                  autoComplete="new-password"
+                  minLength={DEFAULT_DEVICE_PASSWORD_MIN_LENGTH}
+                  disabled={isDefaultDevicePasswordSaving}
+                  required
+                />
+                <button
+                  className="parent-layout-page__table-icon-button"
+                  type="button"
+                  onClick={() =>
+                    setIsConfirmDefaultDevicePasswordVisible(
+                      (currentValue) => !currentValue,
+                    )
+                  }
+                  disabled={isDefaultDevicePasswordSaving}
+                  aria-label={
+                    isConfirmDefaultDevicePasswordVisible
+                      ? "Hide confirmation password"
+                      : "Show confirmation password"
+                  }
+                  title={
+                    isConfirmDefaultDevicePasswordVisible
+                      ? "Hide confirmation password"
+                      : "Show confirmation password"
+                  }
+                >
+                  {isConfirmDefaultDevicePasswordVisible ? (
+                    <EyeOff size={18} aria-hidden="true" />
+                  ) : (
+                    <Eye size={18} aria-hidden="true" />
+                  )}
+                </button>
+              </div>
+            </label>
+          ) : null}
+
+          <button
+            className="parent-layout-page__modal-submit"
+            type="submit"
+            disabled={isDefaultDevicePasswordSaving}
+          >
+            <ShieldCheck size={18} aria-hidden="true" />
+            <span>
+              {isDefaultDevicePasswordSaving
+                ? "Saving..."
+                : isCreatingDefaultDevicePassword
+                  ? isDefaultPasswordTargetAlreadyDefault
+                    ? "Create password"
+                    : "Create and make default"
+                  : "Verify and make default"}
+            </span>
+          </button>
+        </form>
+      </section>
+    </div>
+  ) : null;
+
   const linkedDevicesModal = isLinkedDevicesModalOpen ? (
     <div className="parent-layout-page__modal-backdrop" role="presentation">
       <section
@@ -1648,6 +1961,7 @@ function Header({
                 the current default browser.
                 <ul>
                   <li>Choose only your own trusted device as default.</li>
+                  <li>Making a device default requires the default-device password.</li>
                   <li>The default browser stays remembered after logout.</li>
                   <li>Do not make a public or borrowed browser default.</li>
                 </ul>
@@ -2030,6 +2344,9 @@ function Header({
       {profileModal ? createPortal(profileModal, document.body) : null}
       {accountModal ? createPortal(accountModal, document.body) : null}
       {linkedDevicesModal ? createPortal(linkedDevicesModal, document.body) : null}
+      {defaultDevicePasswordModal
+        ? createPortal(defaultDevicePasswordModal, document.body)
+        : null}
     </div>
   );
 }

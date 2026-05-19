@@ -429,14 +429,21 @@ export async function createSignedDeviceActionPayload(user, action, targetDevice
   };
 }
 
-export async function setDefaultMessengerDevice(user, deviceId) {
+export async function setDefaultMessengerDevice(
+  user,
+  deviceId,
+  { defaultPassword = "" } = {},
+) {
   const payload = await createSignedDeviceActionPayload(
     user,
     "device.default",
     deviceId,
   );
 
-  return setMessengerDefaultCryptoDevice(deviceId, payload);
+  return setMessengerDefaultCryptoDevice(deviceId, {
+    ...payload,
+    default_password: defaultPassword,
+  });
 }
 
 export async function revokeMessengerDevice(user, deviceId) {
