@@ -947,7 +947,11 @@ function Header({
       return isCurrent;
     }
 
-    return canManageCryptoDevices || (isCurrent && isDefaultPasswordConfigured);
+    if (isCurrent) {
+      return true;
+    }
+
+    return canManageCryptoDevices;
   };
 
   const closeDefaultDevicePasswordPrompt = ({ force = false } = {}) => {
@@ -1001,7 +1005,7 @@ function Header({
     }
 
     if (
-      !isDefaultPasswordConfigured &&
+      isCreatingDefaultDevicePassword &&
       defaultDevicePasswordForm.password !==
         defaultDevicePasswordForm.confirm_password
     ) {
@@ -1863,10 +1867,12 @@ function Header({
     </div>
   ) : null;
 
-  const isCreatingDefaultDevicePassword = !isDefaultPasswordConfigured;
   const isDefaultPasswordTargetAlreadyDefault = Boolean(
     defaultPasswordTargetDevice?.is_default,
   );
+  const isCreatingDefaultDevicePassword =
+    !isDefaultPasswordConfigured &&
+    (!hasDefaultCryptoDevice || canManageCryptoDevices);
   const defaultPasswordTargetName =
     defaultPasswordTargetDevice?.device_name ||
     (defaultPasswordTargetDevice?.device_id === currentCryptoDeviceId
@@ -2330,6 +2336,7 @@ function Header({
                 <ul>
                   <li>Choose only your own trusted device as default.</li>
                   <li>Making a device default requires the default-device password.</li>
+                  <li>A non-default browser can make itself default with that password.</li>
                   <li>The default browser stays remembered after logout.</li>
                   <li>Do not make a public or borrowed browser default.</li>
                 </ul>

@@ -314,8 +314,8 @@ function getAttachmentsForTab(attachments, activeTab) {
   );
 }
 
-function canPreviewAttachmentInModal() {
-  return false;
+function canPreviewAttachmentInModal(attachment) {
+  return Boolean(attachment?.file_url || attachment?.encrypted_file_url);
 }
 
 function isTextPreviewAttachment(attachment) {
@@ -1058,7 +1058,38 @@ function AttachmentDocumentPreview({ attachment, onDownload, onOpen }) {
 
   let stageContent = null;
 
-  if (previewMode === "text") {
+  if (kind === "image") {
+    stageContent = (
+      <div className="parent-layout-page__attachment-media-preview">
+        <CachedImage
+          src={previewUrl}
+          alt={label}
+          fallbackClassName="parent-layout-page__attachment-image-fallback parent-layout-page__attachment-image-fallback--stage"
+          fallbackSize={42}
+        />
+      </div>
+    );
+  } else if (kind === "video") {
+    stageContent = (
+      <div className="parent-layout-page__attachment-media-preview">
+        <CachedVideo
+          attachment={attachment}
+          className="parent-layout-page__attachment-modal-media"
+        />
+      </div>
+    );
+  } else if (kind === "audio") {
+    stageContent = (
+      <div className="parent-layout-page__attachment-audio-preview">
+        <AttachmentIcon fileType="audio" size={34} />
+        <strong>{label}</strong>
+        <CachedAudio
+          attachment={attachment}
+          className="parent-layout-page__attachment-modal-audio"
+        />
+      </div>
+    );
+  } else if (previewMode === "text") {
     if (textPreview.status === "loading") {
       stageContent = (
         <div className="parent-layout-page__attachment-document-message">
@@ -3197,20 +3228,12 @@ function MessengerConversation({
         />
         <button
           type="submit"
-          className={`parent-layout-page__message-submit${
-            isSendingMessage ? " is-sending" : ""
-          }`}
+          className="parent-layout-page__message-submit"
           disabled={!messageDraft.trim() && selectedFiles.length === 0}
           aria-label={isSendingMessage ? "Queue message" : "Send message"}
           title="Send"
         >
           <Send size={20} aria-hidden="true" />
-          {isSendingMessage ? (
-            <span
-              className="parent-layout-page__send-buffer"
-              aria-hidden="true"
-            />
-          ) : null}
         </button>
       </form>
       {attachmentViewer.attachments.length > 0 ? (
