@@ -69,6 +69,7 @@ src/
 |   `-- pages/jsx/ContactPanel.jsx  # contact search and management
 |-- messenger/
 |   |-- api.js                      # Messenger API client, JWT refresh, WS URLs
+|   |-- cache.js                    # account-scoped UI cache for messenger data
 |   |-- MessengerInboxListener.jsx  # inbox WebSocket listener
 |   |-- e2ee/
 |   |   |-- devices/index.js        # linked-device identity and signed actions
@@ -104,6 +105,8 @@ src/
 - recovery setup/restore/verify modals
 
 The logged-in app is keyed by the current Parent account. If a different account logs in on the same browser, React remounts the authenticated app and drops the old account's contacts, rooms, selected conversation, and runtime E2EE caches.
+
+`LayoutPage` also hydrates messenger UI from an account-scoped localStorage cache before network requests finish. The cache stores saved contacts, room list data, selected room/contact, peer profile data used by the conversation header, and fetched message pages by room. API responses, websocket events, message-status events, contact edits, and paginated message loads update the cache immediately. Logout or session expiry clears that account's messenger UI cache.
 
 ### First Device
 
@@ -150,7 +153,31 @@ parrot:e2ee.recovery-key-ack:v1
 
 The default device may store the plain recovery key locally so it can show it to the owner. Non-default devices clear and do not store the plain recovery key.
 
-The default-device password is sent only when making a device default. Messenger stores a password hash, and React does not persist the plain password.
+The default-device password is sent only when making a device default or updating that password. Messenger stores a password hash, and React does not persist the plain password.
+
+## Message Send Queue
+
+The conversation composer stays usable while a send is in progress. Each submitted draft is added to an in-memory FIFO queue with an optimistic message and unique `client_message_id`. React encrypts and sends one queued message at a time, which keeps first-come-first-serve order for rapid sends. Messenger treats repeated `client_message_id` values from the same sender as duplicates, so retry behavior remains safe.
+
+## Realtime Updates
+
+React keeps two Messenger websocket paths active while logged in:
+
+- inbox socket: room list updates, delivery receipts, read receipts, presence, device, and recovery events
+- room socket: open-conversation messages, message status updates, and typing events
+
+The room socket sends periodic pings to stay alive behind proxies. The open conversation also listens to inbox message/status events as a fallback, so messages and ticks can update while the room socket is reconnecting.
+
+## Messenger UI Cache
+
+The messenger UI cache is separate from E2EE private-key storage. It is scoped per account under `parrot:messenger-ui-cache:v1:*` and contains only UI data needed for fast rendering:
+
+- contacts and saved aliases
+- room list previews, unread counts, and selected room/contact
+- conversation header peer profile lookup results
+- decrypted message text and safe attachment metadata for fetched conversation pages
+
+Pending optimistic messages and local `blob:` attachment preview URLs are not persisted. Cached conversations are bounded per room and per account so localStorage cannot grow without limit. Messenger APIs and WebSockets remain the source of truth; cached data is only used for instant first paint and offline-tolerant navigation until logout.
 
 Logout cleanup follows the device role:
 

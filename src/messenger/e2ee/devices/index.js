@@ -5,6 +5,7 @@ import {
   revokeMessengerCryptoDevice,
   saveMessengerCryptoKeyBackup,
   setMessengerDefaultCryptoDevice,
+  updateMessengerDefaultDevicePassword,
 } from "../../api.js";
 
 const E2EE_STORAGE_PREFIX = "parrot:e2ee:v1";
@@ -443,6 +444,23 @@ export async function setDefaultMessengerDevice(
   return setMessengerDefaultCryptoDevice(deviceId, {
     ...payload,
     default_password: defaultPassword,
+  });
+}
+
+export async function updateDefaultMessengerDevicePassword(
+  user,
+  { currentPassword = "", newPassword = "" } = {},
+) {
+  const payload = await createSignedDeviceActionPayload(
+    user,
+    "device.default_password.update",
+    "default-password",
+  );
+
+  return updateMessengerDefaultDevicePassword({
+    ...payload,
+    current_default_password: currentPassword,
+    new_default_password: newPassword,
   });
 }
 

@@ -25,6 +25,7 @@ import {
   getStoredMessengerDeviceIdentity,
   revokeMessengerDevice,
   setDefaultMessengerDevice,
+  updateDefaultMessengerDevicePassword,
 } from "../../../messenger/e2ee/devices/index.js";
 import {
   clearStoredRecoveryKey,
@@ -52,6 +53,12 @@ const DEFAULT_DEVICE_PASSWORD_MIN_LENGTH = 8;
 const defaultDevicePasswordInitialForm = {
   password: "",
   confirm_password: "",
+};
+
+const defaultDevicePasswordUpdateInitialForm = {
+  current_password: "",
+  new_password: "",
+  confirm_new_password: "",
 };
 
 const LOGGED_IN_HISTORY_KEY = "parrotLoggedInView";
@@ -327,12 +334,20 @@ function Header({
   const [defaultDevicePasswordForm, setDefaultDevicePasswordForm] = useState(
     () => ({ ...defaultDevicePasswordInitialForm }),
   );
+  const [
+    defaultDevicePasswordUpdateForm,
+    setDefaultDevicePasswordUpdateForm,
+  ] = useState(() => ({ ...defaultDevicePasswordUpdateInitialForm }));
   const [profileMessage, setProfileMessage] = useState(null);
   const [accountMessage, setAccountMessage] = useState(null);
   const [linkedDevicesMessage, setLinkedDevicesMessage] = useState(null);
   const [recoveryKeyMessage, setRecoveryKeyMessage] = useState(null);
   const [defaultDevicePasswordMessage, setDefaultDevicePasswordMessage] =
     useState(null);
+  const [
+    defaultDevicePasswordUpdateMessage,
+    setDefaultDevicePasswordUpdateMessage,
+  ] = useState(null);
   const [storedRecoveryKey, setStoredRecoveryKey] = useState("");
   const [cryptoDevices, setCryptoDevices] = useState([]);
   const [hasDefaultCryptoDevice, setHasDefaultCryptoDevice] = useState(false);
@@ -341,6 +356,10 @@ function Header({
   const [currentCryptoDeviceId, setCurrentCryptoDeviceId] = useState("");
   const [defaultPasswordTargetDevice, setDefaultPasswordTargetDevice] =
     useState(null);
+  const [
+    isDefaultPasswordUpdateModalOpen,
+    setIsDefaultPasswordUpdateModalOpen,
+  ] = useState(false);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [isProfileSaving, setIsProfileSaving] = useState(false);
   const [isPasswordChanging, setIsPasswordChanging] = useState(false);
@@ -348,6 +367,8 @@ function Header({
   const [isDevicesLoading, setIsDevicesLoading] = useState(false);
   const [isRecoveryKeySaving, setIsRecoveryKeySaving] = useState(false);
   const [isDefaultDevicePasswordSaving, setIsDefaultDevicePasswordSaving] =
+    useState(false);
+  const [isDefaultDevicePasswordUpdating, setIsDefaultDevicePasswordUpdating] =
     useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState("");
   const [defaultingDeviceId, setDefaultingDeviceId] = useState("");
@@ -361,6 +382,18 @@ function Header({
   const [
     isConfirmDefaultDevicePasswordVisible,
     setIsConfirmDefaultDevicePasswordVisible,
+  ] = useState(false);
+  const [
+    isCurrentDefaultDevicePasswordVisible,
+    setIsCurrentDefaultDevicePasswordVisible,
+  ] = useState(false);
+  const [
+    isNewDefaultDevicePasswordVisible,
+    setIsNewDefaultDevicePasswordVisible,
+  ] = useState(false);
+  const [
+    isConfirmNewDefaultDevicePasswordVisible,
+    setIsConfirmNewDefaultDevicePasswordVisible,
   ] = useState(false);
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
@@ -382,6 +415,8 @@ function Header({
     (device) => !device.is_default,
   );
   const canManageCryptoDevices = Boolean(currentCryptoDevice?.is_default);
+  const canUpdateDefaultDevicePassword =
+    canManageCryptoDevices && isDefaultPasswordConfigured;
 
   const syncProfile = useCallback(
     (nextProfile) => {
@@ -558,7 +593,13 @@ function Header({
     setDefaultPasswordTargetDevice(null);
     setDefaultDevicePasswordForm({ ...defaultDevicePasswordInitialForm });
     setDefaultDevicePasswordMessage(null);
+    setIsDefaultPasswordUpdateModalOpen(false);
+    setDefaultDevicePasswordUpdateForm({
+      ...defaultDevicePasswordUpdateInitialForm,
+    });
+    setDefaultDevicePasswordUpdateMessage(null);
     setIsDefaultDevicePasswordSaving(false);
+    setIsDefaultDevicePasswordUpdating(false);
     setRecoveryKeyForm({
       recovery_key: "",
       confirm_recovery_key: "",
@@ -568,6 +609,9 @@ function Header({
     setIsConfirmRecoveryKeyVisible(false);
     setIsDefaultDevicePasswordVisible(false);
     setIsConfirmDefaultDevicePasswordVisible(false);
+    setIsCurrentDefaultDevicePasswordVisible(false);
+    setIsNewDefaultDevicePasswordVisible(false);
+    setIsConfirmNewDefaultDevicePasswordVisible(false);
   }, []);
 
   const closeProfileModal = useCallback(() => {
@@ -644,7 +688,11 @@ function Header({
     }
 
     const handleKeyDown = (event) => {
-      if (event.key === "Escape" && !defaultPasswordTargetDevice) {
+      if (
+        event.key === "Escape" &&
+        !defaultPasswordTargetDevice &&
+        !isDefaultPasswordUpdateModalOpen
+      ) {
         closeLinkedDevicesModal();
       }
     };
@@ -657,6 +705,7 @@ function Header({
   }, [
     closeLinkedDevicesModal,
     defaultPasswordTargetDevice,
+    isDefaultPasswordUpdateModalOpen,
     isLinkedDevicesModalOpen,
   ]);
 
@@ -752,6 +801,16 @@ function Header({
       [name]: value,
     }));
     setDefaultDevicePasswordMessage(null);
+  };
+
+  const handleDefaultDevicePasswordUpdateFormChange = (event) => {
+    const { name, value } = event.target;
+
+    setDefaultDevicePasswordUpdateForm((currentForm) => ({
+      ...currentForm,
+      [name]: value,
+    }));
+    setDefaultDevicePasswordUpdateMessage(null);
   };
 
   const handleProfileFormChange = (event) => {
@@ -1002,6 +1061,112 @@ function Header({
     } finally {
       setDefaultingDeviceId("");
       setIsDefaultDevicePasswordSaving(false);
+    }
+  };
+
+  const openDefaultDevicePasswordUpdateModal = () => {
+    if (!canUpdateDefaultDevicePassword) {
+      return;
+    }
+
+    setDefaultDevicePasswordUpdateForm({
+      ...defaultDevicePasswordUpdateInitialForm,
+    });
+    setDefaultDevicePasswordUpdateMessage(null);
+    setIsCurrentDefaultDevicePasswordVisible(false);
+    setIsNewDefaultDevicePasswordVisible(false);
+    setIsConfirmNewDefaultDevicePasswordVisible(false);
+    setIsDefaultPasswordUpdateModalOpen(true);
+  };
+
+  const closeDefaultDevicePasswordUpdateModal = () => {
+    if (isDefaultDevicePasswordUpdating) {
+      return;
+    }
+
+    setIsDefaultPasswordUpdateModalOpen(false);
+    setDefaultDevicePasswordUpdateForm({
+      ...defaultDevicePasswordUpdateInitialForm,
+    });
+    setDefaultDevicePasswordUpdateMessage(null);
+    setIsCurrentDefaultDevicePasswordVisible(false);
+    setIsNewDefaultDevicePasswordVisible(false);
+    setIsConfirmNewDefaultDevicePasswordVisible(false);
+  };
+
+  const handleDefaultDevicePasswordUpdateSubmit = async (event) => {
+    event.preventDefault();
+
+    if (!canUpdateDefaultDevicePassword) {
+      setDefaultDevicePasswordUpdateMessage({
+        type: "error",
+        text: "Only the current default device can update this password.",
+      });
+      return;
+    }
+
+    if (
+      defaultDevicePasswordUpdateForm.current_password.length <
+        DEFAULT_DEVICE_PASSWORD_MIN_LENGTH ||
+      defaultDevicePasswordUpdateForm.new_password.length <
+        DEFAULT_DEVICE_PASSWORD_MIN_LENGTH
+    ) {
+      setDefaultDevicePasswordUpdateMessage({
+        type: "error",
+        text: `Default device passwords must be at least ${DEFAULT_DEVICE_PASSWORD_MIN_LENGTH} characters.`,
+      });
+      return;
+    }
+
+    if (
+      defaultDevicePasswordUpdateForm.new_password !==
+      defaultDevicePasswordUpdateForm.confirm_new_password
+    ) {
+      setDefaultDevicePasswordUpdateMessage({
+        type: "error",
+        text: "New default device passwords do not match.",
+      });
+      return;
+    }
+
+    if (
+      defaultDevicePasswordUpdateForm.current_password ===
+      defaultDevicePasswordUpdateForm.new_password
+    ) {
+      setDefaultDevicePasswordUpdateMessage({
+        type: "error",
+        text: "New default device password must be different.",
+      });
+      return;
+    }
+
+    setIsDefaultDevicePasswordUpdating(true);
+    setDefaultDevicePasswordUpdateMessage(null);
+
+    try {
+      await updateDefaultMessengerDevicePassword(user, {
+        currentPassword: defaultDevicePasswordUpdateForm.current_password,
+        newPassword: defaultDevicePasswordUpdateForm.new_password,
+      });
+      setDefaultDevicePasswordUpdateForm({
+        ...defaultDevicePasswordUpdateInitialForm,
+      });
+      setIsDefaultPasswordUpdateModalOpen(false);
+      onToast?.({
+        type: "success",
+        title: "Default password updated",
+        message: "Use the new password for future default-device changes.",
+      });
+    } catch (error) {
+      setDefaultDevicePasswordUpdateMessage({
+        type: "error",
+        text: getMessengerErrorMessage(
+          error,
+          "Unable to update the default device password.",
+        ),
+      });
+    } finally {
+      setIsDefaultDevicePasswordUpdating(false);
     }
   };
 
@@ -1878,6 +2043,209 @@ function Header({
     </div>
   ) : null;
 
+  const defaultDevicePasswordUpdateModal = isDefaultPasswordUpdateModalOpen ? (
+    <div className="parent-layout-page__modal-backdrop" role="presentation">
+      <section
+        className="parent-layout-page__modal"
+        aria-modal="true"
+        aria-labelledby="parent-default-device-password-update-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close"
+          type="button"
+          onClick={closeDefaultDevicePasswordUpdateModal}
+          aria-label="Close default password update"
+          title="Close"
+          disabled={isDefaultDevicePasswordUpdating}
+        >
+          <X size={28} strokeWidth={3} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__modal-header">
+          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <div>
+            <h2 id="parent-default-device-password-update-title">
+              Update default password
+            </h2>
+          </div>
+        </div>
+
+        <form
+          className="parent-layout-page__profile-form"
+          onSubmit={handleDefaultDevicePasswordUpdateSubmit}
+        >
+          <p className="parent-layout-page__form-note">
+            This password controls future default-device changes. Only the
+            current default device can update it.
+          </p>
+
+          {defaultDevicePasswordUpdateMessage ? (
+            <p
+              className={`parent-layout-page__form-message parent-layout-page__form-message--${defaultDevicePasswordUpdateMessage.type}`}
+              role="alert"
+            >
+              {defaultDevicePasswordUpdateMessage.type === "success" ? (
+                <CheckCircle2 size={18} aria-hidden="true" />
+              ) : (
+                <AlertCircle size={18} aria-hidden="true" />
+              )}
+              <span>{defaultDevicePasswordUpdateMessage.text}</span>
+            </p>
+          ) : null}
+
+          <label className="parent-layout-page__profile-field">
+            <span className="parent-layout-page__field-label">
+              Current password
+              <em className="is-required">Required</em>
+            </span>
+            <div className="parent-layout-page__table-input-action">
+              <input
+                name="current_password"
+                type={isCurrentDefaultDevicePasswordVisible ? "text" : "password"}
+                value={defaultDevicePasswordUpdateForm.current_password}
+                onChange={handleDefaultDevicePasswordUpdateFormChange}
+                autoComplete="current-password"
+                minLength={DEFAULT_DEVICE_PASSWORD_MIN_LENGTH}
+                disabled={isDefaultDevicePasswordUpdating}
+                required
+              />
+              <button
+                className="parent-layout-page__table-icon-button"
+                type="button"
+                onClick={() =>
+                  setIsCurrentDefaultDevicePasswordVisible(
+                    (currentValue) => !currentValue,
+                  )
+                }
+                disabled={isDefaultDevicePasswordUpdating}
+                aria-label={
+                  isCurrentDefaultDevicePasswordVisible
+                    ? "Hide current password"
+                    : "Show current password"
+                }
+                title={
+                  isCurrentDefaultDevicePasswordVisible
+                    ? "Hide current password"
+                    : "Show current password"
+                }
+              >
+                {isCurrentDefaultDevicePasswordVisible ? (
+                  <EyeOff size={18} aria-hidden="true" />
+                ) : (
+                  <Eye size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </label>
+
+          <label className="parent-layout-page__profile-field">
+            <span className="parent-layout-page__field-label">
+              New password
+              <em className="is-required">Required</em>
+            </span>
+            <div className="parent-layout-page__table-input-action">
+              <input
+                name="new_password"
+                type={isNewDefaultDevicePasswordVisible ? "text" : "password"}
+                value={defaultDevicePasswordUpdateForm.new_password}
+                onChange={handleDefaultDevicePasswordUpdateFormChange}
+                autoComplete="new-password"
+                minLength={DEFAULT_DEVICE_PASSWORD_MIN_LENGTH}
+                disabled={isDefaultDevicePasswordUpdating}
+                required
+              />
+              <button
+                className="parent-layout-page__table-icon-button"
+                type="button"
+                onClick={() =>
+                  setIsNewDefaultDevicePasswordVisible(
+                    (currentValue) => !currentValue,
+                  )
+                }
+                disabled={isDefaultDevicePasswordUpdating}
+                aria-label={
+                  isNewDefaultDevicePasswordVisible
+                    ? "Hide new password"
+                    : "Show new password"
+                }
+                title={
+                  isNewDefaultDevicePasswordVisible
+                    ? "Hide new password"
+                    : "Show new password"
+                }
+              >
+                {isNewDefaultDevicePasswordVisible ? (
+                  <EyeOff size={18} aria-hidden="true" />
+                ) : (
+                  <Eye size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </label>
+
+          <label className="parent-layout-page__profile-field">
+            <span className="parent-layout-page__field-label">
+              Confirm new password
+              <em className="is-required">Required</em>
+            </span>
+            <div className="parent-layout-page__table-input-action">
+              <input
+                name="confirm_new_password"
+                type={
+                  isConfirmNewDefaultDevicePasswordVisible ? "text" : "password"
+                }
+                value={defaultDevicePasswordUpdateForm.confirm_new_password}
+                onChange={handleDefaultDevicePasswordUpdateFormChange}
+                autoComplete="new-password"
+                minLength={DEFAULT_DEVICE_PASSWORD_MIN_LENGTH}
+                disabled={isDefaultDevicePasswordUpdating}
+                required
+              />
+              <button
+                className="parent-layout-page__table-icon-button"
+                type="button"
+                onClick={() =>
+                  setIsConfirmNewDefaultDevicePasswordVisible(
+                    (currentValue) => !currentValue,
+                  )
+                }
+                disabled={isDefaultDevicePasswordUpdating}
+                aria-label={
+                  isConfirmNewDefaultDevicePasswordVisible
+                    ? "Hide confirmation password"
+                    : "Show confirmation password"
+                }
+                title={
+                  isConfirmNewDefaultDevicePasswordVisible
+                    ? "Hide confirmation password"
+                    : "Show confirmation password"
+                }
+              >
+                {isConfirmNewDefaultDevicePasswordVisible ? (
+                  <EyeOff size={18} aria-hidden="true" />
+                ) : (
+                  <Eye size={18} aria-hidden="true" />
+                )}
+              </button>
+            </div>
+          </label>
+
+          <button
+            className="parent-layout-page__modal-submit"
+            type="submit"
+            disabled={isDefaultDevicePasswordUpdating}
+          >
+            <KeyRound size={18} aria-hidden="true" />
+            <span>
+              {isDefaultDevicePasswordUpdating ? "Updating..." : "Update password"}
+            </span>
+          </button>
+        </form>
+      </section>
+    </div>
+  ) : null;
+
   const linkedDevicesModal = isLinkedDevicesModalOpen ? (
     <div className="parent-layout-page__modal-backdrop" role="presentation">
       <section
@@ -2022,6 +2390,18 @@ function Header({
                   </section>
                 </div>
               )}
+
+              {canUpdateDefaultDevicePassword ? (
+                <button
+                  type="button"
+                  className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
+                  onClick={openDefaultDevicePasswordUpdateModal}
+                  disabled={isDefaultDevicePasswordUpdating}
+                >
+                  <KeyRound size={18} aria-hidden="true" />
+                  <span>Update default password</span>
+                </button>
+              ) : null}
 
               <button
                 type="button"
@@ -2346,6 +2726,9 @@ function Header({
       {linkedDevicesModal ? createPortal(linkedDevicesModal, document.body) : null}
       {defaultDevicePasswordModal
         ? createPortal(defaultDevicePasswordModal, document.body)
+        : null}
+      {defaultDevicePasswordUpdateModal
+        ? createPortal(defaultDevicePasswordUpdateModal, document.body)
         : null}
     </div>
   );

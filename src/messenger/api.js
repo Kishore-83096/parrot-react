@@ -234,6 +234,9 @@ export const setMessengerDefaultCryptoDevice = (deviceId, data = {}) =>
     data,
   );
 
+export const updateMessengerDefaultDevicePassword = (data = {}) =>
+  messengerAxios.post("/crypto/devices/default-password/", data);
+
 export const revokeMessengerCryptoDevice = (deviceId, data = {}) =>
   messengerAxios.post(
     `/crypto/devices/${encodeURIComponent(deviceId)}/revoke/`,

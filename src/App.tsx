@@ -7,6 +7,7 @@ import {
   onTokenExpired,
 } from './parent/api.js'
 import { clearMessengerSession } from './messenger/api.js'
+import { clearMessengerUiCache } from './messenger/cache.js'
 import { clearE2EEFileRuntimeCaches } from './messenger/e2ee/files.js'
 import { clearE2EEMessageRuntimeCaches } from './messenger/e2ee/messages.js'
 import LayoutPage from './parent/pages/jsx/LayoutPage.jsx'
@@ -66,29 +67,35 @@ function App() {
   )
 
   const handleLoginSuccess = useCallback((user: ParentUser) => {
+    if (parentUser) {
+      clearMessengerUiCache(parentUser)
+    }
+
     clearMessengerSession()
     clearMessengerRuntimeState()
     clearLoggedInHistoryState()
     setParentUser(user || (getStoredParentUser() as ParentUser))
-  }, [])
+  }, [parentUser])
 
   const handleLogout = useCallback(() => {
+    clearMessengerUiCache(parentUser)
     clearMessengerRuntimeState()
     clearLoggedInHistoryState()
     setParentUser(null)
-  }, [])
+  }, [parentUser])
 
   const handleUserUpdate = useCallback((user: ParentUser) => {
     setParentUser(user || (getStoredParentUser() as ParentUser))
   }, [])
 
   const handleSessionExpired = useCallback(() => {
+    clearMessengerUiCache(parentUser)
     clearMessengerSession()
     clearMessengerRuntimeState()
     clearLoggedInHistoryState()
     clearParentSession()
     setParentUser(null)
-  }, [])
+  }, [parentUser])
 
   useEffect(() => {
     if (!parentUser) {

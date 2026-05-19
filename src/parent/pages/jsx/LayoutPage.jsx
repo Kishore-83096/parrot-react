@@ -33,10 +33,17 @@ import {
   findRoomByAccountNumber,
   getCurrentUserId,
   getRoomContact,
+  upsertMessage,
 } from "../../../messenger/pages/jsx/roomHelpers.js";
 import { clearParentSession } from "../../api.js";
 import ContactPanel from "./ContactPanel.jsx";
 import Header from "./Header.jsx";
+import {
+  clearMessengerUiCache,
+  getMessengerUiCache,
+  saveMessengerUiCache,
+  sanitizeConversationForCache,
+} from "../../../messenger/cache.js";
 
 const LOGGED_IN_HISTORY_KEY = "parrotLoggedInView";
 
@@ -62,14 +69,33 @@ function pushLoggedInHistoryView(nextView) {
 }
 
 function LayoutPage({ user, onLogout, onUserUpdate }) {
+  const initialMessengerUiCacheRef = useRef(null);
+
+  if (initialMessengerUiCacheRef.current === null) {
+    initialMessengerUiCacheRef.current = getMessengerUiCache(user);
+  }
+
+  const initialMessengerUiCache = initialMessengerUiCacheRef.current;
   const [activePanelTab, setActivePanelTab] = useState(() => {
     const historyView = getLoggedInHistoryView();
     return historyView?.panelTab === "contacts" ? "contacts" : "chats";
   });
-  const [contacts, setContacts] = useState([]);
-  const [rooms, setRooms] = useState([]);
-  const [selectedContact, setSelectedContact] = useState(null);
-  const [selectedRoom, setSelectedRoom] = useState(null);
+  const [contacts, setContacts] = useState(
+    () => initialMessengerUiCache.contacts,
+  );
+  const [rooms, setRooms] = useState(() => initialMessengerUiCache.rooms);
+  const [selectedContact, setSelectedContact] = useState(
+    () => initialMessengerUiCache.selectedContact,
+  );
+  const [selectedRoom, setSelectedRoom] = useState(
+    () => initialMessengerUiCache.selectedRoom,
+  );
+  const [conversationCache, setConversationCache] = useState(
+    () => initialMessengerUiCache.conversations,
+  );
+  const [peerProfileCache, setPeerProfileCache] = useState(
+    () => initialMessengerUiCache.peerProfiles,
+  );
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [releasedMessagesVersion, setReleasedMessagesVersion] = useState(0);
   const [e2eeRecoveryVersion, setE2eeRecoveryVersion] = useState(0);
@@ -84,6 +110,25 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const onlineUserTimeoutsRef = useRef(new Map());
   const isLogoutInProgressRef = useRef(false);
   const currentUserId = getCurrentUserId(user);
+
+  useEffect(() => {
+    saveMessengerUiCache(user, {
+      contacts,
+      rooms,
+      selectedContact,
+      selectedRoom,
+      conversations: conversationCache,
+      peerProfiles: peerProfileCache,
+    });
+  }, [
+    contacts,
+    conversationCache,
+    peerProfileCache,
+    rooms,
+    selectedContact,
+    selectedRoom,
+    user,
+  ]);
 
   const loadLinkedDevices = useCallback(async () => {
     const userId = user?.id || user?.user_id;
@@ -347,10 +392,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   }, [promptForMissingDefaultDevice]);
 
   const finishLogout = useCallback(() => {
+    clearMessengerUiCache(user);
     clearMessengerSession();
     clearParentSession();
     onLogout?.();
-  }, [onLogout]);
+  }, [onLogout, user]);
 
   const clearLocalEncryptedDeviceState = useCallback(async () => {
     await clearStoredMessengerDeviceIdentity(user);
@@ -484,6 +530,48 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     });
   }, []);
 
+  const handleConversationCacheChange = useCallback((roomId, conversation) => {
+    const cacheRoomId = String(roomId || "");
+
+    if (!cacheRoomId) {
+      return;
+    }
+
+    setConversationCache((currentCache) => {
+      const nextConversation = sanitizeConversationForCache({
+        ...(currentCache[cacheRoomId] || {}),
+        ...(conversation || {}),
+        updatedAt: new Date().toISOString(),
+      });
+
+      if (nextConversation.messages.length === 0) {
+        const nextCache = { ...currentCache };
+        delete nextCache[cacheRoomId];
+        return nextCache;
+      }
+
+      return {
+        ...currentCache,
+        [cacheRoomId]: nextConversation,
+      };
+    });
+  }, []);
+
+  const handlePeerProfileCacheChange = useCallback((accountNumber, profile) => {
+    const cacheAccountNumber = String(accountNumber || "");
+
+    if (!cacheAccountNumber) {
+      return;
+    }
+
+    setPeerProfileCache((currentCache) => ({
+      ...currentCache,
+      [cacheAccountNumber]: profile || {
+        account_number: cacheAccountNumber,
+      },
+    }));
+  }, []);
+
   const handleSelectContact = useCallback(
     (contact) => {
       const matchingRoom = findRoomByAccountNumber(
@@ -612,6 +700,26 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       if (matchingContact && shouldSyncSelectedContact) {
         setSelectedContact(matchingContact);
       }
+
+      if (messageRoomId) {
+        setConversationCache((currentCache) => {
+          const cacheRoomId = String(messageRoomId);
+          const cachedConversation = currentCache[cacheRoomId];
+
+          if (!cachedConversation?.messages?.length) {
+            return currentCache;
+          }
+
+          return {
+            ...currentCache,
+            [cacheRoomId]: sanitizeConversationForCache({
+              ...cachedConversation,
+              messages: upsertMessage(cachedConversation.messages, message),
+              updatedAt: new Date().toISOString(),
+            }),
+          };
+        });
+      }
     },
     [contacts, mergeRoomMessage, selectedRoom?.id, user],
   );
@@ -644,6 +752,84 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       currentRoom ? markRoomRead(currentRoom) : currentRoom,
     );
   }, []);
+
+  const handleRoomMessageStatus = useCallback(
+    (eventPayload) => {
+      const status =
+        eventPayload?.type === "message.read" ? "read" : "delivered";
+      const roomId = Number(eventPayload?.room_id || 0);
+      const lastMessageId =
+        eventPayload?.last_read_message_id ||
+        eventPayload?.last_delivered_message_id;
+
+      if (
+        !roomId ||
+        !lastMessageId ||
+        Number(eventPayload?.user_id) === currentUserId
+      ) {
+        return;
+      }
+
+      const updateRoomStatus = (room) => {
+        const lastMessage = room?.last_message;
+
+        if (
+          Number(room?.id) !== roomId ||
+          Number(lastMessage?.sender_user_id) !== currentUserId ||
+          Number(lastMessage?.id) > Number(lastMessageId) ||
+          (status === "delivered" && lastMessage?.status === "read")
+        ) {
+          return room;
+        }
+
+        return {
+          ...room,
+          last_message: {
+            ...lastMessage,
+            status,
+          },
+        };
+      };
+
+      setRooms((currentRooms) => currentRooms.map(updateRoomStatus));
+      setSelectedRoom((currentRoom) =>
+        currentRoom ? updateRoomStatus(currentRoom) : currentRoom,
+      );
+      setConversationCache((currentCache) => {
+        const cacheRoomId = String(roomId);
+        const cachedConversation = currentCache[cacheRoomId];
+
+        if (!cachedConversation?.messages?.length) {
+          return currentCache;
+        }
+
+        const nextMessages = cachedConversation.messages.map((message) => {
+          if (
+            Number(message.sender_user_id) !== currentUserId ||
+            Number(message.id) > Number(lastMessageId) ||
+            (status === "delivered" && message.status === "read")
+          ) {
+            return message;
+          }
+
+          return {
+            ...message,
+            status,
+          };
+        });
+
+        return {
+          ...currentCache,
+          [cacheRoomId]: sanitizeConversationForCache({
+            ...cachedConversation,
+            messages: nextMessages,
+            updatedAt: new Date().toISOString(),
+          }),
+        };
+      });
+    },
+    [currentUserId],
+  );
 
   const removeOnlineUser = useCallback((userId) => {
     const numericUserId = Number(userId);
@@ -813,6 +999,13 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       ) {
         handleRoomRead(eventPayload.room_id);
       }
+
+      if (
+        eventPayload?.type === "message.read" ||
+        eventPayload?.type === "message.delivered"
+      ) {
+        handleRoomMessageStatus(eventPayload);
+      }
     };
 
     globalThis.addEventListener(
@@ -831,6 +1024,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     clearLocalEncryptedDeviceState,
     finishLogout,
     handleMaybeEncryptedRoomMessage,
+    handleRoomMessageStatus,
     handleRoomRead,
     loadLinkedDevices,
     markOnlineUser,
@@ -925,6 +1119,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             onContactUpdated={handleContactUpdated}
             onBlockedMessagesReleased={handleBlockedMessagesReleased}
             onCloseConversation={handleCloseConversation}
+            peerProfileCache={peerProfileCache}
+            onPeerProfileCacheChange={handlePeerProfileCacheChange}
             onToast={setToast}
           />
         }
@@ -935,8 +1131,14 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             selectedRoom={selectedRoom}
             user={user}
             releasedMessagesVersion={releasedMessagesVersion}
+            cachedConversation={
+              selectedRoom?.id
+                ? conversationCache[String(selectedRoom.id)] || null
+                : null
+            }
             onRoomMessage={handleRoomMessage}
             onRoomRead={handleRoomRead}
+            onConversationCacheChange={handleConversationCacheChange}
           />
         }
         contactsLabel="Contacts and chats"

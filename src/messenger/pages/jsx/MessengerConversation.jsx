@@ -36,6 +36,7 @@ import {
   getMessengerRoomWebSocketUrl,
   getMessengerToken,
   markMessengerRoomRead,
+  MESSENGER_INBOX_EVENT_NAME,
   sendMessengerMessage,
 } from "../../api.js";
 import {
@@ -71,12 +72,20 @@ const ATTACHMENT_PREVIEW_LIMIT = 4;
 const TYPING_REFRESH_INTERVAL_MS = 3000;
 const TYPING_STOP_DELAY_MS = 1600;
 const TYPING_REMOTE_TIMEOUT_MS = 8000;
+const ROOM_SOCKET_PING_INTERVAL_MS = 25000;
 const ATTACHMENT_TABS = [
   { id: "all", label: "All" },
   { id: "images", label: "Images" },
   { id: "pdfs", label: "PDF" },
   { id: "other", label: "Other" },
 ];
+
+function getEmptyMessagePagination() {
+  return {
+    hasMore: false,
+    nextBeforeMessageId: null,
+  };
+}
 const TEXT_DOCUMENT_EXTENSIONS = new Set(["csv", "json", "md", "rtf", "txt"]);
 const OFFICE_DOCUMENT_EXTENSIONS = new Set([
   "doc",
@@ -1378,7 +1387,7 @@ function getReplyAuthorLabel(message, currentUserId, participantNamesByUserId) {
 function mergeMessagePage(currentMessages, pageMessages) {
   const messagesById = new Map();
 
-  [...pageMessages, ...currentMessages].forEach((message) => {
+  [...currentMessages, ...pageMessages].forEach((message) => {
     if (message?.id) {
       messagesById.set(Number(message.id), message);
     }
@@ -1401,17 +1410,19 @@ function MessengerConversation({
   selectedRoom,
   user,
   releasedMessagesVersion,
+  cachedConversation,
   onRoomMessage,
   onRoomRead,
+  onConversationCacheChange,
 }) {
   const [roomMessages, setRoomMessages] = useState([]);
+  const [roomMessagesCacheRoomId, setRoomMessagesCacheRoomId] = useState(null);
   const [roomMessage, setRoomMessage] = useState("");
   const [isRoomMessagesLoading, setIsRoomMessagesLoading] = useState(false);
   const [isOlderMessagesLoading, setIsOlderMessagesLoading] = useState(false);
-  const [messagePagination, setMessagePagination] = useState({
-    hasMore: false,
-    nextBeforeMessageId: null,
-  });
+  const [messagePagination, setMessagePagination] = useState(
+    getEmptyMessagePagination,
+  );
   const [messageDraft, setMessageDraft] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -1433,7 +1444,14 @@ function MessengerConversation({
   const messagesEndRef = useRef(null);
   const messageDraftRef = useRef(null);
   const fileInputRef = useRef(null);
-  const isSendingMessageRef = useRef(false);
+  const sendQueueRef = useRef([]);
+  const isProcessingSendQueueRef = useRef(false);
+  const optimisticMessageSequenceRef = useRef(0);
+  const readMarkedMessageIdsRef = useRef(new Set());
+  const activeConversationRef = useRef({
+    peerAccountNumber: "",
+    roomId: null,
+  });
   const olderMessagesScrollRef = useRef(null);
   const skipNextAutoScrollRef = useRef(false);
   const isOlderMessagesLoadingRef = useRef(false);
@@ -1442,6 +1460,8 @@ function MessengerConversation({
   const typingRemoteTimeoutsRef = useRef(new Map());
   const isTypingSentRef = useRef(false);
   const lastTypingStartedAtRef = useRef(0);
+  const cachedConversationRef = useRef(cachedConversation || null);
+  cachedConversationRef.current = cachedConversation || null;
   const isAttachmentViewerOpen = attachmentViewer.attachments.length > 0;
 
   const focusMessageDraft = useCallback(() => {
@@ -1476,6 +1496,13 @@ function MessengerConversation({
     user,
   });
   const hasActiveConversation = Boolean(selectedPeerAccountNumber);
+
+  useEffect(() => {
+    activeConversationRef.current = {
+      peerAccountNumber: selectedPeerAccountNumber,
+      roomId: selectedRoom?.id || null,
+    };
+  }, [selectedPeerAccountNumber, selectedRoom?.id]);
 
   const clearTypingStopTimeout = useCallback(() => {
     if (typingStopTimeoutRef.current) {
@@ -1622,6 +1649,75 @@ function MessengerConversation({
     [currentUserId, onRoomRead],
   );
 
+  const applyMessageStatusEvent = useCallback(
+    (eventPayload) => {
+      if (
+        (eventPayload?.type !== "message.read" &&
+          eventPayload?.type !== "message.delivered") ||
+        Number(eventPayload.room_id) !==
+          Number(activeConversationRef.current.roomId)
+      ) {
+        return;
+      }
+
+      const status = eventPayload.type === "message.read" ? "read" : "delivered";
+      const lastMessageId =
+        eventPayload.last_read_message_id ||
+        eventPayload.last_delivered_message_id;
+
+      if (Number(eventPayload.user_id) === currentUserId || !lastMessageId) {
+        return;
+      }
+
+      setRoomMessages((currentMessages) =>
+        currentMessages.map((message) => {
+          if (
+            Number(message.sender_user_id) !== currentUserId ||
+            Number(message.id) > Number(lastMessageId) ||
+            (status === "delivered" && message.status === "read")
+          ) {
+            return message;
+          }
+
+          return {
+            ...message,
+            status,
+          };
+        }),
+      );
+    },
+    [currentUserId],
+  );
+
+  const markIncomingRoomMessageRead = useCallback(
+    (roomId, nextMessage) => {
+      const messageId = String(nextMessage?.id || "");
+
+      if (
+        !roomId ||
+        !messageId ||
+        Number(nextMessage?.sender_user_id) === currentUserId ||
+        readMarkedMessageIdsRef.current.has(messageId)
+      ) {
+        return;
+      }
+
+      if (readMarkedMessageIdsRef.current.size > 500) {
+        readMarkedMessageIdsRef.current.clear();
+      }
+      readMarkedMessageIdsRef.current.add(messageId);
+
+      markMessengerRoomRead(roomId, {
+        last_read_message_id: nextMessage.id,
+      })
+        .then(() => onRoomRead(roomId))
+        .catch(() => {
+          readMarkedMessageIdsRef.current.delete(messageId);
+        });
+    },
+    [currentUserId, onRoomRead],
+  );
+
   const loadRoomMessages = useCallback(
     async (
       roomId,
@@ -1635,17 +1731,12 @@ function MessengerConversation({
     ) => {
       if (!roomId) {
         setRoomMessages([]);
-        setMessagePagination({
-          hasMore: false,
-          nextBeforeMessageId: null,
-        });
+        setRoomMessagesCacheRoomId(null);
+        setMessagePagination(getEmptyMessagePagination());
         setRoomMessage("");
         return {
           messages: [],
-          pagination: {
-            hasMore: false,
-            nextBeforeMessageId: null,
-          },
+          pagination: getEmptyMessagePagination(),
         };
       }
 
@@ -1671,12 +1762,27 @@ function MessengerConversation({
           nextBeforeMessageId: pagination.next_before_message_id || null,
         };
 
+        if (
+          Number(activeConversationRef.current.roomId || 0) !== Number(roomId)
+        ) {
+          return {
+            messages: decryptedMessages,
+            pagination: nextPagination,
+            stale: true,
+          };
+        }
+
+        setRoomMessagesCacheRoomId(roomId);
         setRoomMessages((currentMessages) =>
-          mode === "prepend"
+          mode === "prepend" || mode === "merge"
             ? mergeMessagePage(currentMessages, decryptedMessages)
             : decryptedMessages,
         );
-        setMessagePagination(nextPagination);
+        setMessagePagination((currentPagination) =>
+          mode === "merge" && currentPagination?.hasMore
+            ? currentPagination
+            : nextPagination,
+        );
 
         if (markRead) {
           markRoomReadForMessages(roomId, decryptedMessages).catch(() => {});
@@ -1687,7 +1793,7 @@ function MessengerConversation({
           pagination: nextPagination,
         };
       } catch (error) {
-        if (mode !== "prepend") {
+        if (mode !== "prepend" && !silent) {
           setRoomMessages([]);
         }
         setRoomMessage(
@@ -1718,14 +1824,34 @@ function MessengerConversation({
     }
     setPendingReplyScrollId(null);
     setRoomMessage("");
-    setMessagePagination({
-      hasMore: false,
-      nextBeforeMessageId: null,
-    });
+    setMessagePagination(getEmptyMessagePagination());
 
     if (!selectedRoom?.id) {
+      setRoomMessagesCacheRoomId(null);
       setRoomMessages([]);
       setIsRoomMessagesLoading(false);
+      return;
+    }
+
+    const cachedRoomConversation = cachedConversationRef.current;
+    const cachedMessages = Array.isArray(cachedRoomConversation?.messages)
+      ? cachedRoomConversation.messages
+      : [];
+    const cachedPagination = cachedRoomConversation?.pagination;
+
+    setRoomMessagesCacheRoomId(selectedRoom.id);
+
+    if (cachedMessages.length > 0 || cachedPagination) {
+      setRoomMessages(cachedMessages);
+      setMessagePagination({
+        hasMore: Boolean(cachedPagination?.hasMore),
+        nextBeforeMessageId: cachedPagination?.nextBeforeMessageId || null,
+      });
+      setIsRoomMessagesLoading(false);
+      loadRoomMessages(selectedRoom.id, {
+        mode: "merge",
+        silent: true,
+      });
       return;
     }
 
@@ -1737,6 +1863,26 @@ function MessengerConversation({
     selectedPeerAccountNumber,
     selectedRoom?.id,
     sendTypingStopped,
+  ]);
+
+  useEffect(() => {
+    if (
+      !selectedRoom?.id ||
+      String(roomMessagesCacheRoomId || "") !== String(selectedRoom.id)
+    ) {
+      return;
+    }
+
+    onConversationCacheChange?.(selectedRoom.id, {
+      messages: roomMessages,
+      pagination: messagePagination,
+    });
+  }, [
+    messagePagination,
+    onConversationCacheChange,
+    roomMessages,
+    roomMessagesCacheRoomId,
+    selectedRoom?.id,
   ]);
 
   useEffect(() => {
@@ -1812,7 +1958,26 @@ function MessengerConversation({
     let isMounted = true;
     let reconnectAttempt = 0;
     let reconnectTimeout = null;
+    let pingInterval = null;
     let socket = null;
+
+    const clearPingInterval = () => {
+      if (pingInterval) {
+        globalThis.clearInterval(pingInterval);
+        pingInterval = null;
+      }
+    };
+
+    const startPingInterval = (nextSocket) => {
+      clearPingInterval();
+      pingInterval = globalThis.setInterval(() => {
+        if (nextSocket.readyState !== globalThis.WebSocket?.OPEN) {
+          return;
+        }
+
+        nextSocket.send(JSON.stringify({ type: "ping" }));
+      }, ROOM_SOCKET_PING_INTERVAL_MS);
+    };
 
     const scheduleReconnect = (forceRefresh = false) => {
       if (!isMounted) {
@@ -1839,6 +2004,7 @@ function MessengerConversation({
 
         socket.onopen = () => {
           reconnectAttempt = 0;
+          startPingInterval(socket);
           if (messageDraftRef.current?.value.trim()) {
             sendTypingStarted();
           }
@@ -1896,20 +2062,16 @@ function MessengerConversation({
               eventPayload.message,
               user,
             );
+            if (!isMounted) {
+              return;
+            }
             setRoomMessages((currentMessages) =>
               upsertMessage(currentMessages, nextMessage),
             );
             onRoomMessage(eventPayload.room, nextMessage, {
               selectRoom: true,
             });
-
-            if (Number(nextMessage?.sender_user_id) !== currentUserId) {
-              markMessengerRoomRead(roomId, {
-                last_read_message_id: nextMessage.id,
-              })
-                .then(() => onRoomRead(roomId))
-                .catch(() => {});
-            }
+            markIncomingRoomMessageRead(roomId, nextMessage);
             return;
           }
 
@@ -1918,34 +2080,12 @@ function MessengerConversation({
               eventPayload.type === "message.delivered") &&
             Number(eventPayload.room_id) === Number(roomId)
           ) {
-            const status =
-              eventPayload.type === "message.read" ? "read" : "delivered";
-            const lastMessageId =
-              eventPayload.last_read_message_id ||
-              eventPayload.last_delivered_message_id;
-
-            if (Number(eventPayload.user_id) !== currentUserId && lastMessageId) {
-              setRoomMessages((currentMessages) =>
-                currentMessages.map((message) => {
-                  if (
-                    Number(message.sender_user_id) !== currentUserId ||
-                    Number(message.id) > Number(lastMessageId) ||
-                    (status === "delivered" && message.status === "read")
-                  ) {
-                    return message;
-                  }
-
-                  return {
-                    ...message,
-                    status,
-                  };
-                }),
-              );
-            }
+            applyMessageStatusEvent(eventPayload);
           }
         };
 
         socket.onclose = (event) => {
+          clearPingInterval();
           if (roomSocketRef.current === socket) {
             roomSocketRef.current = null;
           }
@@ -1974,6 +2114,8 @@ function MessengerConversation({
         globalThis.clearTimeout(reconnectTimeout);
       }
 
+      clearPingInterval();
+
       if (socket) {
         sendTypingStopped();
         if (roomSocketRef.current === socket) {
@@ -1985,14 +2127,84 @@ function MessengerConversation({
   }, [
     clearRemoteTypingUsers,
     currentUserId,
+    applyMessageStatusEvent,
     loadRoomMessages,
+    markIncomingRoomMessageRead,
     onRoomMessage,
-    onRoomRead,
     removeRemoteTypingUser,
     sendTypingStarted,
     selectedRoom?.id,
     sendTypingStopped,
     setRemoteTypingUser,
+    user,
+  ]);
+
+  useEffect(() => {
+    const handleInboxEvent = async (event) => {
+      const eventPayload = event.detail;
+      const roomId = activeConversationRef.current.roomId;
+
+      if (!roomId) {
+        return;
+      }
+
+      if (
+        eventPayload?.type === "message.sent" &&
+        Number(eventPayload.message?.room_id) === Number(roomId)
+      ) {
+        try {
+          const nextMessage = await decryptMessageForUser(
+            eventPayload.message,
+            user,
+          );
+          if (Number(activeConversationRef.current.roomId) !== Number(roomId)) {
+            return;
+          }
+          setRoomMessages((currentMessages) =>
+            upsertMessage(currentMessages, nextMessage),
+          );
+          onRoomMessage(eventPayload.room, nextMessage, {
+            selectRoom: true,
+          });
+          markIncomingRoomMessageRead(roomId, nextMessage);
+        } catch {
+          if (Number(activeConversationRef.current.roomId) !== Number(roomId)) {
+            return;
+          }
+          setRoomMessages((currentMessages) =>
+            upsertMessage(currentMessages, eventPayload.message),
+          );
+          onRoomMessage(eventPayload.room, eventPayload.message, {
+            selectRoom: true,
+          });
+          markIncomingRoomMessageRead(roomId, eventPayload.message);
+        }
+        return;
+      }
+
+      if (
+        eventPayload?.type === "message.read" ||
+        eventPayload?.type === "message.delivered"
+      ) {
+        applyMessageStatusEvent(eventPayload);
+      }
+    };
+
+    globalThis.addEventListener(
+      MESSENGER_INBOX_EVENT_NAME,
+      handleInboxEvent,
+    );
+
+    return () => {
+      globalThis.removeEventListener(
+        MESSENGER_INBOX_EVENT_NAME,
+        handleInboxEvent,
+      );
+    };
+  }, [
+    applyMessageStatusEvent,
+    markIncomingRoomMessageRead,
+    onRoomMessage,
     user,
   ]);
 
@@ -2497,16 +2709,124 @@ function MessengerConversation({
     resizeMessageDraft();
   }, [messageDraft, resizeMessageDraft, selectedPeerAccountNumber]);
 
-  const handleSendMessage = async (event) => {
+  const isQueuedMessageForActiveConversation = useCallback((queuedMessage) => {
+    return (
+      activeConversationRef.current.peerAccountNumber ===
+      queuedMessage.recipientAccountNumber
+    );
+  }, []);
+
+  const processSendQueue = useCallback(async () => {
+    if (isProcessingSendQueueRef.current) {
+      return;
+    }
+
+    isProcessingSendQueueRef.current = true;
+    setIsSendingMessage(true);
+
+    try {
+      while (sendQueueRef.current.length > 0) {
+        const queuedMessage = sendQueueRef.current[0];
+
+        try {
+          const encryptedAttachments =
+            queuedMessage.filesToSend.length > 0
+              ? await encryptSelectedFilesForMessage(queuedMessage.filesToSend)
+              : [];
+          const encryptedText = await encryptMessageText({
+            attachments: encryptedAttachments,
+            recipientAccountNumber: queuedMessage.recipientAccountNumber,
+            text: queuedMessage.text,
+            user,
+          });
+
+          const sendPayload = {
+            recipient_account_number: queuedMessage.recipientAccountNumber,
+            text: encryptedText,
+            ...(queuedMessage.replyTargetId
+              ? { reply_to_message_id: queuedMessage.replyTargetId }
+              : {}),
+            client_message_id: queuedMessage.clientMessageId,
+          };
+
+          const response = await sendMessengerMessage(sendPayload);
+          const messageResult = response.data?.result || response.data;
+          const sentMessage = messageResult?.message
+            ? await decryptMessageForUser(messageResult.message, user)
+            : null;
+          const isActiveConversation =
+            isQueuedMessageForActiveConversation(queuedMessage);
+
+          if (sentMessage && isActiveConversation) {
+            setRoomMessages((currentMessages) =>
+              upsertMessage(currentMessages, sentMessage),
+            );
+          }
+          if (sentMessage) {
+            queuedMessage.releaseOptimisticPreviews();
+          }
+
+          if (messageResult?.room || sentMessage) {
+            onRoomMessage(messageResult?.room, sentMessage, {
+              selectRoom: isActiveConversation,
+            });
+          }
+        } catch (error) {
+          if (isQueuedMessageForActiveConversation(queuedMessage)) {
+            setRoomMessages((currentMessages) =>
+              currentMessages.filter(
+                (message) =>
+                  message.client_message_id !== queuedMessage.clientMessageId,
+              ),
+            );
+            setMessageDraft((currentDraft) =>
+              currentDraft || queuedMessage.text,
+            );
+            setReplyTarget((currentReplyTarget) =>
+              currentReplyTarget || queuedMessage.replyTargetSnapshot,
+            );
+            setSelectedFiles((currentFiles) =>
+              currentFiles.length > 0
+                ? currentFiles
+                : queuedMessage.filesToSend,
+            );
+            setRoomMessage(
+              error?.response
+                ? getMessengerErrorMessage(error, "Unable to send message.")
+                : error?.message || "Unable to send message.",
+            );
+          }
+          queuedMessage.releaseOptimisticPreviews();
+        } finally {
+          if (sendQueueRef.current[0] === queuedMessage) {
+            sendQueueRef.current.shift();
+          } else {
+            sendQueueRef.current = sendQueueRef.current.filter(
+              (currentQueuedMessage) => currentQueuedMessage !== queuedMessage,
+            );
+          }
+        }
+      }
+    } finally {
+      isProcessingSendQueueRef.current = false;
+      setIsSendingMessage(false);
+      globalThis.requestAnimationFrame(focusMessageDraftUnlessTextEntryIsActive);
+    }
+  }, [
+    focusMessageDraftUnlessTextEntryIsActive,
+    isQueuedMessageForActiveConversation,
+    onRoomMessage,
+    user,
+  ]);
+
+  const handleSendMessage = (event) => {
     event?.preventDefault();
 
     const text = messageDraft.trim();
 
     if (
       (!text && selectedFiles.length === 0) ||
-      !selectedPeerAccountNumber ||
-      isSendingMessage ||
-      isSendingMessageRef.current
+      !selectedPeerAccountNumber
     ) {
       return;
     }
@@ -2515,12 +2835,18 @@ function MessengerConversation({
     const replyTargetSnapshot = replyTarget;
     const filesToSend = selectedFiles;
     const clientMessageId = createMessengerClientMessageId();
+    optimisticMessageSequenceRef.current =
+      (optimisticMessageSequenceRef.current + 1) % 1000;
+    const optimisticMessageId = -(
+      Date.now() * 1000 +
+      optimisticMessageSequenceRef.current
+    );
     const optimisticAttachments =
       filesToSend.length > 0
         ? createOptimisticAttachmentPreviews(filesToSend)
         : [];
     const optimisticMessage = {
-      id: -Date.now(),
+      id: optimisticMessageId,
       room_id: selectedRoom?.id || null,
       reply_to_message_id: replyTargetId || null,
       reply_to: replyTargetSnapshot || null,
@@ -2547,8 +2873,6 @@ function MessengerConversation({
       releaseOptimisticAttachmentPreviews(optimisticAttachments);
     };
 
-    isSendingMessageRef.current = true;
-    setIsSendingMessage(true);
     setRoomMessage("");
     sendTypingStopped();
     setRoomMessages((currentMessages) =>
@@ -2562,67 +2886,16 @@ function MessengerConversation({
     }
     focusMessageDraft();
 
-    try {
-      const encryptedAttachments =
-        filesToSend.length > 0
-          ? await encryptSelectedFilesForMessage(filesToSend)
-          : [];
-      const encryptedText = await encryptMessageText({
-        attachments: encryptedAttachments,
-        recipientAccountNumber: selectedPeerAccountNumber,
-        text,
-        user,
-      });
-
-      const sendPayload = {
-        recipient_account_number: selectedPeerAccountNumber,
-        text: encryptedText,
-        ...(replyTargetId ? { reply_to_message_id: replyTargetId } : {}),
-        client_message_id: clientMessageId,
-      };
-
-      const response = await sendMessengerMessage(sendPayload);
-      const messageResult = response.data?.result || response.data;
-      const sentMessage = messageResult?.message
-        ? await decryptMessageForUser(messageResult.message, user)
-        : null;
-
-      if (sentMessage) {
-        setRoomMessages((currentMessages) =>
-          upsertMessage(currentMessages, sentMessage),
-        );
-        releaseOptimisticPreviews();
-      }
-
-      if (messageResult?.room || sentMessage) {
-        onRoomMessage(messageResult?.room, sentMessage, {
-          selectRoom: true,
-        });
-      }
-    } catch (error) {
-      setRoomMessages((currentMessages) =>
-        currentMessages.filter(
-          (message) => message.client_message_id !== clientMessageId,
-        ),
-      );
-      releaseOptimisticPreviews();
-      setMessageDraft((currentDraft) => currentDraft || text);
-      setReplyTarget((currentReplyTarget) =>
-        currentReplyTarget || replyTargetSnapshot,
-      );
-      setSelectedFiles((currentFiles) =>
-        currentFiles.length > 0 ? currentFiles : filesToSend,
-      );
-      setRoomMessage(
-        error?.response
-          ? getMessengerErrorMessage(error, "Unable to send message.")
-          : error?.message || "Unable to send message.",
-      );
-    } finally {
-      setIsSendingMessage(false);
-      isSendingMessageRef.current = false;
-      globalThis.requestAnimationFrame(focusMessageDraftUnlessTextEntryIsActive);
-    }
+    sendQueueRef.current.push({
+      clientMessageId,
+      filesToSend,
+      recipientAccountNumber: selectedPeerAccountNumber,
+      releaseOptimisticPreviews,
+      replyTargetId,
+      replyTargetSnapshot,
+      text,
+    });
+    void processSendQueue();
   };
 
   const handleMessageDraftChange = (event) => {
@@ -2894,7 +3167,6 @@ function MessengerConversation({
           type="button"
           className="parent-layout-page__message-attach"
           onClick={() => fileInputRef.current?.click()}
-          disabled={isSendingMessage}
           aria-label="Attach files"
           title="Attach files"
         >
@@ -2922,11 +3194,8 @@ function MessengerConversation({
           className={`parent-layout-page__message-submit${
             isSendingMessage ? " is-sending" : ""
           }`}
-          disabled={
-            (!messageDraft.trim() && selectedFiles.length === 0) ||
-            isSendingMessage
-          }
-          aria-label={isSendingMessage ? "Sending message" : "Send message"}
+          disabled={!messageDraft.trim() && selectedFiles.length === 0}
+          aria-label={isSendingMessage ? "Queue message" : "Send message"}
           title="Send"
         >
           <Send size={20} aria-hidden="true" />

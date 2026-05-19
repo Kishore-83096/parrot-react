@@ -8,7 +8,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
@@ -70,6 +70,11 @@ function ContactPanel({
   const [addContactMessage, setAddContactMessage] = useState(null);
   const [isSearchingContact, setIsSearchingContact] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
+  const contactsRef = useRef(contacts);
+
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
 
   const loadContacts = useCallback(async () => {
     setIsContactsLoading(true);
@@ -83,7 +88,9 @@ function ContactPanel({
 
       onContactsChange(nextContacts);
     } catch (error) {
-      onContactsChange([]);
+      if (contactsRef.current.length === 0) {
+        onContactsChange([]);
+      }
       setContactsMessage(
         getParentApiErrorMessage(error, "Unable to load contacts."),
       );
@@ -431,7 +438,7 @@ function ContactPanel({
           </p>
         ) : null}
 
-        {isContactsLoading ? (
+        {isContactsLoading && contacts.length === 0 ? (
           <div className="parent-layout-page__contacts-loading" aria-live="polite">
             <span />
             <span />

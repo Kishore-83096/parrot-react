@@ -10,7 +10,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
@@ -42,6 +42,8 @@ function MessengerRoomHeader({
   onContactUpdated,
   onBlockedMessagesReleased,
   onCloseConversation,
+  peerProfileCache,
+  onPeerProfileCacheChange,
   onToast,
 }) {
   const [peerProfile, setPeerProfile] = useState(null);
@@ -54,6 +56,11 @@ function MessengerRoomHeader({
   const [editContactMessage, setEditContactMessage] = useState(null);
   const [actionMessage, setActionMessage] = useState("");
   const [isContactActionLoading, setIsContactActionLoading] = useState(false);
+  const peerProfileCacheRef = useRef(peerProfileCache || {});
+
+  useEffect(() => {
+    peerProfileCacheRef.current = peerProfileCache || {};
+  }, [peerProfileCache]);
 
   const selectedRoomPeer = selectedRoom ? getRoomPeer(selectedRoom, user) : null;
   const selectedConversationContact = getConversationContact({
@@ -102,33 +109,53 @@ function MessengerRoomHeader({
       return undefined;
     }
 
+    const cachedPeerProfile =
+      peerProfileCacheRef.current?.[String(selectedPeerAccountNumber)] || null;
+
+    if (cachedPeerProfile) {
+      setPeerProfile(cachedPeerProfile);
+    } else {
+      setPeerProfile({
+        account_number: selectedPeerAccountNumber,
+      });
+    }
+
     let isMounted = true;
 
     searchParentUser({ account_number: selectedPeerAccountNumber })
       .then((response) => {
-        if (!isMounted) {
-          return;
-        }
-
-        setPeerProfile({
+        const nextPeerProfile = {
           ...response.data,
           account_number: selectedPeerAccountNumber,
-        });
-      })
-      .catch(() => {
+        };
+
         if (!isMounted) {
           return;
         }
 
-        setPeerProfile({
+        setPeerProfile(nextPeerProfile);
+        onPeerProfileCacheChange?.(selectedPeerAccountNumber, nextPeerProfile);
+      })
+      .catch(() => {
+        const fallbackPeerProfile = {
           account_number: selectedPeerAccountNumber,
-        });
+        };
+
+        if (!isMounted) {
+          return;
+        }
+
+        setPeerProfile(fallbackPeerProfile);
+        onPeerProfileCacheChange?.(
+          selectedPeerAccountNumber,
+          fallbackPeerProfile,
+        );
       });
 
     return () => {
       isMounted = false;
     };
-  }, [selectedPeerAccountNumber]);
+  }, [onPeerProfileCacheChange, selectedPeerAccountNumber]);
 
   if (!selectedPeerAccountNumber) {
     return <h2 id="parrot-layout-room-title">Message Room</h2>;

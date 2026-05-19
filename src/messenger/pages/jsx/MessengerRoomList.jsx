@@ -1,5 +1,5 @@
 import { MessagesSquare, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   getMessengerErrorMessage,
@@ -30,6 +30,11 @@ function MessengerRoomList({
   const [isRoomsLoading, setIsRoomsLoading] = useState(false);
   const [roomSearch, setRoomSearch] = useState("");
   const [hasLoadedContactMap, setHasLoadedContactMap] = useState(false);
+  const roomsRef = useRef(rooms);
+
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
 
   const contactsByAccountNumber = useMemo(
     () =>
@@ -55,7 +60,9 @@ function MessengerRoomList({
 
       onRoomsChange(nextRooms);
     } catch (error) {
-      onRoomsChange([]);
+      if (roomsRef.current.length === 0) {
+        onRoomsChange([]);
+      }
       setRoomsMessage(
         getMessengerErrorMessage(error, "Unable to load chat rooms."),
       );
@@ -141,7 +148,7 @@ function MessengerRoomList({
         </p>
       ) : null}
 
-      {isRoomsLoading ? (
+      {isRoomsLoading && rooms.length === 0 ? (
         <div className="parent-layout-page__contacts-loading" aria-live="polite">
           <span />
           <span />
