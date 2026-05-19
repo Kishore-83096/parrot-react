@@ -143,7 +143,7 @@ async function uploadEncryptedFileWithIntent(encryptedFile, uploadIntent) {
   Object.entries(uploadIntent.parameters).forEach(([key, value]) => {
     formData.append(key, value);
   });
-  formData.append("file", encryptedFile.encryptedBlob, `${encryptedFile.id}.bin`);
+  formData.append("file", encryptedFile.encryptedBlob, `${encryptedFile.id}.txt`);
 
   const uploadResponse = await fetch(uploadIntent.upload_url, {
     method: "POST",
