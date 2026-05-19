@@ -73,13 +73,6 @@ const TYPING_REFRESH_INTERVAL_MS = 3000;
 const TYPING_STOP_DELAY_MS = 1600;
 const TYPING_REMOTE_TIMEOUT_MS = 8000;
 const ROOM_SOCKET_PING_INTERVAL_MS = 25000;
-const ATTACHMENT_TABS = [
-  { id: "all", label: "All" },
-  { id: "images", label: "Images" },
-  { id: "pdfs", label: "PDF" },
-  { id: "other", label: "Other" },
-];
-
 function getEmptyMessagePagination() {
   return {
     hasMore: false,
@@ -266,56 +259,6 @@ function getAttachmentSummary(attachments) {
         `${counts[kind]} ${getAttachmentKindLabel(kind, counts[kind])}`,
     )
     .join(", ");
-}
-
-function getAttachmentTabId(attachment) {
-  const kind = getAttachmentKind(attachment);
-
-  if (kind === "image") {
-    return "images";
-  }
-
-  if (kind === "pdf") {
-    return "pdfs";
-  }
-
-  return "other";
-}
-
-function getAttachmentTabCounts(attachments) {
-  return (attachments || []).reduce(
-    (counts, attachment) => {
-      counts.all += 1;
-      counts[getAttachmentTabId(attachment)] += 1;
-      return counts;
-    },
-    {
-      all: 0,
-      images: 0,
-      pdfs: 0,
-      other: 0,
-    },
-  );
-}
-
-function getVisibleAttachmentTabs(tabCounts) {
-  return ATTACHMENT_TABS.filter(
-    (tab) => tab.id === "all" || tabCounts[tab.id] > 0,
-  );
-}
-
-function getAttachmentsForTab(attachments, activeTab) {
-  if (activeTab === "all") {
-    return attachments || [];
-  }
-
-  return (attachments || []).filter(
-    (attachment) => getAttachmentTabId(attachment) === activeTab,
-  );
-}
-
-function canPreviewAttachmentInModal(attachment) {
-  return Boolean(attachment?.file_url || attachment?.encrypted_file_url);
 }
 
 function isTextPreviewAttachment(attachment) {
@@ -693,6 +636,8 @@ function CachedVideo({ attachment, className }) {
   return (
     <video
       controls
+      playsInline
+      preload="metadata"
       src={sourceUrl}
       className={className || "parent-layout-page__message-attachment-player"}
     >
@@ -750,230 +695,6 @@ function MessageAttachments({ attachments, onOpen }) {
         <span>{getAttachmentSummary(attachments)}</span>
       </button>
     </div>
-  );
-}
-
-function AttachmentListItem({
-  attachment,
-  onDownload,
-  onOpen,
-  onPreviewImage,
-  onSelectAttachment,
-  selected,
-}) {
-  const previewUrl = useCachedMediaUrl(attachment);
-  const label = getAttachmentLabel(attachment);
-  const kind = getAttachmentKind(attachment);
-  const isImage = kind === "image";
-  const canPreview = canPreviewAttachmentInModal(attachment);
-  const openActionLabel = isImage ? "View" : canPreview ? "Preview" : "Open";
-  const handlePrimaryAction = () => {
-    if (isImage) {
-      onPreviewImage(attachment);
-      return;
-    }
-
-    if (canPreview) {
-      onSelectAttachment(attachment);
-      return;
-    }
-
-    onOpen(attachment);
-  };
-
-  return (
-    <article
-      className={`parent-layout-page__attachment-row is-${kind}${
-        selected ? " is-active" : ""
-      }`}
-    >
-      <button
-        type="button"
-      className="parent-layout-page__attachment-row-preview"
-      onClick={handlePrimaryAction}
-      aria-label={`${openActionLabel} ${label}`}
-    >
-        {isImage ? (
-          <CachedImage
-            src={previewUrl}
-            alt={label}
-            fallbackClassName="parent-layout-page__attachment-image-fallback"
-            fallbackSize={18}
-          />
-        ) : null}
-        {kind === "video" ? (
-          <video src={previewUrl} muted playsInline preload="metadata" />
-        ) : null}
-        {kind !== "image" && kind !== "video" ? (
-          <AttachmentIcon fileType={kind} size={17} />
-        ) : null}
-      </button>
-
-      <div className="parent-layout-page__attachment-row-meta">
-        <strong>{label}</strong>
-        <span>{getAttachmentKindLabel(kind, 1)}</span>
-      </div>
-
-      <div className="parent-layout-page__attachment-row-actions">
-        <button
-          type="button"
-          className="parent-layout-page__attachment-open"
-          onClick={handlePrimaryAction}
-        >
-          <ExternalLink size={15} aria-hidden="true" />
-          <span>{openActionLabel}</span>
-        </button>
-        <button
-          type="button"
-          className="parent-layout-page__attachment-download"
-          onClick={() => onDownload(attachment)}
-          aria-label={`Download ${label}`}
-          title="Download to device"
-        >
-          <Download size={16} aria-hidden="true" />
-        </button>
-      </div>
-    </article>
-  );
-}
-
-function AttachmentImageViewer({
-  images,
-  selectedAttachmentId,
-  onDownload,
-  onNavigate,
-  onOpen,
-  onSelectImage,
-}) {
-  const wheelLockRef = useRef(false);
-  const selectedIndex = Math.max(
-    images.findIndex(
-      (attachment) => getAttachmentKey(attachment) === selectedAttachmentId,
-    ),
-    0,
-  );
-  const selectedImage = images[selectedIndex];
-  const imageUrl = useCachedMediaUrl(selectedImage);
-  const label = getAttachmentLabel(selectedImage);
-  const hasManyImages = images.length > 1;
-
-  if (!selectedImage) {
-    return <p>No images in this message.</p>;
-  }
-
-  const handleWheel = (event) => {
-    if (!hasManyImages || wheelLockRef.current) {
-      return;
-    }
-
-    const scrollDelta =
-      Math.abs(event.deltaX) > Math.abs(event.deltaY)
-        ? event.deltaX
-        : event.deltaY;
-
-    if (Math.abs(scrollDelta) < 24) {
-      return;
-    }
-
-    wheelLockRef.current = true;
-    onNavigate(scrollDelta > 0 ? 1 : -1);
-    globalThis.setTimeout(() => {
-      wheelLockRef.current = false;
-    }, 420);
-  };
-
-  return (
-    <div className="parent-layout-page__attachment-image-viewer">
-      <div
-        className="parent-layout-page__attachment-image-stage"
-        onWheel={handleWheel}
-      >
-        {hasManyImages ? (
-          <button
-            type="button"
-            className="parent-layout-page__attachment-image-nav is-prev"
-            onClick={() => onNavigate(-1)}
-            aria-label="Previous image"
-          >
-            <ChevronLeft size={22} aria-hidden="true" />
-          </button>
-        ) : null}
-        <CachedImage
-          key={getAttachmentKey(selectedImage)}
-          src={imageUrl}
-          alt={label}
-          fallbackClassName="parent-layout-page__attachment-image-fallback parent-layout-page__attachment-image-fallback--stage"
-          fallbackSize={42}
-        />
-        {hasManyImages ? (
-          <button
-            type="button"
-            className="parent-layout-page__attachment-image-nav is-next"
-            onClick={() => onNavigate(1)}
-            aria-label="Next image"
-          >
-            <ChevronRight size={22} aria-hidden="true" />
-          </button>
-        ) : null}
-      </div>
-
-      <div className="parent-layout-page__attachment-image-footer">
-        <div>
-          <strong>{label}</strong>
-          <span>
-            {selectedIndex + 1} of {images.length}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="parent-layout-page__attachment-open"
-          onClick={() => onOpen(selectedImage)}
-        >
-          <ExternalLink size={15} aria-hidden="true" />
-          <span>Open</span>
-        </button>
-        <button
-          type="button"
-          className="parent-layout-page__attachment-download"
-          onClick={() => onDownload(selectedImage)}
-          aria-label={`Download ${label}`}
-          title="Download to device"
-        >
-          <Download size={16} aria-hidden="true" />
-        </button>
-      </div>
-
-      {hasManyImages ? (
-        <div className="parent-layout-page__attachment-image-thumbs">
-          {images.map((attachment, index) => (
-            <button
-              type="button"
-              className={
-                index === selectedIndex ? "is-active" : ""
-              }
-              key={getAttachmentKey(attachment)}
-              onClick={() => onSelectImage(attachment)}
-              aria-label={`View image ${index + 1}`}
-            >
-              <AttachmentThumbImage attachment={attachment} />
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function AttachmentThumbImage({ attachment }) {
-  const imageUrl = useCachedMediaUrl(attachment);
-
-  return (
-    <CachedImage
-      src={imageUrl}
-      alt=""
-      fallbackClassName="parent-layout-page__attachment-image-fallback"
-      fallbackSize={16}
-    />
   );
 }
 
@@ -1043,7 +764,7 @@ function useAttachmentTextPreview(sourceUrl, enabled) {
   return textPreview;
 }
 
-function AttachmentDocumentPreview({ attachment, onDownload, onOpen }) {
+function AttachmentDocumentPreview({ attachment }) {
   const previewUrl = useCachedMediaUrl(attachment);
   const label = getAttachmentLabel(attachment);
   const kind = getAttachmentKind(attachment);
@@ -1127,38 +848,7 @@ function AttachmentDocumentPreview({ attachment, onDownload, onOpen }) {
   }
 
   return (
-    <div className="parent-layout-page__attachment-document-preview">
-      <div className="parent-layout-page__attachment-document-toolbar">
-        <div className="parent-layout-page__attachment-document-file">
-          <span>
-            <AttachmentIcon fileType={kind} size={18} />
-          </span>
-          <div>
-            <strong>{label}</strong>
-            <span>{getAttachmentKindLabel(kind, 1)}</span>
-          </div>
-        </div>
-        <div className="parent-layout-page__attachment-document-actions">
-          <button
-            type="button"
-            className="parent-layout-page__attachment-open"
-            onClick={() => onOpen(attachment)}
-          >
-            <ExternalLink size={15} aria-hidden="true" />
-            <span>New tab</span>
-          </button>
-          <button
-            type="button"
-            className="parent-layout-page__attachment-download"
-            onClick={() => onDownload(attachment)}
-            aria-label={`Download ${label}`}
-            title="Download to device"
-          >
-            <Download size={16} aria-hidden="true" />
-          </button>
-        </div>
-      </div>
-
+    <div className="parent-layout-page__attachment-document-preview is-modal-preview">
       <div className="parent-layout-page__attachment-document-stage">
         {stageContent}
       </div>
@@ -1166,109 +856,49 @@ function AttachmentDocumentPreview({ attachment, onDownload, onOpen }) {
   );
 }
 
-function AttachmentDocumentViewer({
-  attachments,
-  selectedAttachmentId,
-  onDownload,
-  onOpen,
-  onPreviewImage,
-  onSelectAttachment,
-}) {
-  const previewableAttachments = attachments.filter(canPreviewAttachmentInModal);
-  const selectedAttachment =
-    previewableAttachments.find(
-      (attachment) => getAttachmentKey(attachment) === selectedAttachmentId,
-    ) ||
-    previewableAttachments[0] ||
-    null;
-  const selectedAttachmentKey = getAttachmentKey(selectedAttachment);
-
-  if (!selectedAttachment) {
-    return (
-      <div className="parent-layout-page__attachment-list">
-        {attachments.map((attachment) => (
-          <AttachmentListItem
-            attachment={attachment}
-            key={getAttachmentKey(attachment)}
-            onDownload={onDownload}
-            onOpen={onOpen}
-            onPreviewImage={onPreviewImage}
-            onSelectAttachment={onSelectAttachment}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="parent-layout-page__attachment-document-viewer">
-      <AttachmentDocumentPreview
-        attachment={selectedAttachment}
-        onDownload={onDownload}
-        onOpen={onOpen}
-      />
-
-      {attachments.length > 1 ? (
-        <div
-          className="parent-layout-page__attachment-document-list"
-          aria-label="Attachments"
-        >
-          {attachments.map((attachment) => (
-            <AttachmentListItem
-              attachment={attachment}
-              key={getAttachmentKey(attachment)}
-              onDownload={onDownload}
-              onOpen={onOpen}
-              onPreviewImage={onPreviewImage}
-              onSelectAttachment={onSelectAttachment}
-              selected={getAttachmentKey(attachment) === selectedAttachmentKey}
-            />
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 function AttachmentViewerModal({
   attachments,
-  activeTab,
   selectedAttachmentId,
-  onChangeTab,
   onClose,
   onOpen,
   onDownload,
-  onNavigateImage,
-  onSelectAttachment,
+  onNavigate,
 }) {
-  const tabCounts = getAttachmentTabCounts(attachments);
-  const visibleTabs = getVisibleAttachmentTabs(tabCounts);
-  const currentActiveTab = visibleTabs.some((tab) => tab.id === activeTab)
-    ? activeTab
-    : visibleTabs[0]?.id || "all";
-  const visibleAttachments = getAttachmentsForTab(
-    attachments,
-    currentActiveTab,
+  const safeAttachments = Array.isArray(attachments) ? attachments : [];
+  const selectedIndex = Math.max(
+    safeAttachments.findIndex(
+      (attachment) => getAttachmentKey(attachment) === selectedAttachmentId,
+    ),
+    0,
   );
-  const imageAttachments = getAttachmentsForTab(attachments, "images");
+  const selectedAttachment =
+    safeAttachments[selectedIndex] || safeAttachments[0] || null;
+  const selectedAttachmentLabel = getAttachmentLabel(selectedAttachment);
+  const selectedAttachmentKind = getAttachmentKind(selectedAttachment);
+  const hasManyAttachments = safeAttachments.length > 1;
+  const counterLabel = `${selectedIndex + 1}/${safeAttachments.length} files`;
 
   useEffect(() => {
     const handleKeyDown = (event) => {
+      if (["AUDIO", "VIDEO"].includes(event.target?.tagName)) {
+        return;
+      }
+
       if (event.key === "Escape") {
         onClose();
-      } else if (currentActiveTab === "images" && event.key === "ArrowLeft") {
-        onNavigateImage(-1);
-      } else if (currentActiveTab === "images" && event.key === "ArrowRight") {
-        onNavigateImage(1);
+      } else if (hasManyAttachments && event.key === "ArrowLeft") {
+        onNavigate(-1);
+      } else if (hasManyAttachments && event.key === "ArrowRight") {
+        onNavigate(1);
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
 
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [currentActiveTab, onClose, onNavigateImage]);
+  }, [hasManyAttachments, onClose, onNavigate]);
 
-  if (!attachments.length) {
+  if (!selectedAttachment) {
     return null;
   }
 
@@ -1285,70 +915,73 @@ function AttachmentViewerModal({
         onClick={onClose}
         aria-label="Close attachments"
       />
-      <div
-        className={`parent-layout-page__attachment-viewer-surface${
-          visibleTabs.length <= 1 ? " has-single-tab" : ""
-        }`}
-      >
-        <header>
-          <div>
-            <strong>Attachments</strong>
-            <span>{getAttachmentSummary(attachments)}</span>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close attachments"
-            title="Close"
-          >
-            <X size={20} aria-hidden="true" />
-          </button>
-        </header>
-
-        {visibleTabs.length > 1 ? (
-          <div className="parent-layout-page__attachment-tabs" role="tablist">
-            {visibleTabs.map((tab) => (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={currentActiveTab === tab.id}
-                className={currentActiveTab === tab.id ? "is-active" : ""}
-                key={tab.id}
-                onClick={() => onChangeTab(tab.id)}
-              >
-                <span>{tab.label}</span>
-                <span>{tabCounts[tab.id]}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-
+      <div className="parent-layout-page__attachment-viewer-surface is-minimal">
+        <button
+          type="button"
+          className="parent-layout-page__attachment-viewer-close"
+          onClick={onClose}
+          aria-label="Close attachments"
+          title="Close"
+        >
+          <X size={20} aria-hidden="true" />
+        </button>
         <div className="parent-layout-page__attachment-viewer-content">
-          {currentActiveTab === "images" ? (
-            <AttachmentImageViewer
-              images={imageAttachments}
-              selectedAttachmentId={selectedAttachmentId}
-              onDownload={onDownload}
-              onNavigate={onNavigateImage}
-              onOpen={onOpen}
-              onSelectImage={onSelectAttachment}
-            />
-          ) : visibleAttachments.length > 0 ? (
-            <AttachmentDocumentViewer
-              attachments={visibleAttachments}
-              selectedAttachmentId={selectedAttachmentId}
-              onDownload={onDownload}
-              onOpen={onOpen}
-              onPreviewImage={(imageAttachment) => {
-                onSelectAttachment(imageAttachment);
-                onChangeTab("images");
-              }}
-              onSelectAttachment={onSelectAttachment}
-            />
-          ) : (
-            <p>No attachments in this tab.</p>
-          )}
+          {hasManyAttachments ? (
+            <button
+              type="button"
+              className="parent-layout-page__attachment-viewer-nav is-prev"
+              onClick={() => onNavigate(-1)}
+              aria-label="Previous attachment"
+              title="Previous"
+            >
+              <ChevronLeft size={24} aria-hidden="true" />
+            </button>
+          ) : null}
+          <AttachmentDocumentPreview
+            key={getAttachmentKey(selectedAttachment)}
+            attachment={selectedAttachment}
+          />
+          {hasManyAttachments ? (
+            <button
+              type="button"
+              className="parent-layout-page__attachment-viewer-nav is-next"
+              onClick={() => onNavigate(1)}
+              aria-label="Next attachment"
+              title="Next"
+            >
+              <ChevronRight size={24} aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
+        <footer className="parent-layout-page__attachment-viewer-footer">
+          <div className="parent-layout-page__attachment-viewer-file">
+            <span>
+              <AttachmentIcon fileType={selectedAttachmentKind} size={17} />
+            </span>
+            <strong>{selectedAttachmentLabel}</strong>
+          </div>
+          <div className="parent-layout-page__attachment-viewer-count">
+            {counterLabel}
+          </div>
+          <div className="parent-layout-page__attachment-viewer-actions">
+            <button
+              type="button"
+              onClick={() => onOpen(selectedAttachment)}
+              aria-label={`Open ${selectedAttachmentLabel} in a new tab`}
+              title="Open in new tab"
+            >
+              <ExternalLink size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDownload(selectedAttachment)}
+              aria-label={`Download ${selectedAttachmentLabel}`}
+              title="Download"
+            >
+              <Download size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </footer>
       </div>
     </div>
   );
@@ -1465,7 +1098,6 @@ function MessengerConversation({
   });
   const [attachmentViewer, setAttachmentViewer] = useState({
     attachments: [],
-    activeTab: "all",
     selectedAttachmentId: "",
   });
   const [typingUserIds, setTypingUserIds] = useState([]);
@@ -2438,17 +2070,10 @@ function MessengerConversation({
   }, []);
 
   const handleOpenAttachmentViewer = useCallback((attachments, attachment) => {
-    const imageAttachments = getAttachmentsForTab(attachments, "images");
-    const previewableAttachments = attachments.filter(canPreviewAttachmentInModal);
-    const selectedAttachment =
-      attachment ||
-      (imageAttachments.length === 1 ? imageAttachments[0] : null) ||
-      previewableAttachments[0] ||
-      null;
+    const selectedAttachment = attachment || attachments[0] || null;
 
     setAttachmentViewer({
       attachments,
-      activeTab: "all",
       selectedAttachmentId: selectedAttachment
         ? getAttachmentKey(selectedAttachment)
         : "",
@@ -2458,56 +2083,32 @@ function MessengerConversation({
   const handleCloseAttachmentViewer = useCallback(() => {
     setAttachmentViewer({
       attachments: [],
-      activeTab: "all",
       selectedAttachmentId: "",
     });
   }, []);
 
-  const handleChangeAttachmentTab = useCallback((activeTab) => {
-    setAttachmentViewer((currentViewer) => ({
-      ...currentViewer,
-      activeTab,
-      selectedAttachmentId:
-        activeTab === "images" && !currentViewer.selectedAttachmentId
-          ? getAttachmentKey(
-              getAttachmentsForTab(currentViewer.attachments, "images")[0],
-            )
-          : currentViewer.selectedAttachmentId,
-    }));
-  }, []);
-
-  const handleSelectAttachmentInViewer = useCallback((attachment) => {
-    setAttachmentViewer((currentViewer) => ({
-      ...currentViewer,
-      selectedAttachmentId: getAttachmentKey(attachment),
-    }));
-  }, []);
-
-  const handleNavigateAttachmentImage = useCallback((direction) => {
+  const handleNavigateAttachment = useCallback((direction) => {
     setAttachmentViewer((currentViewer) => {
-      const imageAttachments = getAttachmentsForTab(
-        currentViewer.attachments,
-        "images",
-      );
+      const currentAttachments = currentViewer.attachments;
 
-      if (imageAttachments.length <= 1) {
+      if (currentAttachments.length <= 1) {
         return currentViewer;
       }
 
       const currentIndex = Math.max(
-        imageAttachments.findIndex(
+        currentAttachments.findIndex(
           (attachment) =>
             getAttachmentKey(attachment) === currentViewer.selectedAttachmentId,
         ),
         0,
       );
       const nextIndex =
-        (currentIndex + direction + imageAttachments.length) %
-        imageAttachments.length;
+        (currentIndex + direction + currentAttachments.length) %
+        currentAttachments.length;
 
       return {
         ...currentViewer,
-        selectedAttachmentId: getAttachmentKey(imageAttachments[nextIndex]),
+        selectedAttachmentId: getAttachmentKey(currentAttachments[nextIndex]),
       };
     });
   }, []);
@@ -3239,14 +2840,11 @@ function MessengerConversation({
       {attachmentViewer.attachments.length > 0 ? (
         <AttachmentViewerModal
           attachments={attachmentViewer.attachments}
-          activeTab={attachmentViewer.activeTab}
           selectedAttachmentId={attachmentViewer.selectedAttachmentId}
-          onChangeTab={handleChangeAttachmentTab}
           onClose={handleCloseAttachmentViewer}
           onDownload={handleDownloadAttachment}
-          onNavigateImage={handleNavigateAttachmentImage}
+          onNavigate={handleNavigateAttachment}
           onOpen={handleOpenAttachment}
-          onSelectAttachment={handleSelectAttachmentInViewer}
         />
       ) : null}
     </section>
