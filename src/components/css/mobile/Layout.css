@@ -1153,7 +1153,7 @@
   display: grid;
   grid-auto-rows: max-content;
   align-content: start;
-  gap: 10px;
+  gap: 16px;
   overflow: auto;
   padding: 18px 20px 16px;
   scrollbar-width: none;
@@ -1335,6 +1335,7 @@
 }
 
 .parent-layout-page__message {
+  position: relative;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -1407,6 +1408,7 @@
   gap: 5px;
   position: relative;
   opacity: 0;
+  pointer-events: none;
   transform: scale(0.92);
   transition:
     opacity 140ms ease,
@@ -1421,8 +1423,10 @@
 .parent-layout-page__message:hover .parent-layout-page__message-actions,
 .parent-layout-page__message:focus-within .parent-layout-page__message-actions,
 .parent-layout-page__message.is-reply-dragging .parent-layout-page__message-actions,
+.parent-layout-page__message.is-actions-open .parent-layout-page__message-actions,
 .parent-layout-page__message.is-reaction-picker-open .parent-layout-page__message-actions {
   opacity: 1;
+  pointer-events: auto;
   transform: scale(1);
 }
 
@@ -1519,13 +1523,17 @@
 }
 
 .parent-layout-page__message.has-reactions {
-  margin-bottom: 17px;
+  margin-bottom: 24px;
+}
+
+.parent-layout-page__message.is-reaction-picker-open {
+  margin-top: 46px;
 }
 
 .parent-layout-page__message-reactions {
   position: absolute;
   right: 10px;
-  bottom: -17px;
+  bottom: -22px;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -4645,6 +4653,7 @@ video.parent-layout-page__attachment-modal-media {
 
 .parent-layout-page__messages {
   padding: 12px 10px;
+  gap: 16px;
 }
 
 .parent-layout-page__messages-empty {
@@ -4671,9 +4680,46 @@ video.parent-layout-page__attachment-modal-media {
   line-height: 1.42;
 }
 
+.parent-layout-page__message {
+  align-items: flex-end;
+}
+
+.parent-layout-page__message.is-reaction-picker-open,
+.parent-layout-page__message.is-actions-open {
+  margin-top: 54px;
+}
+
+.parent-layout-page__message.has-reactions {
+  margin-bottom: 26px;
+}
+
 .parent-layout-page__message-actions {
+  position: absolute;
+  top: -44px;
+  z-index: 5;
+  display: none;
+  gap: 5px;
   opacity: 1;
-  transform: scale(1);
+  pointer-events: auto;
+  transform: none;
+}
+
+.parent-layout-page__message.is-theirs .parent-layout-page__message-actions {
+  left: 2px;
+  right: auto;
+  flex-direction: row;
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-actions {
+  right: 2px;
+  left: auto;
+  flex-direction: row-reverse;
+}
+
+.parent-layout-page__message.is-actions-open .parent-layout-page__message-actions,
+.parent-layout-page__message.is-reaction-picker-open .parent-layout-page__message-actions,
+.parent-layout-page__message:focus-within .parent-layout-page__message-actions {
+  display: flex;
 }
 
 .parent-layout-page__message-reply-action,
@@ -4684,13 +4730,24 @@ video.parent-layout-page__attachment-modal-media {
 }
 
 .parent-layout-page__message-reaction-picker {
+  position: static;
+  max-width: calc(100vw - 92px);
   gap: 3px;
   padding: 4px;
+}
+
+.parent-layout-page__message.is-reaction-picker-open .parent-layout-page__message-reaction-action {
+  display: none;
 }
 
 .parent-layout-page__message-reaction-picker button {
   width: 32px;
   height: 32px;
+}
+
+.parent-layout-page__message-reactions {
+  bottom: -23px;
+  max-width: calc(100% - 12px);
 }
 
 .parent-layout-page__message-attachment-grid {

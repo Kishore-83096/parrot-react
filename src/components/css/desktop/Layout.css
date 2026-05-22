@@ -1153,7 +1153,7 @@
   display: grid;
   grid-auto-rows: max-content;
   align-content: start;
-  gap: 10px;
+  gap: 16px;
   overflow: auto;
   padding: 18px 20px 16px;
   scrollbar-width: none;
@@ -1335,6 +1335,7 @@
 }
 
 .parent-layout-page__message {
+  position: relative;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -1412,6 +1413,7 @@
   gap: 5px;
   position: relative;
   opacity: 0;
+  pointer-events: none;
   transform: scale(0.92);
   transition:
     opacity 140ms ease,
@@ -1426,8 +1428,10 @@
 .parent-layout-page__message:hover .parent-layout-page__message-actions,
 .parent-layout-page__message:focus-within .parent-layout-page__message-actions,
 .parent-layout-page__message.is-reply-dragging .parent-layout-page__message-actions,
+.parent-layout-page__message.is-actions-open .parent-layout-page__message-actions,
 .parent-layout-page__message.is-reaction-picker-open .parent-layout-page__message-actions {
   opacity: 1;
+  pointer-events: auto;
   transform: scale(1);
 }
 
@@ -1524,13 +1528,17 @@
 }
 
 .parent-layout-page__message.has-reactions {
-  margin-bottom: 17px;
+  margin-bottom: 24px;
+}
+
+.parent-layout-page__message.is-reaction-picker-open {
+  margin-top: 46px;
 }
 
 .parent-layout-page__message-reactions {
   position: absolute;
   right: 10px;
-  bottom: -17px;
+  bottom: -22px;
   display: flex;
   align-items: center;
   gap: 3px;

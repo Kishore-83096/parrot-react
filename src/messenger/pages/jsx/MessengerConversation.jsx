@@ -81,6 +81,8 @@ const TYPING_REFRESH_INTERVAL_MS = 3000;
 const TYPING_STOP_DELAY_MS = 1600;
 const TYPING_REMOTE_TIMEOUT_MS = 8000;
 const ROOM_SOCKET_PING_INTERVAL_MS = 25000;
+const MESSAGE_ACTION_LONG_PRESS_MS = 420;
+const MESSAGE_ACTION_LONG_PRESS_MOVE_TOLERANCE = 10;
 const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
 const VOICE_NOTE_MAX_DURATION_SECONDS = 180;
 const VOICE_NOTE_AUDIO_BITRATE = 32000;
@@ -2218,6 +2220,7 @@ function MessengerConversation({
     messageId: null,
     offsetX: 0,
   });
+  const [activeMessageActionsId, setActiveMessageActionsId] = useState(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
   const [attachmentViewer, setAttachmentViewer] = useState({
     attachments: [],
@@ -2250,6 +2253,7 @@ function MessengerConversation({
   const skipNextAutoScrollRef = useRef(false);
   const isOlderMessagesLoadingRef = useRef(false);
   const replyDragStateRef = useRef(null);
+  const messageActionLongPressRef = useRef(null);
   const reactionRequestSequenceRef = useRef(new Map());
   const typingStopTimeoutRef = useRef(null);
   const typingRemoteTimeoutsRef = useRef(new Map());
@@ -2296,12 +2300,26 @@ function MessengerConversation({
   });
   const hasActiveConversation = Boolean(selectedPeerAccountNumber);
 
+  const clearMessageActionLongPress = useCallback(() => {
+    if (messageActionLongPressRef.current?.timeoutId) {
+      globalThis.clearTimeout(messageActionLongPressRef.current.timeoutId);
+    }
+
+    messageActionLongPressRef.current = null;
+  }, []);
+
   useEffect(() => {
     activeConversationRef.current = {
       peerAccountNumber: selectedPeerAccountNumber,
       roomId: selectedRoom?.id || null,
     };
   }, [selectedPeerAccountNumber, selectedRoom?.id]);
+
+  useEffect(() => {
+    return () => {
+      clearMessageActionLongPress();
+    };
+  }, [clearMessageActionLongPress]);
 
   const clearTypingStopTimeout = useCallback(() => {
     if (typingStopTimeoutRef.current) {
@@ -2839,6 +2857,7 @@ function MessengerConversation({
     clearRemoteTypingUsers();
     setMessageDraft("");
     setReplyTarget(null);
+    setActiveMessageActionsId(null);
     setReactionPickerMessageId(null);
     setSelectedFiles([]);
     if (fileInputRef.current) {
@@ -2954,7 +2973,7 @@ function MessengerConversation({
   }, [focusMessageDraft, hasActiveConversation, isAttachmentViewerOpen]);
 
   useEffect(() => {
-    if (!reactionPickerMessageId) {
+    if (!reactionPickerMessageId && !activeMessageActionsId) {
       return undefined;
     }
 
@@ -2964,6 +2983,7 @@ function MessengerConversation({
       }
 
       setReactionPickerMessageId(null);
+      setActiveMessageActionsId(null);
     };
 
     globalThis.document?.addEventListener("pointerdown", handlePointerDown);
@@ -2971,7 +2991,7 @@ function MessengerConversation({
     return () => {
       globalThis.document?.removeEventListener("pointerdown", handlePointerDown);
     };
-  }, [reactionPickerMessageId]);
+  }, [activeMessageActionsId, reactionPickerMessageId]);
 
   useLayoutEffect(() => {
     const scrollSnapshot = olderMessagesScrollRef.current;
@@ -3389,6 +3409,8 @@ function MessengerConversation({
         return;
       }
 
+      setActiveMessageActionsId(null);
+      setReactionPickerMessageId(null);
       setReplyTarget(message);
       focusMessageDraft();
     },
@@ -3401,9 +3423,12 @@ function MessengerConversation({
   }, [focusMessageDraft]);
 
   const handleToggleReactionPicker = useCallback((messageId) => {
-    setReactionPickerMessageId((currentMessageId) =>
-      Number(currentMessageId) === Number(messageId) ? null : messageId,
-    );
+    setReactionPickerMessageId((currentMessageId) => {
+      const isClosing = Number(currentMessageId) === Number(messageId);
+      setActiveMessageActionsId(isClosing ? null : messageId);
+
+      return isClosing ? null : messageId;
+    });
   }, []);
 
   const handleSelectMessageReaction = useCallback(
@@ -3422,6 +3447,7 @@ function MessengerConversation({
       const requestId =
         (reactionRequestSequenceRef.current.get(messageId) || 0) + 1;
       reactionRequestSequenceRef.current.set(messageId, requestId);
+      setActiveMessageActionsId(null);
       setReactionPickerMessageId(null);
       setRoomMessage("");
       setRoomMessages((currentMessages) =>
@@ -3691,28 +3717,73 @@ function MessengerConversation({
     ],
   );
 
-  const handleReplyDragStart = useCallback((event, message, isMine) => {
-    if (
-      event.button !== 0 ||
-      event.target.closest("a, button, input, select, textarea")
-    ) {
-      return;
-    }
+  const handleReplyDragStart = useCallback(
+    (event, message, isMine) => {
+      if (
+        event.button !== 0 ||
+        event.target.closest("a, button, input, select, textarea")
+      ) {
+        return;
+      }
 
-    replyDragStateRef.current = {
-      pointerId: event.pointerId,
-      message,
-      direction: isMine ? -1 : 1,
-      startX: event.clientX,
-      activated: false,
-    };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  }, []);
+      clearMessageActionLongPress();
+      const dragState = {
+        pointerId: event.pointerId,
+        message,
+        direction: isMine ? -1 : 1,
+        startX: event.clientX,
+        startY: event.clientY,
+        activated: false,
+        longPressActivated: false,
+      };
+      replyDragStateRef.current = dragState;
+
+      if (event.pointerType === "touch" || event.pointerType === "pen") {
+        const timeoutId = globalThis.setTimeout(() => {
+          if (replyDragStateRef.current?.pointerId !== event.pointerId) {
+            return;
+          }
+
+          replyDragStateRef.current.longPressActivated = true;
+          setActiveMessageActionsId(message.id);
+          setReactionPickerMessageId(message.id);
+          setReplyDrag({ messageId: null, offsetX: 0 });
+        }, MESSAGE_ACTION_LONG_PRESS_MS);
+
+        messageActionLongPressRef.current = {
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          timeoutId,
+        };
+      }
+
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+    },
+    [clearMessageActionLongPress],
+  );
 
   const handleReplyDragMove = useCallback((event) => {
     const dragState = replyDragStateRef.current;
 
     if (!dragState || dragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const longPressState = messageActionLongPressRef.current;
+    if (longPressState?.pointerId === event.pointerId) {
+      const movedDistance = Math.hypot(
+        event.clientX - longPressState.startX,
+        event.clientY - longPressState.startY,
+      );
+
+      if (movedDistance > MESSAGE_ACTION_LONG_PRESS_MOVE_TOLERANCE) {
+        clearMessageActionLongPress();
+      }
+    }
+
+    if (dragState.longPressActivated) {
+      event.preventDefault();
       return;
     }
 
@@ -3738,6 +3809,7 @@ function MessengerConversation({
 
   const handleReplyDragEnd = useCallback(
     (event) => {
+      clearMessageActionLongPress();
       const dragState = replyDragStateRef.current;
 
       if (!dragState || dragState.pointerId !== event.pointerId) {
@@ -3751,7 +3823,7 @@ function MessengerConversation({
       replyDragStateRef.current = null;
       setReplyDrag({ messageId: null, offsetX: 0 });
     },
-    [handleSelectReplyTarget],
+    [clearMessageActionLongPress, handleSelectReplyTarget],
   );
 
   const handleLoadOlderMessages = async () => {
@@ -4178,6 +4250,9 @@ function MessengerConversation({
                 .length > 0;
             const isReactionPickerOpen =
               Number(reactionPickerMessageId) === Number(message.id);
+            const areMessageActionsOpen =
+              isReactionPickerOpen ||
+              Number(activeMessageActionsId) === Number(message.id);
             const messageText = getRenderableMessageText(message);
             const messageAttachments = getMessageAttachments(message);
             const messageStyle = isReplyDragging
@@ -4198,7 +4273,7 @@ function MessengerConversation({
                     hasMessageReactions ? " has-reactions" : ""
                   }${
                     isReactionPickerOpen ? " is-reaction-picker-open" : ""
-                  }`}
+                  }${areMessageActionsOpen ? " is-actions-open" : ""}`}
                   data-message-id={message.id}
                   style={messageStyle}
                   onPointerDown={(event) =>
@@ -4207,6 +4282,11 @@ function MessengerConversation({
                   onPointerMove={handleReplyDragMove}
                   onPointerUp={handleReplyDragEnd}
                   onPointerCancel={handleReplyDragEnd}
+                  onContextMenu={(event) => {
+                    if (areMessageActionsOpen) {
+                      event.preventDefault();
+                    }
+                  }}
                 >
                   <div className="parent-layout-page__message-bubble">
                     {replyPreview ? (
