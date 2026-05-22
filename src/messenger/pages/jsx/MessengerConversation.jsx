@@ -9,6 +9,7 @@
   FileText,
   Image as ImageIcon,
   LoaderCircle,
+  Mic,
   Music,
   MessageCircle,
   Paperclip,
@@ -77,6 +78,22 @@ const TYPING_REFRESH_INTERVAL_MS = 3000;
 const TYPING_STOP_DELAY_MS = 1600;
 const TYPING_REMOTE_TIMEOUT_MS = 8000;
 const ROOM_SOCKET_PING_INTERVAL_MS = 25000;
+const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
+const VOICE_NOTE_MAX_DURATION_SECONDS = 180;
+const VOICE_NOTE_AUDIO_BITRATE = 32000;
+const VOICE_NOTE_WAVEFORM_BARS = 40;
+const VOICE_NOTE_MIME_TYPE_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/ogg;codecs=opus",
+  "audio/mp4",
+];
+const DEFAULT_VOICE_NOTE_WAVEFORM = [
+  0.24, 0.48, 0.34, 0.72, 0.42, 0.58, 0.88, 0.36, 0.52, 0.76,
+  0.3, 0.64, 0.44, 0.82, 0.56, 0.38, 0.7, 0.5, 0.9, 0.46,
+  0.6, 0.34, 0.74, 0.54, 0.42, 0.8, 0.48, 0.66, 0.36, 0.58,
+  0.86, 0.4, 0.62, 0.5, 0.78, 0.32, 0.68, 0.44, 0.56, 0.72,
+];
 function getEmptyMessagePagination() {
   return {
     hasMore: false,
@@ -120,6 +137,13 @@ function getMessagePreviewText(message) {
     return text;
   }
 
+  const attachments = getMessageAttachments(message);
+  const voiceNoteCount = attachments.filter(isVoiceNoteAttachment).length;
+
+  if (voiceNoteCount > 0 && voiceNoteCount === attachments.length) {
+    return voiceNoteCount === 1 ? "Voice note" : `${voiceNoteCount} voice notes`;
+  }
+
   const attachmentCount = getMessageAttachmentCount(message);
 
   return attachmentCount > 0 ? "Attachment" : "Message";
@@ -155,9 +179,25 @@ function createSelectedFileId(file) {
   ].join("-");
 }
 
+function isVoiceNoteSelectedFile(selectedFile) {
+  return selectedFile?.attachmentKind === VOICE_NOTE_ATTACHMENT_KIND;
+}
+
+function isVoiceNoteAttachment(attachment) {
+  return (
+    attachment?.attachment_kind === VOICE_NOTE_ATTACHMENT_KIND ||
+    attachment?.attachmentKind === VOICE_NOTE_ATTACHMENT_KIND ||
+    attachment?.kind === VOICE_NOTE_ATTACHMENT_KIND ||
+    attachment?.is_voice_note === true
+  );
+}
+
 function createOptimisticAttachmentPreviews(selectedFiles) {
   return selectedFiles.map((selectedFile, index) => {
     const localPreviewUrl = URL.createObjectURL(selectedFile.file);
+    const durationSeconds = normalizeVoiceNoteDuration(
+      selectedFile.durationSeconds,
+    );
 
     return {
       id: selectedFile.id,
@@ -167,6 +207,9 @@ function createOptimisticAttachmentPreviews(selectedFiles) {
       mime_type: selectedFile.file.type || "application/octet-stream",
       file_size_bytes: selectedFile.file.size,
       file_type: selectedFile.fileType || "document",
+      attachment_kind: selectedFile.attachmentKind || "",
+      duration_seconds: durationSeconds,
+      waveform: normalizeVoiceNoteWaveform(selectedFile.waveform),
       sort_order: index,
       is_local_preview: true,
     };
@@ -182,6 +225,10 @@ function releaseOptimisticAttachmentPreviews(attachments) {
 }
 
 function getAttachmentLabel(attachment) {
+  if (isVoiceNoteAttachment(attachment)) {
+    return "Voice note";
+  }
+
   return attachment?.file_name || attachment?.file_type || "File";
 }
 
@@ -316,6 +363,104 @@ function formatMediaTime(seconds) {
   const remainingSeconds = String(roundedSeconds % 60).padStart(2, "0");
 
   return `${minutes}:${remainingSeconds}`;
+}
+
+function normalizeVoiceNoteDuration(value) {
+  const duration = Number(value);
+
+  return Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+}
+
+function normalizeVoiceNoteWaveform(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, 80)
+    .map((level) => Number(level))
+    .filter((level) => Number.isFinite(level))
+    .map((level) => Math.min(Math.max(level, 0.08), 1));
+}
+
+function getVoiceNoteDuration(attachment) {
+  return normalizeVoiceNoteDuration(
+    attachment?.duration_seconds || attachment?.durationSeconds,
+  );
+}
+
+function getVoiceNoteWaveform(attachment) {
+  const waveform = normalizeVoiceNoteWaveform(attachment?.waveform);
+
+  return waveform.length > 0 ? waveform : DEFAULT_VOICE_NOTE_WAVEFORM;
+}
+
+function getSupportedVoiceNoteMimeType() {
+  if (typeof globalThis.MediaRecorder === "undefined") {
+    return "";
+  }
+
+  return (
+    VOICE_NOTE_MIME_TYPE_CANDIDATES.find((mimeType) =>
+      globalThis.MediaRecorder.isTypeSupported(mimeType),
+    ) || ""
+  );
+}
+
+function getVoiceNoteFileExtension(mimeType) {
+  const normalizedMimeType = String(mimeType || "").toLowerCase();
+
+  if (normalizedMimeType.includes("ogg")) {
+    return "ogg";
+  }
+
+  if (normalizedMimeType.includes("mp4")) {
+    return "m4a";
+  }
+
+  return "webm";
+}
+
+async function createVoiceNoteWaveform(blob) {
+  const AudioContextConstructor =
+    globalThis.AudioContext || globalThis.webkitAudioContext;
+
+  if (!AudioContextConstructor || !blob?.size) {
+    return DEFAULT_VOICE_NOTE_WAVEFORM;
+  }
+
+  const audioContext = new AudioContextConstructor();
+
+  try {
+    const audioBuffer = await audioContext.decodeAudioData(
+      await blob.arrayBuffer(),
+    );
+    const channelData = audioBuffer.getChannelData(0);
+    const samplesPerBar = Math.max(
+      1,
+      Math.floor(channelData.length / VOICE_NOTE_WAVEFORM_BARS),
+    );
+    const bars = Array.from({ length: VOICE_NOTE_WAVEFORM_BARS }, (_, index) => {
+      const start = index * samplesPerBar;
+      const end = Math.min(start + samplesPerBar, channelData.length);
+      let total = 0;
+
+      for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
+        total += Math.abs(channelData[sampleIndex] || 0);
+      }
+
+      return total / Math.max(end - start, 1);
+    });
+    const peak = Math.max(...bars, 0.01);
+
+    return bars.map((level) =>
+      Number(Math.max(0.08, Math.min(level / peak, 1)).toFixed(2)),
+    );
+  } catch {
+    return DEFAULT_VOICE_NOTE_WAVEFORM;
+  } finally {
+    audioContext.close?.();
+  }
 }
 
 function clampMediaVolume(volume) {
@@ -855,40 +1000,263 @@ function AttachmentMediaPlayer({ attachment, label, type }) {
   );
 }
 
+function VoiceNotePlayer({ attachment }) {
+  const audioRef = useRef(null);
+  const objectUrlRef = useRef("");
+  const sourceUrlRef = useRef("");
+  const declaredDuration = getVoiceNoteDuration(attachment);
+  const waveform = getVoiceNoteWaveform(attachment);
+  const [audioSourceUrl, setAudioSourceUrl] = useState("");
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [playbackState, setPlaybackState] = useState({
+    currentTime: 0,
+    duration: declaredDuration,
+    isPlaying: false,
+  });
+  const duration = playbackState.duration || declaredDuration;
+  const progressRatio = duration
+    ? Math.min(playbackState.currentTime / duration, 1)
+    : 0;
+  const playedBars = Math.round(progressRatio * waveform.length);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current);
+    }
+
+    objectUrlRef.current = "";
+    sourceUrlRef.current = "";
+    setAudioSourceUrl("");
+    setIsLoadingAudio(false);
+    setPlaybackState({
+      currentTime: 0,
+      duration: declaredDuration,
+      isPlaying: false,
+    });
+  }, [attachment, declaredDuration]);
+
+  const syncAudioState = useCallback(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    setPlaybackState((currentState) => ({
+      currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
+      duration:
+        Number.isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration
+          : currentState.duration || declaredDuration,
+      isPlaying: !audio.paused && !audio.ended,
+    }));
+  }, [declaredDuration]);
+
+  const ensureAudioSource = useCallback(async () => {
+    if (sourceUrlRef.current) {
+      return sourceUrlRef.current;
+    }
+
+    const directUrl = attachment?.file_url || "";
+
+    if (!isEncryptedAttachment(attachment)) {
+      if (!directUrl) {
+        throw new Error("Voice note is unavailable.");
+      }
+
+      sourceUrlRef.current = directUrl;
+      setAudioSourceUrl(directUrl);
+      return directUrl;
+    }
+
+    setIsLoadingAudio(true);
+
+    try {
+      const blob = await decryptEncryptedAttachmentBlob(attachment);
+      const objectUrl = URL.createObjectURL(blob);
+
+      objectUrlRef.current = objectUrl;
+      sourceUrlRef.current = objectUrl;
+      setAudioSourceUrl(objectUrl);
+      return objectUrl;
+    } finally {
+      setIsLoadingAudio(false);
+    }
+  }, [attachment]);
+
+  const playAudio = useCallback(async () => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    const sourceUrl = await ensureAudioSource();
+
+    if (audio.src !== sourceUrl) {
+      audio.src = sourceUrl;
+    }
+
+    await audio.play();
+  }, [ensureAudioSource]);
+
+  const handleTogglePlay = useCallback(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    if (!audio.paused && !audio.ended) {
+      audio.pause();
+      return;
+    }
+
+    playAudio().catch(() => {
+      setPlaybackState((currentState) => ({
+        ...currentState,
+        isPlaying: false,
+      }));
+    });
+  }, [playAudio]);
+
+  const handleWaveformSeek = useCallback(
+    (event) => {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const ratio = rect.width
+        ? Math.min(Math.max((event.clientX - rect.left) / rect.width, 0), 1)
+        : 0;
+
+      playAudio()
+        .then(() => {
+          const audio = audioRef.current;
+          const seekDuration =
+            Number.isFinite(audio?.duration) && audio.duration > 0
+              ? audio.duration
+              : duration;
+
+          if (!audio || !seekDuration) {
+            return;
+          }
+
+          audio.currentTime = seekDuration * ratio;
+          syncAudioState();
+        })
+        .catch(() => {});
+    },
+    [duration, playAudio, syncAudioState],
+  );
+
+  return (
+    <div className="parent-layout-page__voice-note">
+      <button
+        type="button"
+        className="parent-layout-page__voice-note-play"
+        onClick={handleTogglePlay}
+        aria-label={playbackState.isPlaying ? "Pause voice note" : "Play voice note"}
+        title={playbackState.isPlaying ? "Pause" : "Play"}
+        disabled={isLoadingAudio}
+      >
+        {isLoadingAudio ? (
+          <LoaderCircle size={18} aria-hidden="true" />
+        ) : playbackState.isPlaying ? (
+          <Pause size={18} aria-hidden="true" />
+        ) : (
+          <Play size={18} aria-hidden="true" />
+        )}
+      </button>
+      <div className="parent-layout-page__voice-note-body">
+        <button
+          type="button"
+          className="parent-layout-page__voice-note-waveform"
+          onClick={handleWaveformSeek}
+          aria-label="Seek voice note"
+          title="Seek"
+        >
+          {waveform.map((level, index) => (
+            <span
+              className={index < playedBars ? "is-played" : undefined}
+              key={`${index}-${level}`}
+              style={{ "--voice-note-bar-level": level }}
+            />
+          ))}
+        </button>
+        <span className="parent-layout-page__voice-note-time">
+          {formatMediaTime(playbackState.currentTime)} / {formatMediaTime(duration)}
+        </span>
+      </div>
+      <audio
+        ref={audioRef}
+        preload="metadata"
+        src={audioSourceUrl || undefined}
+        onDurationChange={syncAudioState}
+        onEnded={syncAudioState}
+        onLoadedMetadata={syncAudioState}
+        onPause={syncAudioState}
+        onPlay={syncAudioState}
+        onTimeUpdate={syncAudioState}
+      />
+    </div>
+  );
+}
+
 function MessageAttachments({ attachments, onOpen }) {
-  const visibleAttachments = attachments.slice(0, ATTACHMENT_PREVIEW_LIMIT);
+  const voiceNoteAttachments = attachments.filter(isVoiceNoteAttachment);
+  const regularAttachments = attachments.filter(
+    (attachment) => !isVoiceNoteAttachment(attachment),
+  );
+  const visibleAttachments = regularAttachments.slice(0, ATTACHMENT_PREVIEW_LIMIT);
   const hiddenAttachmentCount = Math.max(
-    attachments.length - ATTACHMENT_PREVIEW_LIMIT,
+    regularAttachments.length - ATTACHMENT_PREVIEW_LIMIT,
     0,
   );
 
   return (
     <div className="parent-layout-page__message-attachments">
-      <div
-        className={`parent-layout-page__message-attachment-grid is-count-${Math.min(
-          visibleAttachments.length,
-          ATTACHMENT_PREVIEW_LIMIT,
-        )}`}
-      >
-        {visibleAttachments.map((attachment, index) => (
-          <AttachmentPreviewTile
-            attachment={attachment}
-            index={index}
-            key={getAttachmentKey(attachment)}
-            overflowCount={hiddenAttachmentCount}
-            onOpen={() => onOpen(attachments, attachment)}
-          />
-        ))}
-      </div>
+      {voiceNoteAttachments.map((attachment) => (
+        <VoiceNotePlayer
+          attachment={attachment}
+          key={getAttachmentKey(attachment)}
+        />
+      ))}
 
-      <button
-        type="button"
-        className="parent-layout-page__message-attachment-summary"
-        onClick={() => onOpen(attachments)}
-      >
-        <Paperclip size={14} aria-hidden="true" />
-        <span>{getAttachmentSummary(attachments)}</span>
-      </button>
+      {regularAttachments.length > 0 ? (
+        <>
+          <div
+            className={`parent-layout-page__message-attachment-grid is-count-${Math.min(
+              visibleAttachments.length,
+              ATTACHMENT_PREVIEW_LIMIT,
+            )}`}
+          >
+            {visibleAttachments.map((attachment, index) => (
+              <AttachmentPreviewTile
+                attachment={attachment}
+                index={index}
+                key={getAttachmentKey(attachment)}
+                overflowCount={hiddenAttachmentCount}
+                onOpen={() => onOpen(regularAttachments, attachment)}
+              />
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="parent-layout-page__message-attachment-summary"
+            onClick={() => onOpen(regularAttachments)}
+          >
+            <Paperclip size={14} aria-hidden="true" />
+            <span>{getAttachmentSummary(regularAttachments)}</span>
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -1290,6 +1658,11 @@ function MessengerConversation({
   const [messageDraft, setMessageDraft] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [voiceRecording, setVoiceRecording] = useState({
+    durationSeconds: 0,
+    startedAt: 0,
+    status: "idle",
+  });
   const [pendingReplyScrollId, setPendingReplyScrollId] = useState(null);
   const [isReplyTargetLoading, setIsReplyTargetLoading] = useState(false);
   const [replyDrag, setReplyDrag] = useState({
@@ -1307,6 +1680,13 @@ function MessengerConversation({
   const messagesEndRef = useRef(null);
   const messageDraftRef = useRef(null);
   const fileInputRef = useRef(null);
+  const voiceRecorderRef = useRef(null);
+  const voiceRecordingChunksRef = useRef([]);
+  const voiceRecordingStreamRef = useRef(null);
+  const voiceRecordingTimerRef = useRef(null);
+  const voiceRecordingStartedAtRef = useRef(0);
+  const voiceRecordingMimeTypeRef = useRef("");
+  const isVoiceRecordingStoppingRef = useRef(false);
   const sendQueueRef = useRef([]);
   const isProcessingSendQueueRef = useRef(false);
   const optimisticMessageSequenceRef = useRef(0);
@@ -1326,6 +1706,10 @@ function MessengerConversation({
   const cachedConversationRef = useRef(cachedConversation || null);
   cachedConversationRef.current = cachedConversation || null;
   const isAttachmentViewerOpen = attachmentViewer.attachments.length > 0;
+  const isVoiceRecording =
+    voiceRecording.status === "recording" ||
+    voiceRecording.status === "finishing";
+  const isVoiceRecordingFinishing = voiceRecording.status === "finishing";
 
   const focusMessageDraft = useCallback(() => {
     const textarea = messageDraftRef.current;
@@ -1431,6 +1815,206 @@ function MessengerConversation({
 
     scheduleTypingStopped();
   }, [scheduleTypingStopped, sendRoomSocketEvent]);
+
+  const clearVoiceRecordingTimer = useCallback(() => {
+    if (voiceRecordingTimerRef.current) {
+      globalThis.clearInterval(voiceRecordingTimerRef.current);
+      voiceRecordingTimerRef.current = null;
+    }
+  }, []);
+
+  const stopVoiceRecordingStream = useCallback(() => {
+    voiceRecordingStreamRef.current?.getTracks?.().forEach((track) => {
+      track.stop();
+    });
+    voiceRecordingStreamRef.current = null;
+  }, []);
+
+  const resetVoiceRecordingState = useCallback(() => {
+    clearVoiceRecordingTimer();
+    stopVoiceRecordingStream();
+    voiceRecorderRef.current = null;
+    voiceRecordingChunksRef.current = [];
+    voiceRecordingStartedAtRef.current = 0;
+    voiceRecordingMimeTypeRef.current = "";
+    isVoiceRecordingStoppingRef.current = false;
+    setVoiceRecording({
+      durationSeconds: 0,
+      startedAt: 0,
+      status: "idle",
+    });
+  }, [clearVoiceRecordingTimer, stopVoiceRecordingStream]);
+
+  const finishVoiceRecording = useCallback(
+    ({ discard = false } = {}) =>
+      new Promise((resolve, reject) => {
+        const recorder = voiceRecorderRef.current;
+        const startedAt = voiceRecordingStartedAtRef.current || Date.now();
+        const mimeType =
+          voiceRecordingMimeTypeRef.current ||
+          recorder?.mimeType ||
+          "audio/webm";
+
+        const finalize = () => {
+          const chunks = voiceRecordingChunksRef.current;
+          const durationSeconds = Math.max(
+            1,
+            Math.round((Date.now() - startedAt) / 1000),
+          );
+
+          resetVoiceRecordingState();
+
+          if (discard) {
+            resolve(null);
+            return;
+          }
+
+          const blob = new Blob(chunks, {
+            type: mimeType,
+          });
+
+          if (!blob.size) {
+            reject(new Error("Voice note recording is empty."));
+            return;
+          }
+
+          resolve({
+            blob,
+            durationSeconds,
+            mimeType: blob.type || mimeType,
+          });
+        };
+
+        if (!recorder || recorder.state === "inactive") {
+          finalize();
+          return;
+        }
+
+        if (isVoiceRecordingStoppingRef.current) {
+          reject(new Error("Voice note is already stopping."));
+          return;
+        }
+
+        isVoiceRecordingStoppingRef.current = true;
+        setVoiceRecording((currentRecording) => ({
+          ...currentRecording,
+          status: "finishing",
+        }));
+
+        recorder.addEventListener("stop", finalize, { once: true });
+        recorder.addEventListener(
+          "error",
+          () => {
+            resetVoiceRecordingState();
+            reject(new Error("Voice note recording failed."));
+          },
+          { once: true },
+        );
+        recorder.stop();
+      }),
+    [resetVoiceRecordingState],
+  );
+
+  const handleStartVoiceRecording = useCallback(async () => {
+    if (isVoiceRecording || !hasActiveConversation) {
+      return;
+    }
+
+    if (
+      typeof globalThis.MediaRecorder === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      setRoomMessage("Voice recording is not supported in this browser.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          autoGainControl: true,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      const mimeType = getSupportedVoiceNoteMimeType();
+      const recorderOptions = {
+        audioBitsPerSecond: VOICE_NOTE_AUDIO_BITRATE,
+        ...(mimeType ? { mimeType } : {}),
+      };
+      const recorder = new MediaRecorder(stream, recorderOptions);
+      const startedAt = Date.now();
+
+      voiceRecordingChunksRef.current = [];
+      voiceRecordingStreamRef.current = stream;
+      voiceRecorderRef.current = recorder;
+      voiceRecordingStartedAtRef.current = startedAt;
+      voiceRecordingMimeTypeRef.current = recorder.mimeType || mimeType;
+      isVoiceRecordingStoppingRef.current = false;
+
+      recorder.addEventListener("dataavailable", (event) => {
+        if (event.data?.size > 0) {
+          voiceRecordingChunksRef.current.push(event.data);
+        }
+      });
+      recorder.addEventListener("error", () => {
+        resetVoiceRecordingState();
+        setRoomMessage("Voice recording stopped unexpectedly.");
+      });
+
+      recorder.start(1000);
+      clearVoiceRecordingTimer();
+      voiceRecordingTimerRef.current = globalThis.setInterval(() => {
+        const elapsedSeconds = Math.min(
+          VOICE_NOTE_MAX_DURATION_SECONDS,
+          Math.floor((Date.now() - startedAt) / 1000),
+        );
+
+        setVoiceRecording((currentRecording) => ({
+          ...currentRecording,
+          durationSeconds: elapsedSeconds,
+        }));
+      }, 250);
+      setVoiceRecording({
+        durationSeconds: 0,
+        startedAt,
+        status: "recording",
+      });
+      setRoomMessage("");
+      sendTypingStopped();
+      messageDraftRef.current?.blur();
+    } catch (error) {
+      resetVoiceRecordingState();
+      setRoomMessage(
+        error?.name === "NotAllowedError"
+          ? "Microphone permission is required to record a voice note."
+          : "Unable to start voice recording.",
+      );
+    }
+  }, [
+    clearVoiceRecordingTimer,
+    hasActiveConversation,
+    isVoiceRecording,
+    resetVoiceRecordingState,
+    sendTypingStopped,
+  ]);
+
+  const handleCancelVoiceRecording = useCallback(() => {
+    finishVoiceRecording({ discard: true })
+      .then(() => {
+        setRoomMessage("");
+        globalThis.requestAnimationFrame(focusMessageDraft);
+      })
+      .catch(() => {
+        resetVoiceRecordingState();
+      });
+  }, [finishVoiceRecording, focusMessageDraft, resetVoiceRecordingState]);
+
+  useEffect(() => {
+    return () => {
+      resetVoiceRecordingState();
+    };
+  }, [resetVoiceRecordingState]);
 
   const removeRemoteTypingUser = useCallback((userId) => {
     const numericUserId = Number(userId);
@@ -1678,6 +2262,7 @@ function MessengerConversation({
 
   useEffect(() => {
     sendTypingStopped();
+    resetVoiceRecordingState();
     clearRemoteTypingUsers();
     setMessageDraft("");
     setReplyTarget(null);
@@ -1723,6 +2308,7 @@ function MessengerConversation({
     clearRemoteTypingUsers,
     loadRoomMessages,
     releasedMessagesVersion,
+    resetVoiceRecordingState,
     selectedPeerAccountNumber,
     selectedRoom?.id,
     sendTypingStopped,
@@ -2657,83 +3243,156 @@ function MessengerConversation({
     user,
   ]);
 
-  const handleSendMessage = (event) => {
-    event?.preventDefault();
+  const queueOutgoingMessage = useCallback(
+    ({ filesToSend = [], replyTargetSnapshot = null, text = "" }) => {
+      const normalizedText = String(text || "").trim();
+      const safeFilesToSend = Array.isArray(filesToSend) ? filesToSend : [];
 
-    const text = messageDraft.trim();
+      if (
+        (!normalizedText && safeFilesToSend.length === 0) ||
+        !selectedPeerAccountNumber
+      ) {
+        return false;
+      }
 
-    if (
-      (!text && selectedFiles.length === 0) ||
-      !selectedPeerAccountNumber
-    ) {
-      return;
-    }
+      const replyTargetId = replyTargetSnapshot?.id;
+      const clientMessageId = createMessengerClientMessageId();
+      optimisticMessageSequenceRef.current =
+        (optimisticMessageSequenceRef.current + 1) % 1000;
+      const optimisticMessageId = -(
+        Date.now() * 1000 +
+        optimisticMessageSequenceRef.current
+      );
+      const optimisticAttachments =
+        safeFilesToSend.length > 0
+          ? createOptimisticAttachmentPreviews(safeFilesToSend)
+          : [];
+      const optimisticMessage = {
+        id: optimisticMessageId,
+        room_id: selectedRoom?.id || null,
+        reply_to_message_id: replyTargetId || null,
+        reply_to: replyTargetSnapshot || null,
+        sender_user_id: currentUserId,
+        recipient_user_id: null,
+        text: "",
+        decrypted_text: normalizedText,
+        decrypted_attachments: optimisticAttachments,
+        decryption_status: "ok",
+        is_encrypted: true,
+        client_message_id: clientMessageId,
+        status: "sending",
+        attachments: [],
+        created_at: new Date().toISOString(),
+        is_pending: true,
+      };
+      let didReleaseOptimisticAttachments = false;
+      const releaseOptimisticPreviews = () => {
+        if (didReleaseOptimisticAttachments) {
+          return;
+        }
 
-    const replyTargetId = replyTarget?.id;
-    const replyTargetSnapshot = replyTarget;
-    const filesToSend = selectedFiles;
-    const clientMessageId = createMessengerClientMessageId();
-    optimisticMessageSequenceRef.current =
-      (optimisticMessageSequenceRef.current + 1) % 1000;
-    const optimisticMessageId = -(
-      Date.now() * 1000 +
-      optimisticMessageSequenceRef.current
-    );
-    const optimisticAttachments =
-      filesToSend.length > 0
-        ? createOptimisticAttachmentPreviews(filesToSend)
-        : [];
-    const optimisticMessage = {
-      id: optimisticMessageId,
-      room_id: selectedRoom?.id || null,
-      reply_to_message_id: replyTargetId || null,
-      reply_to: replyTargetSnapshot || null,
-      sender_user_id: currentUserId,
-      recipient_user_id: null,
-      text: "",
-      decrypted_text: text,
-      decrypted_attachments: optimisticAttachments,
-      decryption_status: "ok",
-      is_encrypted: true,
-      client_message_id: clientMessageId,
-      status: "sending",
-      attachments: [],
-      created_at: new Date().toISOString(),
-      is_pending: true,
-    };
-    let didReleaseOptimisticAttachments = false;
-    const releaseOptimisticPreviews = () => {
-      if (didReleaseOptimisticAttachments) {
+        didReleaseOptimisticAttachments = true;
+        releaseOptimisticAttachmentPreviews(optimisticAttachments);
+      };
+
+      setRoomMessage("");
+      sendTypingStopped();
+      setRoomMessages((currentMessages) =>
+        upsertMessage(currentMessages, optimisticMessage),
+      );
+      setMessageDraft("");
+      setReplyTarget(null);
+      setSelectedFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      focusMessageDraft();
+
+      sendQueueRef.current.push({
+        clientMessageId,
+        filesToSend: safeFilesToSend,
+        recipientAccountNumber: selectedPeerAccountNumber,
+        releaseOptimisticPreviews,
+        replyTargetId,
+        replyTargetSnapshot,
+        text: normalizedText,
+      });
+      void processSendQueue();
+      return true;
+    },
+    [
+      currentUserId,
+      focusMessageDraft,
+      processSendQueue,
+      selectedPeerAccountNumber,
+      selectedRoom?.id,
+      sendTypingStopped,
+    ],
+  );
+
+  const handleSendVoiceRecording = useCallback(async () => {
+    try {
+      const recording = await finishVoiceRecording();
+
+      if (!recording?.blob) {
         return;
       }
 
-      didReleaseOptimisticAttachments = true;
-      releaseOptimisticAttachmentPreviews(optimisticAttachments);
-    };
+      const waveform = await createVoiceNoteWaveform(recording.blob);
+      const extension = getVoiceNoteFileExtension(recording.mimeType);
+      const file = new File(
+        [recording.blob],
+        `voice-note-${Date.now()}.${extension}`,
+        {
+          type: recording.mimeType || recording.blob.type || "audio/webm",
+        },
+      );
+      const voiceNoteFile = {
+        id: createSelectedFileId(file),
+        attachmentKind: VOICE_NOTE_ATTACHMENT_KIND,
+        durationSeconds: recording.durationSeconds,
+        file,
+        fileType: "audio",
+        waveform,
+      };
 
-    setRoomMessage("");
-    sendTypingStopped();
-    setRoomMessages((currentMessages) =>
-      upsertMessage(currentMessages, optimisticMessage),
-    );
-    setMessageDraft("");
-    setReplyTarget(null);
-    setSelectedFiles([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      queueOutgoingMessage({
+        filesToSend: [voiceNoteFile],
+        replyTargetSnapshot: replyTarget,
+        text: "",
+      });
+    } catch (error) {
+      setRoomMessage(error?.message || "Unable to send voice note.");
+      resetVoiceRecordingState();
     }
-    focusMessageDraft();
+  }, [
+    finishVoiceRecording,
+    queueOutgoingMessage,
+    replyTarget,
+    resetVoiceRecordingState,
+  ]);
 
-    sendQueueRef.current.push({
-      clientMessageId,
-      filesToSend,
-      recipientAccountNumber: selectedPeerAccountNumber,
-      releaseOptimisticPreviews,
-      replyTargetId,
-      replyTargetSnapshot,
-      text,
+  useEffect(() => {
+    if (
+      voiceRecording.status === "recording" &&
+      voiceRecording.durationSeconds >= VOICE_NOTE_MAX_DURATION_SECONDS
+    ) {
+      void handleSendVoiceRecording();
+    }
+  }, [
+    handleSendVoiceRecording,
+    voiceRecording.durationSeconds,
+    voiceRecording.status,
+  ]);
+
+  const handleSendMessage = (event) => {
+    event?.preventDefault();
+
+    queueOutgoingMessage({
+      filesToSend: selectedFiles,
+      replyTargetSnapshot: replyTarget,
+      text: messageDraft,
     });
-    void processSendQueue();
   };
 
   const handleMessageDraftChange = (event) => {
@@ -2748,12 +3407,20 @@ function MessengerConversation({
   };
 
   const handleMessageDraftKeyDown = (event) => {
+    if (isVoiceRecording) {
+      return;
+    }
+
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent?.isComposing) {
       return;
     }
 
     handleSendMessage(event);
   };
+
+  const hasComposedMessage = Boolean(
+    messageDraft.trim() || selectedFiles.length > 0,
+  );
 
   if (!hasActiveConversation) {
     return (
@@ -2980,15 +3647,23 @@ function MessengerConversation({
             </button>
           </div>
         ) : null}
-        {selectedFiles.length > 0 ? (
+        {selectedFiles.length > 0 && !isVoiceRecording ? (
           <div className="parent-layout-page__message-file-list">
             {selectedFiles.map((selectedFile) => (
               <span
-                className="parent-layout-page__message-file-chip"
+                className={`parent-layout-page__message-file-chip${
+                  isVoiceNoteSelectedFile(selectedFile) ? " is-voice-note" : ""
+                }`}
                 key={selectedFile.id}
               >
                 <AttachmentIcon fileType={selectedFile.fileType} />
-                <span>{selectedFile.file.name}</span>
+                <span>
+                  {isVoiceNoteSelectedFile(selectedFile)
+                    ? `Voice note ${formatMediaTime(
+                        selectedFile.durationSeconds,
+                      )}`
+                    : selectedFile.file.name}
+                </span>
                 <button
                   type="button"
                   onClick={() => handleRemoveSelectedFile(selectedFile.id)}
@@ -3001,41 +3676,109 @@ function MessengerConversation({
             ))}
           </div>
         ) : null}
-        <button
-          type="button"
-          className="parent-layout-page__message-attach"
-          onClick={() => fileInputRef.current?.click()}
-          aria-label="Attach files"
-          title="Attach files"
-        >
-          <Paperclip size={18} aria-hidden="true" />
-        </button>
-        <input
-          ref={fileInputRef}
-          className="parent-layout-page__message-file-input"
-          type="file"
-          multiple
-          onChange={handleFileInputChange}
-          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.md,.json"
-        />
-        <textarea
-          ref={messageDraftRef}
-          value={messageDraft}
-          onChange={handleMessageDraftChange}
-          onKeyDown={handleMessageDraftKeyDown}
-          placeholder="Message"
-          maxLength={5000}
-          rows={1}
-        />
-        <button
-          type="submit"
-          className="parent-layout-page__message-submit"
-          disabled={!messageDraft.trim() && selectedFiles.length === 0}
-          aria-label={isSendingMessage ? "Queue message" : "Send message"}
-          title="Send"
-        >
-          <Send size={20} aria-hidden="true" />
-        </button>
+        {isVoiceRecording ? (
+          <>
+            <button
+              type="button"
+              className="parent-layout-page__message-attach is-recording-cancel"
+              onClick={handleCancelVoiceRecording}
+              aria-label="Cancel voice note"
+              title="Cancel"
+              disabled={isVoiceRecordingFinishing}
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
+            <div
+              className="parent-layout-page__voice-recording"
+              role="status"
+              aria-live="polite"
+            >
+              <span
+                className="parent-layout-page__voice-recording-dot"
+                aria-hidden="true"
+              />
+              <div className="parent-layout-page__voice-recording-wave">
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+                <i />
+              </div>
+              <span className="parent-layout-page__voice-recording-time">
+                {formatMediaTime(voiceRecording.durationSeconds)}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="parent-layout-page__message-submit is-recording-send"
+              onClick={handleSendVoiceRecording}
+              disabled={isVoiceRecordingFinishing}
+              aria-label="Send voice note"
+              title="Send voice note"
+            >
+              {isVoiceRecordingFinishing ? (
+                <LoaderCircle size={19} aria-hidden="true" />
+              ) : (
+                <Send size={20} aria-hidden="true" />
+              )}
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="parent-layout-page__message-attach"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach files"
+              title="Attach files"
+            >
+              <Paperclip size={18} aria-hidden="true" />
+            </button>
+            <input
+              ref={fileInputRef}
+              className="parent-layout-page__message-file-input"
+              type="file"
+              multiple
+              onChange={handleFileInputChange}
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.md,.json"
+            />
+            <textarea
+              ref={messageDraftRef}
+              value={messageDraft}
+              onChange={handleMessageDraftChange}
+              onKeyDown={handleMessageDraftKeyDown}
+              placeholder="Message"
+              maxLength={5000}
+              rows={1}
+            />
+            <button
+              type={hasComposedMessage ? "submit" : "button"}
+              className={`parent-layout-page__message-submit${
+                hasComposedMessage ? "" : " is-voice-idle"
+              }`}
+              onClick={
+                hasComposedMessage ? undefined : handleStartVoiceRecording
+              }
+              aria-label={
+                hasComposedMessage
+                  ? isSendingMessage
+                    ? "Queue message"
+                    : "Send message"
+                  : "Record voice note"
+              }
+              title={hasComposedMessage ? "Send" : "Record voice note"}
+            >
+              {hasComposedMessage ? (
+                <Send size={20} aria-hidden="true" />
+              ) : (
+                <Mic size={20} aria-hidden="true" />
+              )}
+            </button>
+          </>
+        )}
       </form>
       {attachmentViewer.attachments.length > 0 ? (
         <AttachmentViewerModal

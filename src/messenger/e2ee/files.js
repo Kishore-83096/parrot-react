@@ -130,8 +130,39 @@ async function encryptSelectedFile(selectedFile, index) {
     mime_type: file.type || "application/octet-stream",
     file_size_bytes: file.size,
     file_type: selectedFile.fileType || "document",
+    attachment_kind: normalizeOptionalAttachmentKind(
+      selectedFile.attachmentKind,
+    ),
+    duration_seconds: normalizeOptionalPositiveNumber(
+      selectedFile.durationSeconds,
+    ),
+    waveform: normalizeOptionalWaveform(selectedFile.waveform),
     sort_order: index,
   };
+}
+
+function normalizeOptionalAttachmentKind(value) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeOptionalPositiveNumber(value) {
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) && numberValue > 0
+    ? Math.round(numberValue)
+    : null;
+}
+
+function normalizeOptionalWaveform(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .slice(0, 80)
+    .map((level) => Number(level))
+    .filter((level) => Number.isFinite(level))
+    .map((level) => Math.min(Math.max(level, 0), 1));
 }
 
 async function uploadEncryptedFileWithIntent(encryptedFile, uploadIntent) {

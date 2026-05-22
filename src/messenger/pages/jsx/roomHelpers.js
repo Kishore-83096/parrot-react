@@ -9,6 +9,8 @@ import {
   isEncryptedMessageText,
 } from "../../e2ee/messages.js";
 
+const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
+
 export {
   getContactInitials,
   getContactName,
@@ -90,7 +92,17 @@ export function getLastMessagePreview(room, currentUser) {
     : Array.isArray(message.attachments)
       ? message.attachments.length
       : 0;
+  const attachments = Array.isArray(message.decrypted_attachments)
+    ? message.decrypted_attachments
+    : Array.isArray(message.attachments)
+      ? message.attachments
+      : [];
+  const voiceNoteCount = attachments.filter(isVoiceNoteAttachment).length;
   let preview = messageText;
+
+  if (!preview && voiceNoteCount > 0 && voiceNoteCount === attachmentCount) {
+    preview = voiceNoteCount === 1 ? "Voice note" : `${voiceNoteCount} voice notes`;
+  }
 
   if (!preview && isEncryptedMessageText(message.text)) {
     preview = "Encrypted message";
@@ -106,6 +118,15 @@ export function getLastMessagePreview(room, currentUser) {
   }
 
   return preview;
+}
+
+function isVoiceNoteAttachment(attachment) {
+  return (
+    attachment?.attachment_kind === VOICE_NOTE_ATTACHMENT_KIND ||
+    attachment?.attachmentKind === VOICE_NOTE_ATTACHMENT_KIND ||
+    attachment?.kind === VOICE_NOTE_ATTACHMENT_KIND ||
+    attachment?.is_voice_note === true
+  );
 }
 
 export function formatRoomTime(value) {
