@@ -18,6 +18,7 @@
   Play,
   Reply,
   Send,
+  Smile,
   Trash2,
   Video,
   Volume1,
@@ -43,6 +44,7 @@ import {
   getMessengerToken,
   markMessengerRoomRead,
   MESSENGER_INBOX_EVENT_NAME,
+  reactToMessengerMessage,
   sendMessengerMessage,
 } from "../../api.js";
 import {
@@ -95,6 +97,14 @@ const DEFAULT_VOICE_NOTE_WAVEFORM = [
   0.6, 0.34, 0.74, 0.54, 0.42, 0.8, 0.48, 0.66, 0.36, 0.58,
   0.86, 0.4, 0.62, 0.5, 0.78, 0.32, 0.68, 0.44, 0.56, 0.72,
 ];
+const MESSAGE_REACTIONS = [
+  { key: "thumbs_up", emoji: "\u{1F44D}", label: "Thumbs up" },
+  { key: "heart", emoji: "\u2764\uFE0F", label: "Heart" },
+  { key: "laugh", emoji: "\u{1F602}", label: "Laugh" },
+  { key: "surprised", emoji: "\u{1F62E}", label: "Surprised" },
+  { key: "sad", emoji: "\u{1F622}", label: "Sad" },
+];
+const MESSAGE_REACTION_KEYS = MESSAGE_REACTIONS.map((reaction) => reaction.key);
 function getEmptyMessagePagination() {
   return {
     hasMore: false,
@@ -118,6 +128,113 @@ const OFFICE_DOCUMENT_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
+
+function getReactionConfig(reactionKey) {
+  return (
+    MESSAGE_REACTIONS.find((reaction) => reaction.key === reactionKey) || null
+  );
+}
+
+function normalizeReactionGroups(reactions, myReaction = null) {
+  const countByReaction = new Map();
+
+  (Array.isArray(reactions) ? reactions : []).forEach((reactionItem) => {
+    const reactionKey = String(reactionItem?.reaction || "");
+    const count = Math.max(Number(reactionItem?.count || 0), 0);
+
+    if (!MESSAGE_REACTION_KEYS.includes(reactionKey) || count <= 0) {
+      return;
+    }
+
+    countByReaction.set(
+      reactionKey,
+      (countByReaction.get(reactionKey) || 0) + count,
+    );
+  });
+
+  return MESSAGE_REACTIONS.map((reaction) => {
+    const count = countByReaction.get(reaction.key) || 0;
+
+    return count > 0
+      ? {
+          reaction: reaction.key,
+          count,
+          reacted_by_me: reaction.key === myReaction,
+        }
+      : null;
+  }).filter(Boolean);
+}
+
+function getMessageMyReaction(message) {
+  const explicitReaction = String(message?.my_reaction || "");
+
+  if (MESSAGE_REACTION_KEYS.includes(explicitReaction)) {
+    return explicitReaction;
+  }
+
+  const reactedByMe = (Array.isArray(message?.reactions)
+    ? message.reactions
+    : []
+  ).find((reactionItem) => reactionItem?.reacted_by_me);
+  const reactionKey = String(reactedByMe?.reaction || "");
+
+  return MESSAGE_REACTION_KEYS.includes(reactionKey) ? reactionKey : null;
+}
+
+function applyOptimisticReaction(message, reactionKey, currentUserId) {
+  const currentReaction = getMessageMyReaction(message);
+  const nextReaction = currentReaction === reactionKey ? null : reactionKey;
+  const counts = new Map();
+
+  normalizeReactionGroups(message?.reactions, currentReaction).forEach(
+    (reactionItem) => {
+      counts.set(reactionItem.reaction, reactionItem.count);
+    },
+  );
+
+  if (currentReaction) {
+    counts.set(
+      currentReaction,
+      Math.max((counts.get(currentReaction) || 0) - 1, 0),
+    );
+  }
+
+  if (nextReaction) {
+    counts.set(nextReaction, (counts.get(nextReaction) || 0) + 1);
+  }
+
+  const reactions = MESSAGE_REACTIONS.map((reaction) => {
+    const count = counts.get(reaction.key) || 0;
+
+    return count > 0
+      ? {
+          reaction: reaction.key,
+          count,
+          reacted_by_me: reaction.key === nextReaction,
+        }
+      : null;
+  }).filter(Boolean);
+
+  return {
+    ...message,
+    reactions,
+    my_reaction: nextReaction,
+  };
+}
+
+function applyReactionSnapshot(message, snapshot, currentUserId) {
+  const actingUserId = Number(snapshot?.user_id);
+  const nextMyReaction =
+    actingUserId && actingUserId === Number(currentUserId)
+      ? snapshot?.reaction || null
+      : getMessageMyReaction(message);
+
+  return {
+    ...message,
+    reactions: normalizeReactionGroups(snapshot?.reactions, nextMyReaction),
+    my_reaction: nextMyReaction,
+  };
+}
 
 function isTextEntryElement(element) {
   if (!element) {
@@ -1998,6 +2115,77 @@ function mergeMessagePage(currentMessages, pageMessages) {
   });
 }
 
+function MessageReactionSummary({ message, onSelect }) {
+  const reactions = normalizeReactionGroups(
+    message?.reactions,
+    getMessageMyReaction(message) || null,
+  );
+
+  if (reactions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className="parent-layout-page__message-reactions"
+      aria-label="Message reactions"
+    >
+      {reactions.map((reactionItem) => {
+        const reactionConfig = getReactionConfig(reactionItem.reaction);
+
+        if (!reactionConfig) {
+          return null;
+        }
+
+        return (
+          <button
+            key={reactionItem.reaction}
+            type="button"
+            className={`parent-layout-page__message-reaction-pill${
+              reactionItem.reacted_by_me ? " is-selected" : ""
+            }`}
+            onClick={() => onSelect(message, reactionItem.reaction)}
+            aria-label={`${reactionConfig.label} reaction${
+              reactionItem.count > 1 ? `, ${reactionItem.count}` : ""
+            }`}
+            title={reactionConfig.label}
+          >
+            <span>{reactionConfig.emoji}</span>
+            {reactionItem.count > 1 ? <strong>{reactionItem.count}</strong> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MessageReactionPicker({ message, onSelect }) {
+  const myReaction = message?.my_reaction || null;
+
+  return (
+    <div
+      className="parent-layout-page__message-reaction-picker"
+      role="menu"
+      aria-label="Choose reaction"
+      data-reaction-picker-root="true"
+    >
+      {MESSAGE_REACTIONS.map((reaction) => (
+        <button
+          key={reaction.key}
+          type="button"
+          className={myReaction === reaction.key ? "is-selected" : ""}
+          onClick={() => onSelect(message, reaction.key)}
+          role="menuitem"
+          aria-label={reaction.label}
+          title={reaction.label}
+        >
+          <span>{reaction.emoji}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function MessengerConversation({
   selectedContact,
   selectedRoom,
@@ -2030,6 +2218,7 @@ function MessengerConversation({
     messageId: null,
     offsetX: 0,
   });
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
   const [attachmentViewer, setAttachmentViewer] = useState({
     attachments: [],
     playback: null,
@@ -2061,6 +2250,7 @@ function MessengerConversation({
   const skipNextAutoScrollRef = useRef(false);
   const isOlderMessagesLoadingRef = useRef(false);
   const replyDragStateRef = useRef(null);
+  const reactionRequestSequenceRef = useRef(new Map());
   const typingStopTimeoutRef = useRef(null);
   const typingRemoteTimeoutsRef = useRef(new Map());
   const isTypingSentRef = useRef(false);
@@ -2498,6 +2688,27 @@ function MessengerConversation({
     [currentUserId],
   );
 
+  const applyMessageReactionEvent = useCallback(
+    (eventPayload) => {
+      if (
+        eventPayload?.type !== "message.reaction_updated" ||
+        Number(eventPayload.room_id) !==
+          Number(activeConversationRef.current.roomId)
+      ) {
+        return;
+      }
+
+      setRoomMessages((currentMessages) =>
+        currentMessages.map((message) =>
+          Number(message.id) === Number(eventPayload.message_id)
+            ? applyReactionSnapshot(message, eventPayload, currentUserId)
+            : message,
+        ),
+      );
+    },
+    [currentUserId],
+  );
+
   const markIncomingRoomMessageRead = useCallback(
     (roomId, nextMessage) => {
       const messageId = String(nextMessage?.id || "");
@@ -2628,6 +2839,7 @@ function MessengerConversation({
     clearRemoteTypingUsers();
     setMessageDraft("");
     setReplyTarget(null);
+    setReactionPickerMessageId(null);
     setSelectedFiles([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -2740,6 +2952,26 @@ function MessengerConversation({
       );
     };
   }, [focusMessageDraft, hasActiveConversation, isAttachmentViewerOpen]);
+
+  useEffect(() => {
+    if (!reactionPickerMessageId) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (event.target?.closest?.("[data-reaction-picker-root]")) {
+        return;
+      }
+
+      setReactionPickerMessageId(null);
+    };
+
+    globalThis.document?.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      globalThis.document?.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [reactionPickerMessageId]);
 
   useLayoutEffect(() => {
     const scrollSnapshot = olderMessagesScrollRef.current;
@@ -2892,6 +3124,14 @@ function MessengerConversation({
             Number(eventPayload.room_id) === Number(roomId)
           ) {
             applyMessageStatusEvent(eventPayload);
+            return;
+          }
+
+          if (
+            eventPayload.type === "message.reaction_updated" &&
+            Number(eventPayload.room_id) === Number(roomId)
+          ) {
+            applyMessageReactionEvent(eventPayload);
           }
         };
 
@@ -2939,6 +3179,7 @@ function MessengerConversation({
     clearRemoteTypingUsers,
     currentUserId,
     applyMessageStatusEvent,
+    applyMessageReactionEvent,
     loadRoomMessages,
     markIncomingRoomMessageRead,
     onRoomMessage,
@@ -2998,6 +3239,11 @@ function MessengerConversation({
         eventPayload?.type === "message.delivered"
       ) {
         applyMessageStatusEvent(eventPayload);
+        return;
+      }
+
+      if (eventPayload?.type === "message.reaction_updated") {
+        applyMessageReactionEvent(eventPayload);
       }
     };
 
@@ -3014,6 +3260,7 @@ function MessengerConversation({
     };
   }, [
     applyMessageStatusEvent,
+    applyMessageReactionEvent,
     markIncomingRoomMessageRead,
     onRoomMessage,
     user,
@@ -3152,6 +3399,79 @@ function MessengerConversation({
     setReplyTarget(null);
     focusMessageDraft();
   }, [focusMessageDraft]);
+
+  const handleToggleReactionPicker = useCallback((messageId) => {
+    setReactionPickerMessageId((currentMessageId) =>
+      Number(currentMessageId) === Number(messageId) ? null : messageId,
+    );
+  }, []);
+
+  const handleSelectMessageReaction = useCallback(
+    async (message, reactionKey) => {
+      const messageId = Number(message?.id);
+
+      if (
+        !messageId ||
+        messageId < 0 ||
+        !MESSAGE_REACTION_KEYS.includes(reactionKey)
+      ) {
+        return;
+      }
+
+      const previousMessage = messagesById.get(messageId) || message;
+      const requestId =
+        (reactionRequestSequenceRef.current.get(messageId) || 0) + 1;
+      reactionRequestSequenceRef.current.set(messageId, requestId);
+      setReactionPickerMessageId(null);
+      setRoomMessage("");
+      setRoomMessages((currentMessages) =>
+        currentMessages.map((currentMessage) =>
+          Number(currentMessage.id) === messageId
+            ? applyOptimisticReaction(currentMessage, reactionKey, currentUserId)
+            : currentMessage,
+        ),
+      );
+
+      try {
+        const response = await reactToMessengerMessage(messageId, reactionKey);
+        const reactionResult = response.data?.result || response.data;
+
+        if (reactionRequestSequenceRef.current.get(messageId) !== requestId) {
+          return;
+        }
+
+        reactionRequestSequenceRef.current.delete(messageId);
+        setRoomMessages((currentMessages) =>
+          currentMessages.map((currentMessage) =>
+            Number(currentMessage.id) === messageId
+              ? applyReactionSnapshot(
+                  currentMessage,
+                  reactionResult,
+                  currentUserId,
+                )
+              : currentMessage,
+          ),
+        );
+      } catch (error) {
+        if (reactionRequestSequenceRef.current.get(messageId) !== requestId) {
+          return;
+        }
+
+        reactionRequestSequenceRef.current.delete(messageId);
+        setRoomMessages((currentMessages) =>
+          currentMessages.map((currentMessage) =>
+            Number(currentMessage.id) === messageId
+              ? previousMessage
+              : currentMessage,
+          ),
+        );
+        setRoomMessage(
+          getMessengerErrorMessage(error, "Unable to update reaction."),
+        );
+      }
+    },
+    [currentUserId, messagesById],
+  );
 
   const handleFileInputChange = useCallback((event) => {
     const incomingFiles = Array.from(event.target.files || []);
@@ -3646,6 +3966,8 @@ function MessengerConversation({
         client_message_id: clientMessageId,
         status: "sending",
         attachments: [],
+        reactions: [],
+        my_reaction: null,
         created_at: new Date().toISOString(),
         is_pending: true,
       };
@@ -3851,6 +4173,11 @@ function MessengerConversation({
             const sentWhileBlocked = Boolean(message.sent_while_blocked);
             const replyPreview = getReplyPreview(message);
             const isReplyDragging = replyDrag.messageId === message.id;
+            const hasMessageReactions =
+              normalizeReactionGroups(message.reactions, message.my_reaction)
+                .length > 0;
+            const isReactionPickerOpen =
+              Number(reactionPickerMessageId) === Number(message.id);
             const messageText = getRenderableMessageText(message);
             const messageAttachments = getMessageAttachments(message);
             const messageStyle = isReplyDragging
@@ -3867,7 +4194,11 @@ function MessengerConversation({
                 <article
                   className={`parent-layout-page__message${
                     isMine ? " is-mine" : " is-theirs"
-                  }${isReplyDragging ? " is-reply-dragging" : ""}`}
+                  }${isReplyDragging ? " is-reply-dragging" : ""}${
+                    hasMessageReactions ? " has-reactions" : ""
+                  }${
+                    isReactionPickerOpen ? " is-reaction-picker-open" : ""
+                  }`}
                   data-message-id={message.id}
                   style={messageStyle}
                   onPointerDown={(event) =>
@@ -3946,16 +4277,42 @@ function MessengerConversation({
                         </span>
                       ) : null}
                     </footer>
+                    <MessageReactionSummary
+                      message={message}
+                      onSelect={handleSelectMessageReaction}
+                    />
                   </div>
-                  <button
-                    type="button"
-                    className="parent-layout-page__message-reply-action"
-                    onClick={() => handleSelectReplyTarget(message)}
-                    aria-label="Reply to message"
-                    title="Reply"
+                  <div
+                    className="parent-layout-page__message-actions"
+                    data-reaction-picker-root="true"
                   >
-                    <Reply size={15} aria-hidden="true" />
-                  </button>
+                    <button
+                      type="button"
+                      className="parent-layout-page__message-reply-action"
+                      onClick={() => handleSelectReplyTarget(message)}
+                      aria-label="Reply to message"
+                      title="Reply"
+                    >
+                      <Reply size={15} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className={`parent-layout-page__message-reaction-action${
+                        isReactionPickerOpen ? " is-active" : ""
+                      }`}
+                      onClick={() => handleToggleReactionPicker(message.id)}
+                      aria-label="React to message"
+                      title="React"
+                    >
+                      <Smile size={15} aria-hidden="true" />
+                    </button>
+                    {isReactionPickerOpen ? (
+                      <MessageReactionPicker
+                        message={message}
+                        onSelect={handleSelectMessageReaction}
+                      />
+                    ) : null}
+                  </div>
                 </article>
               </Fragment>
             );

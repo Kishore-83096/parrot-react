@@ -225,6 +225,12 @@ export const getMessengerInboxWebSocketUrl = (token) =>
 export const sendMessengerMessage = (data) =>
   messengerAxios.post("/messages/send/", data);
 
+export const reactToMessengerMessage = (messageId, reaction) =>
+  messengerAxios.post(
+    `/messages/${encodeURIComponent(messageId)}/reaction/`,
+    { reaction },
+  );
+
 export const registerMessengerCryptoDevice = (data) =>
   messengerAxios.post("/crypto/devices/", data);
 

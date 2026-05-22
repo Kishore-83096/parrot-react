@@ -1,6 +1,6 @@
 # Parrot React Frontend
 
-This is the browser frontend for Parrot. It handles account login, profile management, contacts, real-time chat, encrypted messages, linked devices, and recovery-key flows.
+This is the browser frontend for Parrot. It handles account login, profile management, contacts, real-time chat, encrypted messages, voice notes, inline audio/video playback, linked devices, and recovery-key flows.
 
 ## Tech Stack
 
@@ -74,7 +74,7 @@ src/
 |   |-- e2ee/
 |   |   |-- devices/index.js        # linked-device identity and signed actions
 |   |   |-- messages.js             # message encryption/decryption
-|   |   |-- files.js                # encrypted attachment handling
+|   |   |-- files.js                # encrypted attachment and voice-note handling
 |   |   |-- recovery.js             # recovery-key backup and verification
 |   |   |-- RecoverySetupModal.jsx
 |   |   |-- RecoveryRestoreModal.jsx
@@ -159,11 +159,21 @@ The default-device password is sent only when making a device default or updatin
 
 The conversation composer stays usable while a send is in progress. Each submitted draft is added to an in-memory FIFO queue with an optimistic message and unique `client_message_id`. React encrypts and sends one queued message at a time, which keeps first-come-first-serve order for rapid sends. Messenger treats repeated `client_message_id` values from the same sender as duplicates, so retry behavior remains safe.
 
+## Conversation Composer And Media
+
+The composer keeps the voice-note button separate from the text send button. Text sends use the send action, while voice notes start from the microphone action so recording cannot accidentally conflict with typed-message submission.
+
+Voice notes are recorded in the browser with `navigator.mediaDevices.getUserMedia` and `MediaRecorder`; no third-party voice API is required. When recording stops, React sends the voice note through the same encrypted attachment pipeline used for files. The encrypted message payload marks the attachment as `attachment_kind: "voice_note"` and includes safe UI metadata such as recorded duration and waveform data.
+
+Voice-note playback uses a compact chat-player UI with a play/pause button, progress, duration, and waveform styling. React preloads/decrypts the audio source before playback so the first click starts playback instead of only triggering decryption.
+
+Single non-voice-note audio/video attachments render as inline players inside the conversation. The inline play button controls message-room playback. The maximize button opens the media modal and hands off the current playback time and playing state, so the modal continues from the same position instead of restarting.
+
 ## Encrypted Attachments
 
-React encrypts attachments in the browser before upload. For each queued message with files, React asks Messenger for signed Cloudinary upload intents bound to the authenticated sender, recipient account, and `client_message_id`. It then uploads the encrypted blobs directly to Cloudinary as `raw` resources, completes each intent with Messenger, and sends the completed intent ids with the encrypted message envelope.
+React encrypts attachments in the browser before upload. For each queued message with files or voice notes, React asks Messenger for signed Cloudinary upload intents bound to the authenticated sender, recipient account, and `client_message_id`. It then uploads the encrypted blobs directly to Cloudinary as `raw` resources, completes each intent with Messenger, and sends the completed intent ids with the encrypted message envelope.
 
-Cloudinary API secrets stay only on Messenger. React receives only short-lived signed params for server-generated public ids, and pending/local blob previews are not stored in the UI cache.
+Cloudinary API secrets stay only on Messenger. React receives only short-lived signed params for server-generated public ids, and pending/local blob previews are not stored in the UI cache. Voice-note duration, waveform, and media presentation hints live in the frontend-encrypted payload, not in Messenger-readable fields.
 
 ## Realtime Updates
 
