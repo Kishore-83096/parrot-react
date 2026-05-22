@@ -936,7 +936,7 @@ function AttachmentPreviewTile({
       <span className="parent-layout-page__message-attachment-tile-shade" />
       {index === ATTACHMENT_PREVIEW_LIMIT - 1 && overflowCount > 0 ? (
         <span className="parent-layout-page__message-attachment-more">
-          +{overflowCount}
+          +{overflowCount} more
         </span>
       ) : null}
       <span className="parent-layout-page__message-attachment-type">
@@ -1623,6 +1623,12 @@ function MessageAttachments({ attachments, onOpen }) {
   const shouldRenderInlineMedia =
     regularAttachments.length === 1 &&
     ["audio", "video"].includes(getAttachmentKind(regularAttachments[0]));
+  const singleRegularAttachmentKind =
+    regularAttachments.length === 1
+      ? getAttachmentKind(regularAttachments[0])
+      : "";
+  const shouldShowAttachmentSummary =
+    regularAttachments.length > 1 || singleRegularAttachmentKind !== "image";
   const visibleAttachments = regularAttachments.slice(0, ATTACHMENT_PREVIEW_LIMIT);
   const hiddenAttachmentCount = Math.max(
     regularAttachments.length - ATTACHMENT_PREVIEW_LIMIT,
@@ -1659,32 +1665,34 @@ function MessageAttachments({ attachments, onOpen }) {
           />
         ) : (
           <>
-          <div
-            className={`parent-layout-page__message-attachment-grid is-count-${Math.min(
-              visibleAttachments.length,
-              ATTACHMENT_PREVIEW_LIMIT,
-            )}`}
-          >
-            {visibleAttachments.map((attachment, index) => (
-              <AttachmentPreviewTile
-                attachment={attachment}
-                index={index}
-                key={getAttachmentKey(attachment)}
-                overflowCount={hiddenAttachmentCount}
-                onOpen={() => onOpen(regularAttachments, attachment)}
-              />
-            ))}
-          </div>
+            <div
+              className={`parent-layout-page__message-attachment-grid is-count-${Math.min(
+                visibleAttachments.length,
+                ATTACHMENT_PREVIEW_LIMIT,
+              )}`}
+            >
+              {visibleAttachments.map((attachment, index) => (
+                <AttachmentPreviewTile
+                  attachment={attachment}
+                  index={index}
+                  key={getAttachmentKey(attachment)}
+                  overflowCount={hiddenAttachmentCount}
+                  onOpen={() => onOpen(regularAttachments, attachment)}
+                />
+              ))}
+            </div>
 
-          <button
-            type="button"
-            className="parent-layout-page__message-attachment-summary"
-            onClick={() => onOpen(regularAttachments)}
-          >
-            <Paperclip size={14} aria-hidden="true" />
-            <span>{getAttachmentSummary(regularAttachments)}</span>
-          </button>
-        </>
+            {shouldShowAttachmentSummary ? (
+              <button
+                type="button"
+                className="parent-layout-page__message-attachment-summary"
+                onClick={() => onOpen(regularAttachments)}
+              >
+                <Paperclip size={14} aria-hidden="true" />
+                <span>{getAttachmentSummary(regularAttachments)}</span>
+              </button>
+            ) : null}
+          </>
         )
       ) : null}
     </div>

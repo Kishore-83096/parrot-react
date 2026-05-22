@@ -1733,6 +1733,10 @@
   --message-caption-width: 224px;
 }
 
+.parent-layout-page__message-bubble.has-attachments.is-attachment-count-1 {
+  --message-caption-width: 284px;
+}
+
 .parent-layout-page__message-bubble.has-attachments.is-attachment-count-2 {
   --message-caption-width: 236px;
 }
@@ -1820,12 +1824,15 @@
 }
 
 .parent-layout-page__message-attachment-grid {
-  --message-attachment-tile-height: 74px;
+  --message-attachment-collage-height: 236px;
 
   width: min(284px, 100%);
+  height: var(--message-attachment-collage-height);
   max-width: 100%;
+  box-sizing: border-box;
   display: grid;
-  grid-auto-rows: var(--message-attachment-tile-height);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 4px;
   overflow: hidden;
   border-radius: 12px;
@@ -1833,34 +1840,39 @@
 }
 
 .parent-layout-page__message-attachment-grid.is-count-1 {
-  --message-attachment-tile-height: 176px;
+  --message-attachment-collage-height: 224px;
 
-  width: min(224px, 100%);
-  grid-template-columns: minmax(0, min(224px, 100%));
+  width: min(284px, 100%);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  border: 1px solid rgba(124, 60, 255, 0.12);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.32), rgba(244, 239, 255, 0.18)),
+    rgba(255, 255, 255, 0.16);
+  box-shadow: 0 12px 24px rgba(95, 52, 167, 0.08);
 }
 
 .parent-layout-page__message-attachment-grid.is-count-2 {
-  --message-attachment-tile-height: 118px;
-
-  width: min(236px, 100%);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
 .parent-layout-page__message-attachment-grid.is-count-3 {
-  width: min(242px, 100%);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
 }
 
-.parent-layout-page__message-attachment-grid.is-count-4 {
-  width: min(284px, 100%);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.parent-layout-page__message-attachment-grid.is-count-3 .parent-layout-page__message-attachment-tile:first-child {
+  grid-column: 1 / -1;
 }
 
 .parent-layout-page__message-attachment-tile {
   min-width: 0;
+  min-height: 0;
   width: 100%;
-  height: var(--message-attachment-tile-height);
-  max-height: var(--message-attachment-tile-height);
+  height: 100%;
   padding: 0;
   position: relative;
   display: grid;
@@ -1873,13 +1885,16 @@
 }
 
 .parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile {
-  height: var(--message-attachment-tile-height);
-  max-height: var(--message-attachment-tile-height);
+  grid-column: 1 / -1;
+  justify-self: stretch;
+  align-self: stretch;
+  border-radius: inherit;
 }
 
-.parent-layout-page__message-attachment-grid.is-count-2 .parent-layout-page__message-attachment-tile {
-  height: var(--message-attachment-tile-height);
-  max-height: var(--message-attachment-tile-height);
+.parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile.is-image {
+  background:
+    linear-gradient(135deg, rgba(246, 242, 255, 0.72), rgba(234, 244, 255, 0.66)),
+    rgba(255, 255, 255, 0.28);
 }
 
 .parent-layout-page__message-attachment-tile img,
@@ -1892,7 +1907,12 @@
   max-height: none;
   display: block;
   object-fit: cover;
+  object-position: center;
   transition: transform 180ms ease;
+}
+
+.parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile.is-image img {
+  object-fit: contain;
 }
 
 .parent-layout-page__image-loading {
@@ -1985,17 +2005,25 @@
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent 42%, rgba(0, 0, 0, 0.42));
 }
 
+.parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile.is-image .parent-layout-page__message-attachment-tile-shade,
+.parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile.is-image .parent-layout-page__message-attachment-type {
+  display: none;
+}
+
 .parent-layout-page__message-attachment-more {
   position: absolute;
   inset: 0;
   z-index: 2;
   display: grid;
   place-items: center;
+  padding: 10px;
   color: #ffffff;
-  background: rgba(0, 0, 0, 0.5);
-  font-size: 24px;
-  line-height: 1;
+  background: rgba(9, 8, 18, 0.62);
+  text-align: center;
+  font-size: 18px;
+  line-height: 1.05;
   font-weight: 880;
+  backdrop-filter: blur(4px);
 }
 
 .parent-layout-page__message-attachment-type {
