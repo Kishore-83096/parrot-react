@@ -1,6 +1,6 @@
 # Parrot React Frontend
 
-This is the browser frontend for Parrot. It handles account login, profile management, contacts, real-time chat, encrypted messages, voice notes, inline audio/video playback, linked devices, and recovery-key flows.
+This is the browser frontend for Parrot. It handles account login, profile management, contacts, real-time chat, encrypted messages, message replies, emoji reactions, voice notes, inline audio/video playback, linked devices, and recovery-key flows.
 
 ## Tech Stack
 
@@ -169,6 +169,25 @@ Voice-note playback uses a compact chat-player UI with a play/pause button, prog
 
 Single non-voice-note audio/video attachments render as inline players inside the conversation. The inline play button controls message-room playback. The maximize button opens the media modal and hands off the current playback time and playing state, so the modal continues from the same position instead of restarting.
 
+## Replies And Reactions
+
+Messages support reply targeting and five emoji reactions: thumbs up, heart, laugh, surprised, and sad. The frontend owns the visual emoji mapping and themed styling, while Messenger stores the reaction key and returns grouped reaction counts plus the current user's reaction.
+
+Reply previews are target-aware. If the replied-to message was sent by the current user, the preview uses a blue treatment. If the replied-to message was received from the contact, the preview uses a white treatment. The same styling is used in the composer reply preview before sending and in the final message bubble after sending.
+
+Desktop interaction:
+
+- Hover the message bubble to show the reply control and emoji picker with a small pop animation.
+- The hover trigger is limited to the message bubble, not the full row.
+- Mouse drag-to-reply is disabled on desktop.
+
+Mobile interaction:
+
+- Tap the message bubble to show the reply control and emoji picker beside the bubble.
+- The mobile popup does not rely on hover and does not push the message row down.
+- Swipe either left or right on a message to select it as the reply target.
+- Long press still opens the message actions for touch/pen users.
+
 ## Encrypted Attachments
 
 React encrypts attachments in the browser before upload. For each queued message with files or voice notes, React asks Messenger for signed Cloudinary upload intents bound to the authenticated sender, recipient account, and `client_message_id`. It then uploads the encrypted blobs directly to Cloudinary as `raw` resources, completes each intent with Messenger, and sends the completed intent ids with the encrypted message envelope.
@@ -179,8 +198,8 @@ Cloudinary API secrets stay only on Messenger. React receives only short-lived s
 
 React keeps two Messenger websocket paths active while logged in:
 
-- inbox socket: room list updates, delivery receipts, read receipts, presence, device, and recovery events
-- room socket: open-conversation messages, message status updates, and typing events
+- inbox socket: room list updates, delivery receipts, read receipts, message reaction updates, presence, device, and recovery events
+- room socket: open-conversation messages, message status updates, message reaction updates, and typing events
 
 The room socket sends periodic pings to stay alive behind proxies. The open conversation also listens to inbox message/status events as a fallback, so messages and ticks can update while the room socket is reconnecting.
 

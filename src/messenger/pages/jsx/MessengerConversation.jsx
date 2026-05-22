@@ -18,7 +18,6 @@
   Play,
   Reply,
   Send,
-  Smile,
   Trash2,
   Video,
   Volume1,
@@ -248,6 +247,20 @@ function isTextEntryElement(element) {
   }
 
   return ["INPUT", "SELECT", "TEXTAREA"].includes(element.tagName);
+}
+
+function supportsFineHoverPointer() {
+  return (
+    typeof globalThis.matchMedia === "function" &&
+    globalThis.matchMedia("(hover: hover) and (pointer: fine)").matches
+  );
+}
+
+function supportsMobileMessageTap() {
+  return (
+    typeof globalThis.matchMedia === "function" &&
+    globalThis.matchMedia("(hover: none), (pointer: coarse)").matches
+  );
 }
 
 function getMessagePreviewText(message) {
@@ -2254,6 +2267,7 @@ function MessengerConversation({
   const isOlderMessagesLoadingRef = useRef(false);
   const replyDragStateRef = useRef(null);
   const messageActionLongPressRef = useRef(null);
+  const ignoreNextMessageBubbleClickRef = useRef(null);
   const reactionRequestSequenceRef = useRef(new Map());
   const typingStopTimeoutRef = useRef(null);
   const typingRemoteTimeoutsRef = useRef(new Map());
@@ -3417,19 +3431,64 @@ function MessengerConversation({
     [focusMessageDraft],
   );
 
+  const handleMessageBubbleMouseEnter = useCallback((message) => {
+    if (!message?.id || !supportsFineHoverPointer()) {
+      return;
+    }
+
+    setActiveMessageActionsId(message.id);
+  }, []);
+
+  const handleMessageMouseLeave = useCallback(
+    (message) => {
+      if (!message?.id || !supportsFineHoverPointer()) {
+        return;
+      }
+
+      const messageId = Number(message.id);
+
+      if (Number(activeMessageActionsId) === messageId) {
+        setActiveMessageActionsId(null);
+      }
+
+      if (Number(reactionPickerMessageId) === messageId) {
+        setReactionPickerMessageId(null);
+      }
+    },
+    [activeMessageActionsId, reactionPickerMessageId],
+  );
+
+  const handleMessageBubbleClick = useCallback((event, message) => {
+    const messageId = Number(message?.id);
+
+    if (
+      !messageId ||
+      !supportsMobileMessageTap() ||
+      event.defaultPrevented ||
+      event.target?.closest?.(
+        "a, button, input, select, textarea, [role='button'], [data-reaction-picker-root]",
+      )
+    ) {
+      return;
+    }
+
+    const ignoredClick = ignoreNextMessageBubbleClickRef.current;
+    if (
+      ignoredClick?.messageId === messageId &&
+      ignoredClick.until > Date.now()
+    ) {
+      ignoreNextMessageBubbleClickRef.current = null;
+      return;
+    }
+
+    setActiveMessageActionsId(messageId);
+    setReactionPickerMessageId(messageId);
+  }, []);
+
   const handleClearReplyTarget = useCallback(() => {
     setReplyTarget(null);
     focusMessageDraft();
   }, [focusMessageDraft]);
-
-  const handleToggleReactionPicker = useCallback((messageId) => {
-    setReactionPickerMessageId((currentMessageId) => {
-      const isClosing = Number(currentMessageId) === Number(messageId);
-      setActiveMessageActionsId(isClosing ? null : messageId);
-
-      return isClosing ? null : messageId;
-    });
-  }, []);
 
   const handleSelectMessageReaction = useCallback(
     async (message, reactionKey) => {
@@ -3718,8 +3777,10 @@ function MessengerConversation({
   );
 
   const handleReplyDragStart = useCallback(
-    (event, message, isMine) => {
+    (event, message) => {
       if (
+        !["touch", "pen"].includes(event.pointerType) ||
+        supportsFineHoverPointer() ||
         event.button !== 0 ||
         event.target.closest("a, button, input, select, textarea")
       ) {
@@ -3730,7 +3791,6 @@ function MessengerConversation({
       const dragState = {
         pointerId: event.pointerId,
         message,
-        direction: isMine ? -1 : 1,
         startX: event.clientX,
         startY: event.clientY,
         activated: false,
@@ -3787,11 +3847,10 @@ function MessengerConversation({
       return;
     }
 
-    const directedDelta =
-      (event.clientX - dragState.startX) * dragState.direction;
-    const clampedDelta = Math.max(
-      0,
-      Math.min(directedDelta, MESSAGE_REPLY_DRAG_LIMIT),
+    const rawDelta = event.clientX - dragState.startX;
+    const clampedDelta = Math.min(
+      Math.abs(rawDelta),
+      MESSAGE_REPLY_DRAG_LIMIT,
     );
 
     if (clampedDelta <= 2) {
@@ -3803,7 +3862,7 @@ function MessengerConversation({
     dragState.activated = clampedDelta >= MESSAGE_REPLY_DRAG_THRESHOLD;
     setReplyDrag({
       messageId: dragState.message.id,
-      offsetX: clampedDelta * dragState.direction,
+      offsetX: clampedDelta * (rawDelta < 0 ? -1 : 1),
     });
   }, []);
 
@@ -3818,6 +3877,16 @@ function MessengerConversation({
 
       if (dragState.activated) {
         handleSelectReplyTarget(dragState.message);
+      }
+
+      if (
+        (dragState.activated || dragState.longPressActivated) &&
+        (event.pointerType === "touch" || event.pointerType === "pen")
+      ) {
+        ignoreNextMessageBubbleClickRef.current = {
+          messageId: Number(dragState.message?.id || 0),
+          until: Date.now() + 450,
+        };
       }
 
       replyDragStateRef.current = null;
@@ -4244,6 +4313,13 @@ function MessengerConversation({
             const messageStatus = getMessageStatusLabel(message.status);
             const sentWhileBlocked = Boolean(message.sent_while_blocked);
             const replyPreview = getReplyPreview(message);
+            const replyPreviewClassName = replyPreview
+              ? `parent-layout-page__message-reply-preview ${
+                  Number(replyPreview.sender_user_id) === currentUserId
+                    ? "is-replying-to-mine"
+                    : "is-replying-to-theirs"
+                }`
+              : "parent-layout-page__message-reply-preview";
             const isReplyDragging = replyDrag.messageId === message.id;
             const hasMessageReactions =
               normalizeReactionGroups(message.reactions, message.my_reaction)
@@ -4255,6 +4331,22 @@ function MessengerConversation({
               Number(activeMessageActionsId) === Number(message.id);
             const messageText = getRenderableMessageText(message);
             const messageAttachments = getMessageAttachments(message);
+            const attachmentCountClass =
+              messageAttachments.length > 0
+                ? ` has-attachments is-attachment-count-${Math.min(
+                    messageAttachments.length,
+                    4,
+                  )}`
+                : "";
+            const hasInlineMediaAttachment =
+              messageAttachments.length === 1 &&
+              !isVoiceNoteAttachment(messageAttachments[0]) &&
+              ["audio", "video"].includes(
+                getAttachmentKind(messageAttachments[0]),
+              );
+            const bubbleClassName = `parent-layout-page__message-bubble${attachmentCountClass}${
+              hasInlineMediaAttachment ? " has-inline-media" : ""
+            }`;
             const messageStyle = isReplyDragging
               ? { "--message-reply-drag-x": `${replyDrag.offsetX}px` }
               : undefined;
@@ -4277,22 +4369,27 @@ function MessengerConversation({
                   data-message-id={message.id}
                   style={messageStyle}
                   onPointerDown={(event) =>
-                    handleReplyDragStart(event, message, isMine)
+                    handleReplyDragStart(event, message)
                   }
                   onPointerMove={handleReplyDragMove}
                   onPointerUp={handleReplyDragEnd}
                   onPointerCancel={handleReplyDragEnd}
+                  onMouseLeave={() => handleMessageMouseLeave(message)}
                   onContextMenu={(event) => {
                     if (areMessageActionsOpen) {
                       event.preventDefault();
                     }
                   }}
                 >
-                  <div className="parent-layout-page__message-bubble">
+                  <div
+                    className={bubbleClassName}
+                    onMouseEnter={() => handleMessageBubbleMouseEnter(message)}
+                    onClick={(event) => handleMessageBubbleClick(event, message)}
+                  >
                     {replyPreview ? (
                       <button
                         type="button"
-                        className="parent-layout-page__message-reply-preview"
+                        className={replyPreviewClassName}
                         onClick={() => handleScrollToReplyTarget(replyPreview.id)}
                         disabled={isReplyTargetLoading}
                         aria-label="Show replied message"
@@ -4375,23 +4472,10 @@ function MessengerConversation({
                     >
                       <Reply size={15} aria-hidden="true" />
                     </button>
-                    <button
-                      type="button"
-                      className={`parent-layout-page__message-reaction-action${
-                        isReactionPickerOpen ? " is-active" : ""
-                      }`}
-                      onClick={() => handleToggleReactionPicker(message.id)}
-                      aria-label="React to message"
-                      title="React"
-                    >
-                      <Smile size={15} aria-hidden="true" />
-                    </button>
-                    {isReactionPickerOpen ? (
-                      <MessageReactionPicker
-                        message={message}
-                        onSelect={handleSelectMessageReaction}
-                      />
-                    ) : null}
+                    <MessageReactionPicker
+                      message={message}
+                      onSelect={handleSelectMessageReaction}
+                    />
                   </div>
                 </article>
               </Fragment>
@@ -4429,7 +4513,13 @@ function MessengerConversation({
         onSubmit={handleSendMessage}
       >
         {replyTarget ? (
-          <div className="parent-layout-page__message-reply-composer">
+          <div
+            className={`parent-layout-page__message-reply-composer ${
+              Number(replyTarget.sender_user_id) === currentUserId
+                ? "is-replying-to-mine"
+                : "is-replying-to-theirs"
+            }`}
+          >
             <div>
               <span>
                 {getReplyAuthorLabel(

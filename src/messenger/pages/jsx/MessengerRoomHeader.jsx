@@ -480,24 +480,19 @@ function MessengerRoomHeader({
         </span>
 
         <div className="parent-layout-page__conversation-title">
-          <h2 id="parrot-layout-room-title">{selectedConversationName}</h2>
-          {selectedConversationSubtitle ? (
-            <div className="parent-layout-page__conversation-meta">
-              {isSelectedPeerOnline ? (
-                <span className="parent-layout-page__presence-status">
-                  <span aria-hidden="true" />
-                  Online
-                </span>
-              ) : null}
-              <span className="parent-layout-page__conversation-subtitle">
-                {selectedConversationSubtitle}
-              </span>
-            </div>
-          ) : isSelectedPeerOnline ? (
-            <div className="parent-layout-page__conversation-meta">
+          <div className="parent-layout-page__conversation-title-row">
+            <h2 id="parrot-layout-room-title">{selectedConversationName}</h2>
+            {isSelectedPeerOnline ? (
               <span className="parent-layout-page__presence-status">
                 <span aria-hidden="true" />
                 Online
+              </span>
+            ) : null}
+          </div>
+          {selectedConversationSubtitle ? (
+            <div className="parent-layout-page__conversation-meta">
+              <span className="parent-layout-page__conversation-subtitle">
+                {selectedConversationSubtitle}
               </span>
             </div>
           ) : null}

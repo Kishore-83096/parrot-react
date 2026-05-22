@@ -646,7 +646,7 @@
   background: linear-gradient(135deg, var(--layout-blue), var(--layout-purple));
   font-size: 13px;
   font-weight: 850;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .parent-layout-page__contact-avatar img {
@@ -661,11 +661,12 @@
 }
 
 .parent-layout-page__presence-dot {
-  width: 11px;
-  height: 11px;
+  box-sizing: border-box;
+  width: 13px;
+  height: 13px;
   position: absolute;
-  right: 1px;
-  bottom: 1px;
+  right: -2px;
+  bottom: -2px;
   z-index: 1;
   border: 2px solid rgba(255, 255, 255, 0.92);
   border-radius: 999px;
@@ -853,6 +854,15 @@
 
 .parent-layout-page__conversation-title {
   min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.parent-layout-page__conversation-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .parent-layout-page__conversation-title h2,
@@ -873,7 +883,6 @@
 
 .parent-layout-page__conversation-meta {
   min-width: 0;
-  margin-top: 5px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -892,10 +901,16 @@
 
 .parent-layout-page__presence-status {
   flex: 0 0 auto;
+  min-height: 24px;
+  padding: 0 9px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  border: 1px solid rgba(24, 185, 99, 0.18);
+  border-radius: 999px;
   color: #0e8749;
+  background: rgba(232, 255, 243, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.58);
   font-size: 12px;
   line-height: 1;
   font-weight: 840;
@@ -1247,8 +1262,8 @@
   position: relative;
   z-index: 6;
   justify-self: start;
-  width: calc(100% - 36px);
-  max-width: 360px;
+  width: fit-content;
+  max-width: calc(100% - 36px);
   margin: 0 18px 8px;
   padding: 7px 10px;
   display: inline-flex;
@@ -1292,6 +1307,8 @@
 }
 
 .parent-layout-page__typing-indicator p {
+  min-width: 0;
+  max-width: min(240px, calc(100vw - 150px));
   margin: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1336,6 +1353,7 @@
 
 .parent-layout-page__message {
   position: relative;
+  box-sizing: border-box;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -1353,8 +1371,9 @@
 
 .parent-layout-page__message-bubble {
   position: relative;
+  box-sizing: border-box;
   width: fit-content;
-  max-width: min(72%, 560px);
+  max-width: min(50%, 560px);
   min-width: 0;
   padding: 10px 12px 8px;
   border: 1px solid rgba(124, 60, 255, 0.11);
@@ -1414,7 +1433,9 @@
   position: relative;
   opacity: 0;
   pointer-events: none;
-  transform: scale(0.92);
+  visibility: hidden;
+  transform: translateY(5px) scale(0.92);
+  transform-origin: center;
   transition:
     opacity 140ms ease,
     transform 140ms ease;
@@ -1425,18 +1446,37 @@
   flex-direction: row-reverse;
 }
 
-.parent-layout-page__message:hover .parent-layout-page__message-actions,
+.parent-layout-page__message-bubble:hover + .parent-layout-page__message-actions,
+.parent-layout-page__message-actions:hover,
 .parent-layout-page__message:focus-within .parent-layout-page__message-actions,
 .parent-layout-page__message.is-reply-dragging .parent-layout-page__message-actions,
 .parent-layout-page__message.is-actions-open .parent-layout-page__message-actions,
 .parent-layout-page__message.is-reaction-picker-open .parent-layout-page__message-actions {
   opacity: 1;
   pointer-events: auto;
-  transform: scale(1);
+  visibility: visible;
+  animation: parentMessageActionsPop 170ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  transform: translateY(0) scale(1);
 }
 
-.parent-layout-page__message-reply-action,
-.parent-layout-page__message-reaction-action {
+@keyframes parentMessageActionsPop {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.88);
+  }
+
+  70% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.04);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.parent-layout-page__message-reply-action {
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
@@ -1457,24 +1497,21 @@
 }
 
 .parent-layout-page__message-reply-action:hover,
-.parent-layout-page__message-reply-action:focus-visible,
-.parent-layout-page__message-reaction-action:hover,
-.parent-layout-page__message-reaction-action:focus-visible,
-.parent-layout-page__message-reaction-action.is-active {
+.parent-layout-page__message-reply-action:focus-visible {
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-blue), var(--layout-purple));
   transform: translateY(-1px);
 }
 
-.parent-layout-page__message-reply-action svg,
-.parent-layout-page__message-reaction-action svg {
+.parent-layout-page__message-reply-action svg {
   stroke-width: 2.6;
 }
 
 .parent-layout-page__message-reaction-picker {
   position: absolute;
-  bottom: calc(100% + 9px);
-  left: 0;
+  top: 50%;
+  bottom: auto;
+  left: calc(100% + 8px);
   z-index: 4;
   display: flex;
   align-items: center;
@@ -1488,10 +1525,11 @@
   box-shadow:
     0 16px 36px rgba(95, 52, 167, 0.18),
     0 0 0 1px rgba(63, 140, 255, 0.07);
+  transform: translateY(-50%);
 }
 
 .parent-layout-page__message.is-mine .parent-layout-page__message-reaction-picker {
-  right: 0;
+  right: calc(100% + 8px);
   left: auto;
 }
 
@@ -1527,67 +1565,86 @@
   filter: drop-shadow(0 2px 3px rgba(95, 52, 167, 0.18));
 }
 
-.parent-layout-page__message.has-reactions {
-  margin-bottom: 24px;
+.parent-layout-page__message.is-reaction-picker-open {
+  padding-top: 0;
 }
 
-.parent-layout-page__message.is-reaction-picker-open {
-  margin-top: 46px;
+.parent-layout-page__message.has-reactions {
+  margin-bottom: 12px;
+}
+
+.parent-layout-page__message.has-reactions .parent-layout-page__message-bubble {
+  padding-bottom: 14px;
 }
 
 .parent-layout-page__message-reactions {
   position: absolute;
-  right: 10px;
-  bottom: -22px;
+  left: 12px;
+  bottom: 0;
+  z-index: 2;
+  width: auto;
+  max-width: calc(100% - 24px);
+  height: 16px;
+  margin: 0;
   display: flex;
   align-items: center;
-  gap: 3px;
-  max-width: calc(100% - 20px);
-  padding: 3px;
-  border: 1px solid rgba(124, 60, 255, 0.13);
-  border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.97), rgba(255, 240, 250, 0.95)),
-    rgba(246, 242, 255, 0.94);
-  box-shadow: 0 8px 18px rgba(95, 52, 167, 0.13);
+  justify-content: flex-start;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  transform: translateY(50%);
 }
 
 .parent-layout-page__message.is-theirs .parent-layout-page__message-reactions {
+  left: 12px;
   right: auto;
-  left: 10px;
+  justify-content: flex-start;
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-reactions {
+  left: 12px;
+  right: auto;
+  justify-content: flex-start;
 }
 
 .parent-layout-page__message-reaction-pill {
-  min-width: 28px;
-  height: 24px;
+  min-width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  padding: 0 7px;
-  border: 1px solid transparent;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   color: var(--layout-purple-deep);
-  background: rgba(255, 255, 255, 0.72);
+  background: transparent;
   cursor: pointer;
   font-size: 13px;
   line-height: 1;
   font-weight: 830;
+  filter: drop-shadow(0 2px 3px rgba(95, 52, 167, 0.18));
+  transition:
+    filter 140ms ease,
+    transform 140ms ease;
 }
 
 .parent-layout-page__message-reaction-pill.is-selected {
-  border-color: rgba(63, 140, 255, 0.42);
-  background: linear-gradient(135deg, rgba(232, 242, 255, 0.95), rgba(255, 229, 246, 0.95));
+  filter:
+    drop-shadow(0 2px 3px rgba(95, 52, 167, 0.2))
+    drop-shadow(0 0 6px rgba(255, 130, 201, 0.28));
+  transform: none;
 }
 
 .parent-layout-page__message-reaction-pill span {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
 }
 
 .parent-layout-page__message-reaction-pill strong {
-  font-size: 11px;
-  line-height: 1;
+  display: none;
 }
 
 .parent-layout-page__message-reply-preview {
@@ -1621,6 +1678,23 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
+.parent-layout-page__message-reply-preview.is-replying-to-mine,
+.parent-layout-page__message.is-mine .parent-layout-page__message-reply-preview.is-replying-to-mine {
+  border-left-color: #ffffff;
+  color: #ffffff;
+  background:
+    linear-gradient(135deg, rgba(63, 140, 255, 0.96), rgba(122, 53, 245, 0.82)),
+    var(--layout-blue);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.parent-layout-page__message-reply-preview.is-replying-to-theirs,
+.parent-layout-page__message.is-mine .parent-layout-page__message-reply-preview.is-replying-to-theirs {
+  border-left-color: rgba(124, 60, 255, 0.38);
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.88);
+}
+
 .parent-layout-page__message-bubble .parent-layout-page__message-reply-preview span {
   display: block;
   color: inherit;
@@ -1645,12 +1719,36 @@
 }
 
 .parent-layout-page__message-bubble p {
+  max-width: 100%;
   margin: 0;
   overflow-wrap: anywhere;
+  word-break: break-word;
   white-space: pre-wrap;
   font-size: 14px;
   line-height: 1.38;
   font-weight: 650;
+}
+
+.parent-layout-page__message-bubble.has-attachments {
+  --message-caption-width: 224px;
+}
+
+.parent-layout-page__message-bubble.has-attachments.is-attachment-count-2 {
+  --message-caption-width: 236px;
+}
+
+.parent-layout-page__message-bubble.has-attachments.is-attachment-count-3 {
+  --message-caption-width: 242px;
+}
+
+.parent-layout-page__message-bubble.has-attachments.is-attachment-count-4,
+.parent-layout-page__message-bubble.has-inline-media {
+  --message-caption-width: 284px;
+}
+
+.parent-layout-page__message-bubble.has-attachments .parent-layout-page__message-text {
+  display: block;
+  max-width: min(var(--message-caption-width), 100%);
 }
 
 .parent-layout-page__message-attachments + .parent-layout-page__message-text {
@@ -1724,7 +1822,7 @@
 .parent-layout-page__message-attachment-grid {
   --message-attachment-tile-height: 74px;
 
-  width: fit-content;
+  width: min(284px, 100%);
   max-width: 100%;
   display: grid;
   grid-auto-rows: var(--message-attachment-tile-height);
@@ -1737,21 +1835,25 @@
 .parent-layout-page__message-attachment-grid.is-count-1 {
   --message-attachment-tile-height: 176px;
 
-  grid-template-columns: minmax(0, 224px);
+  width: min(224px, 100%);
+  grid-template-columns: minmax(0, min(224px, 100%));
 }
 
 .parent-layout-page__message-attachment-grid.is-count-2 {
   --message-attachment-tile-height: 118px;
 
-  grid-template-columns: repeat(2, minmax(0, 116px));
+  width: min(236px, 100%);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .parent-layout-page__message-attachment-grid.is-count-3 {
-  grid-template-columns: repeat(3, minmax(0, 78px));
+  width: min(242px, 100%);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .parent-layout-page__message-attachment-grid.is-count-4 {
-  grid-template-columns: repeat(4, minmax(0, 68px));
+  width: min(284px, 100%);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .parent-layout-page__message-attachment-tile {
@@ -2407,12 +2509,35 @@
   box-shadow: 0 10px 20px rgba(95, 52, 167, 0.08);
 }
 
+.parent-layout-page__message-reply-composer.is-replying-to-mine {
+  border-left-color: #ffffff;
+  color: #ffffff;
+  background:
+    linear-gradient(135deg, rgba(63, 140, 255, 0.96), rgba(122, 53, 245, 0.84)),
+    var(--layout-blue);
+}
+
+.parent-layout-page__message-reply-composer.is-replying-to-theirs {
+  border-left-color: rgba(124, 60, 255, 0.38);
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.88);
+}
+
 .parent-layout-page__message-reply-composer span {
   display: block;
   color: var(--layout-purple-deep);
   font-size: 11px;
   line-height: 1.1;
   font-weight: 880;
+}
+
+.parent-layout-page__message-reply-composer.is-replying-to-mine span,
+.parent-layout-page__message-reply-composer.is-replying-to-mine p {
+  color: #ffffff;
+}
+
+.parent-layout-page__message-reply-composer.is-replying-to-theirs span {
+  color: var(--layout-purple-deep);
 }
 
 .parent-layout-page__message-reply-composer p {
@@ -2439,10 +2564,21 @@
   cursor: pointer;
 }
 
+.parent-layout-page__message-reply-composer.is-replying-to-mine button {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.16);
+}
+
 .parent-layout-page__message-reply-composer button:hover,
 .parent-layout-page__message-reply-composer button:focus-visible {
   color: var(--layout-purple-deep);
   background: rgba(124, 60, 255, 0.13);
+}
+
+.parent-layout-page__message-reply-composer.is-replying-to-mine button:hover,
+.parent-layout-page__message-reply-composer.is-replying-to-mine button:focus-visible {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .parent-layout-page__message-submit {
