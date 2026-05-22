@@ -9,6 +9,7 @@
   FileText,
   Image as ImageIcon,
   LoaderCircle,
+  Maximize2,
   Mic,
   Music,
   MessageCircle,
@@ -389,10 +390,51 @@ function getVoiceNoteDuration(attachment) {
   );
 }
 
+function getReliableVoiceNoteDuration(declaredDuration, mediaDuration, fallbackDuration = 0) {
+  if (declaredDuration > 0) {
+    return declaredDuration;
+  }
+
+  return Number.isFinite(mediaDuration) && mediaDuration > 0
+    ? mediaDuration
+    : fallbackDuration;
+}
+
 function getVoiceNoteWaveform(attachment) {
   const waveform = normalizeVoiceNoteWaveform(attachment?.waveform);
 
   return waveform.length > 0 ? waveform : DEFAULT_VOICE_NOTE_WAVEFORM;
+}
+
+function waitForMediaReady(media) {
+  if (!media || media.readyState >= 2) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    let timeout = null;
+    const cleanup = () => {
+      if (timeout) {
+        globalThis.clearTimeout(timeout);
+      }
+      media.removeEventListener("canplay", handleReady);
+      media.removeEventListener("loadedmetadata", handleReady);
+      media.removeEventListener("error", handleError);
+    };
+    const handleReady = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error("Voice note audio is unavailable."));
+    };
+    timeout = globalThis.setTimeout(handleReady, 900);
+
+    media.addEventListener("canplay", handleReady, { once: true });
+    media.addEventListener("loadedmetadata", handleReady, { once: true });
+    media.addEventListener("error", handleError, { once: true });
+  });
 }
 
 function getSupportedVoiceNoteMimeType() {
@@ -795,13 +837,29 @@ function PdfAttachmentThumbnail({ label, sourceUrl }) {
   );
 }
 
-function AttachmentMediaPlayer({ attachment, label, type }) {
+function AttachmentMediaPlayer({
+  attachment,
+  initialPlayback = null,
+  label,
+  type,
+}) {
   const sourceUrl = useCachedMediaUrl(attachment);
   const mediaRef = useRef(null);
+  const didApplyInitialPlaybackRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(1);
+  const attachmentKey = getAttachmentKey(attachment);
+  const shouldUseInitialPlayback =
+    initialPlayback?.attachmentKey &&
+    initialPlayback.attachmentKey === attachmentKey;
+  const initialPlaybackTime = shouldUseInitialPlayback
+    ? Math.max(Number(initialPlayback.currentTime) || 0, 0)
+    : 0;
+  const shouldAutoPlayInitialPlayback = Boolean(
+    shouldUseInitialPlayback && initialPlayback.shouldPlay,
+  );
 
   const isVideo = type === "video";
   const mediaClassName = isVideo
@@ -809,10 +867,11 @@ function AttachmentMediaPlayer({ attachment, label, type }) {
     : "parent-layout-page__attachment-modal-audio-source";
 
   useEffect(() => {
-    setCurrentTime(0);
+    didApplyInitialPlaybackRef.current = false;
+    setCurrentTime(initialPlaybackTime);
     setDuration(0);
     setIsPlaying(false);
-  }, [sourceUrl]);
+  }, [initialPlaybackTime, sourceUrl]);
 
   const syncMediaState = useCallback(() => {
     const media = mediaRef.current;
@@ -826,6 +885,42 @@ function AttachmentMediaPlayer({ attachment, label, type }) {
     setIsPlaying(!media.paused && !media.ended);
     setVolume(media.muted ? 0 : clampMediaVolume(media.volume));
   }, []);
+
+  const applyInitialPlayback = useCallback(() => {
+    const media = mediaRef.current;
+
+    if (!media || didApplyInitialPlaybackRef.current || !sourceUrl) {
+      return;
+    }
+
+    didApplyInitialPlaybackRef.current = true;
+
+    if (initialPlaybackTime > 0) {
+      const seekTime =
+        Number.isFinite(media.duration) && media.duration > 0
+          ? Math.min(initialPlaybackTime, media.duration)
+          : initialPlaybackTime;
+      media.currentTime = seekTime;
+      setCurrentTime(seekTime);
+    }
+
+    if (shouldAutoPlayInitialPlayback) {
+      media.play().catch(() => {
+        setIsPlaying(false);
+      });
+    }
+  }, [initialPlaybackTime, shouldAutoPlayInitialPlayback, sourceUrl]);
+
+  useEffect(() => {
+    if (mediaRef.current?.readyState >= 1) {
+      applyInitialPlayback();
+    }
+  }, [applyInitialPlayback, sourceUrl]);
+
+  const handleLoadedMetadata = useCallback(() => {
+    syncMediaState();
+    applyInitialPlayback();
+  }, [applyInitialPlayback, syncMediaState]);
 
   const handleTogglePlay = useCallback(() => {
     const media = mediaRef.current;
@@ -900,7 +995,7 @@ function AttachmentMediaPlayer({ attachment, label, type }) {
           onClick={handleTogglePlay}
           onDurationChange={syncMediaState}
           onEnded={syncMediaState}
-          onLoadedMetadata={syncMediaState}
+          onLoadedMetadata={handleLoadedMetadata}
           onPause={syncMediaState}
           onPlay={syncMediaState}
           onTimeUpdate={syncMediaState}
@@ -919,7 +1014,7 @@ function AttachmentMediaPlayer({ attachment, label, type }) {
             className={mediaClassName}
             onDurationChange={syncMediaState}
             onEnded={syncMediaState}
-            onLoadedMetadata={syncMediaState}
+            onLoadedMetadata={handleLoadedMetadata}
             onPause={syncMediaState}
             onPlay={syncMediaState}
             onTimeUpdate={syncMediaState}
@@ -1000,22 +1095,226 @@ function AttachmentMediaPlayer({ attachment, label, type }) {
   );
 }
 
+function InlineMediaAttachmentPlayer({ attachment, onMaximize }) {
+  const sourceUrl = useCachedMediaUrl(attachment);
+  const mediaRef = useRef(null);
+  const label = getAttachmentLabel(attachment);
+  const kind = getAttachmentKind(attachment);
+  const isVideo = kind === "video";
+  const [mediaState, setMediaState] = useState({
+    currentTime: 0,
+    duration: getVoiceNoteDuration(attachment),
+    isPlaying: false,
+  });
+  const duration = mediaState.duration || getVoiceNoteDuration(attachment);
+  const progressValue = duration
+    ? Math.min(mediaState.currentTime, duration)
+    : mediaState.currentTime;
+
+  useEffect(() => {
+    setMediaState({
+      currentTime: 0,
+      duration: getVoiceNoteDuration(attachment),
+      isPlaying: false,
+    });
+  }, [attachment, sourceUrl]);
+
+  const syncMediaState = useCallback(() => {
+    const media = mediaRef.current;
+
+    if (!media) {
+      return;
+    }
+
+    setMediaState((currentState) => ({
+      currentTime: Number.isFinite(media.currentTime) ? media.currentTime : 0,
+      duration:
+        Number.isFinite(media.duration) && media.duration > 0
+          ? media.duration
+          : currentState.duration,
+      isPlaying: !media.paused && !media.ended,
+    }));
+  }, []);
+
+  const handleTogglePlay = useCallback(() => {
+    const media = mediaRef.current;
+
+    if (!media || !sourceUrl) {
+      return;
+    }
+
+    if (media.paused || media.ended) {
+      media.play().catch(() => {
+        setMediaState((currentState) => ({
+          ...currentState,
+          isPlaying: false,
+        }));
+      });
+    } else {
+      media.pause();
+    }
+  }, [sourceUrl]);
+
+  const handleSeek = useCallback((event) => {
+    const media = mediaRef.current;
+    const nextTime = Number(event.target.value);
+
+    if (!media || !Number.isFinite(nextTime)) {
+      return;
+    }
+
+    media.currentTime = nextTime;
+    setMediaState((currentState) => ({
+      ...currentState,
+      currentTime: nextTime,
+    }));
+  }, []);
+
+  const handleMaximize = useCallback(() => {
+    const media = mediaRef.current;
+    const wasPlaying = Boolean(media && !media.paused && !media.ended);
+    const currentTime = Number.isFinite(media?.currentTime)
+      ? media.currentTime
+      : mediaState.currentTime;
+
+    if (wasPlaying) {
+      media.pause();
+    }
+
+    onMaximize(attachment, {
+      currentTime,
+      shouldPlay: wasPlaying,
+    });
+  }, [attachment, mediaState.currentTime, onMaximize]);
+
+  return (
+    <div className={`parent-layout-page__inline-media is-${kind}`}>
+      {isVideo ? (
+        <button
+          type="button"
+          className="parent-layout-page__inline-media-stage"
+          onClick={handleTogglePlay}
+          aria-label={mediaState.isPlaying ? "Pause video" : "Play video"}
+        >
+          <video
+            ref={mediaRef}
+            playsInline
+            preload="metadata"
+            src={sourceUrl || undefined}
+            onDurationChange={syncMediaState}
+            onEnded={syncMediaState}
+            onLoadedMetadata={syncMediaState}
+            onPause={syncMediaState}
+            onPlay={syncMediaState}
+            onTimeUpdate={syncMediaState}
+          >
+            <a href={attachment.file_url}>{label}</a>
+          </video>
+          {!mediaState.isPlaying ? (
+            <span className="parent-layout-page__inline-media-play-overlay">
+              {sourceUrl ? (
+                <Play size={22} aria-hidden="true" />
+              ) : (
+                <LoaderCircle size={22} aria-hidden="true" />
+              )}
+            </span>
+          ) : null}
+        </button>
+      ) : (
+        <>
+          <audio
+            ref={mediaRef}
+            preload="metadata"
+            src={sourceUrl || undefined}
+            onDurationChange={syncMediaState}
+            onEnded={syncMediaState}
+            onLoadedMetadata={syncMediaState}
+            onPause={syncMediaState}
+            onPlay={syncMediaState}
+            onTimeUpdate={syncMediaState}
+          >
+            <a href={attachment.file_url}>{label}</a>
+          </audio>
+          <div className="parent-layout-page__inline-media-audio-visual">
+            <span>
+              <Music size={22} aria-hidden="true" />
+            </span>
+            <strong>{label}</strong>
+          </div>
+        </>
+      )}
+
+      <div className="parent-layout-page__inline-media-controls">
+        <button
+          type="button"
+          className="parent-layout-page__inline-media-button"
+          onClick={handleTogglePlay}
+          aria-label={mediaState.isPlaying ? "Pause attachment" : "Play attachment"}
+          title={mediaState.isPlaying ? "Pause" : "Play"}
+          disabled={!sourceUrl}
+        >
+          {!sourceUrl ? (
+            <LoaderCircle size={17} aria-hidden="true" />
+          ) : mediaState.isPlaying ? (
+            <Pause size={17} aria-hidden="true" />
+          ) : (
+            <Play size={17} aria-hidden="true" />
+          )}
+        </button>
+        <span className="parent-layout-page__inline-media-time">
+          {formatMediaTime(mediaState.currentTime)}
+        </span>
+        <input
+          className="parent-layout-page__inline-media-progress"
+          type="range"
+          min="0"
+          max={duration || 0}
+          step="0.1"
+          value={progressValue}
+          onChange={handleSeek}
+          disabled={!duration}
+          aria-label="Seek attachment"
+        />
+        <span className="parent-layout-page__inline-media-time">
+          {formatMediaTime(duration)}
+        </span>
+        <button
+          type="button"
+          className="parent-layout-page__inline-media-button"
+          onClick={handleMaximize}
+          aria-label={`Open ${label} in expanded player`}
+          title="Maximize"
+          disabled={!sourceUrl}
+        >
+          <Maximize2 size={17} aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function VoiceNotePlayer({ attachment }) {
   const audioRef = useRef(null);
   const objectUrlRef = useRef("");
   const sourceUrlRef = useRef("");
+  const sourceRequestIdRef = useRef(0);
   const declaredDuration = getVoiceNoteDuration(attachment);
   const waveform = getVoiceNoteWaveform(attachment);
   const [audioSourceUrl, setAudioSourceUrl] = useState("");
-  const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [isLoadingAudio, setIsLoadingAudio] = useState(
+    isEncryptedAttachment(attachment),
+  );
   const [playbackState, setPlaybackState] = useState({
     currentTime: 0,
     duration: declaredDuration,
     isPlaying: false,
   });
   const duration = playbackState.duration || declaredDuration;
+  const displayCurrentTime = duration
+    ? Math.min(playbackState.currentTime, duration)
+    : playbackState.currentTime;
   const progressRatio = duration
-    ? Math.min(playbackState.currentTime / duration, 1)
+    ? Math.min(displayCurrentTime / duration, 1)
     : 0;
   const playedBars = Math.round(progressRatio * waveform.length);
 
@@ -1028,6 +1327,8 @@ function VoiceNotePlayer({ attachment }) {
   }, []);
 
   useEffect(() => {
+    sourceRequestIdRef.current += 1;
+
     if (objectUrlRef.current) {
       URL.revokeObjectURL(objectUrlRef.current);
     }
@@ -1035,7 +1336,7 @@ function VoiceNotePlayer({ attachment }) {
     objectUrlRef.current = "";
     sourceUrlRef.current = "";
     setAudioSourceUrl("");
-    setIsLoadingAudio(false);
+    setIsLoadingAudio(isEncryptedAttachment(attachment));
     setPlaybackState({
       currentTime: 0,
       duration: declaredDuration,
@@ -1050,14 +1351,24 @@ function VoiceNotePlayer({ attachment }) {
       return;
     }
 
-    setPlaybackState((currentState) => ({
-      currentTime: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
-      duration:
-        Number.isFinite(audio.duration) && audio.duration > 0
-          ? audio.duration
-          : currentState.duration || declaredDuration,
-      isPlaying: !audio.paused && !audio.ended,
-    }));
+    setPlaybackState((currentState) => {
+      const nextDuration = getReliableVoiceNoteDuration(
+        declaredDuration,
+        audio.duration,
+        currentState.duration,
+      );
+      const nextCurrentTime = Number.isFinite(audio.currentTime)
+        ? audio.currentTime
+        : 0;
+
+      return {
+        currentTime: nextDuration
+          ? Math.min(nextCurrentTime, nextDuration)
+          : nextCurrentTime,
+        duration: nextDuration,
+        isPlaying: !audio.paused && !audio.ended,
+      };
+    });
   }, [declaredDuration]);
 
   const ensureAudioSource = useCallback(async () => {
@@ -1066,10 +1377,15 @@ function VoiceNotePlayer({ attachment }) {
     }
 
     const directUrl = attachment?.file_url || "";
+    const requestId = sourceRequestIdRef.current;
 
     if (!isEncryptedAttachment(attachment)) {
       if (!directUrl) {
         throw new Error("Voice note is unavailable.");
+      }
+
+      if (requestId !== sourceRequestIdRef.current) {
+        return "";
       }
 
       sourceUrlRef.current = directUrl;
@@ -1083,14 +1399,25 @@ function VoiceNotePlayer({ attachment }) {
       const blob = await decryptEncryptedAttachmentBlob(attachment);
       const objectUrl = URL.createObjectURL(blob);
 
+      if (requestId !== sourceRequestIdRef.current) {
+        URL.revokeObjectURL(objectUrl);
+        return "";
+      }
+
       objectUrlRef.current = objectUrl;
       sourceUrlRef.current = objectUrl;
       setAudioSourceUrl(objectUrl);
       return objectUrl;
     } finally {
-      setIsLoadingAudio(false);
+      if (requestId === sourceRequestIdRef.current) {
+        setIsLoadingAudio(false);
+      }
     }
   }, [attachment]);
+
+  useEffect(() => {
+    ensureAudioSource().catch(() => {});
+  }, [ensureAudioSource]);
 
   const playAudio = useCallback(async () => {
     const audio = audioRef.current;
@@ -1100,13 +1427,19 @@ function VoiceNotePlayer({ attachment }) {
     }
 
     const sourceUrl = await ensureAudioSource();
+    if (!sourceUrl) {
+      return;
+    }
 
     if (audio.src !== sourceUrl) {
       audio.src = sourceUrl;
+      audio.load();
     }
 
+    await waitForMediaReady(audio);
     await audio.play();
-  }, [ensureAudioSource]);
+    syncAudioState();
+  }, [ensureAudioSource, syncAudioState]);
 
   const handleTogglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -1138,10 +1471,11 @@ function VoiceNotePlayer({ attachment }) {
       playAudio()
         .then(() => {
           const audio = audioRef.current;
-          const seekDuration =
-            Number.isFinite(audio?.duration) && audio.duration > 0
-              ? audio.duration
-              : duration;
+          const seekDuration = getReliableVoiceNoteDuration(
+            declaredDuration,
+            audio?.duration,
+            duration,
+          );
 
           if (!audio || !seekDuration) {
             return;
@@ -1152,7 +1486,7 @@ function VoiceNotePlayer({ attachment }) {
         })
         .catch(() => {});
     },
-    [duration, playAudio, syncAudioState],
+    [declaredDuration, duration, playAudio, syncAudioState],
   );
 
   return (
@@ -1190,7 +1524,7 @@ function VoiceNotePlayer({ attachment }) {
           ))}
         </button>
         <span className="parent-layout-page__voice-note-time">
-          {formatMediaTime(playbackState.currentTime)} / {formatMediaTime(duration)}
+          {formatMediaTime(displayCurrentTime)} / {formatMediaTime(duration)}
         </span>
       </div>
       <audio
@@ -1213,10 +1547,26 @@ function MessageAttachments({ attachments, onOpen }) {
   const regularAttachments = attachments.filter(
     (attachment) => !isVoiceNoteAttachment(attachment),
   );
+  const shouldRenderInlineMedia =
+    regularAttachments.length === 1 &&
+    ["audio", "video"].includes(getAttachmentKind(regularAttachments[0]));
   const visibleAttachments = regularAttachments.slice(0, ATTACHMENT_PREVIEW_LIMIT);
   const hiddenAttachmentCount = Math.max(
     regularAttachments.length - ATTACHMENT_PREVIEW_LIMIT,
     0,
+  );
+
+  const handleMaximizeInlineMedia = useCallback(
+    (attachment, playback) => {
+      onOpen(regularAttachments, attachment, {
+        playback: {
+          attachmentKey: getAttachmentKey(attachment),
+          currentTime: playback.currentTime,
+          shouldPlay: playback.shouldPlay,
+        },
+      });
+    },
+    [onOpen, regularAttachments],
   );
 
   return (
@@ -1229,7 +1579,13 @@ function MessageAttachments({ attachments, onOpen }) {
       ))}
 
       {regularAttachments.length > 0 ? (
-        <>
+        shouldRenderInlineMedia ? (
+          <InlineMediaAttachmentPlayer
+            attachment={regularAttachments[0]}
+            onMaximize={handleMaximizeInlineMedia}
+          />
+        ) : (
+          <>
           <div
             className={`parent-layout-page__message-attachment-grid is-count-${Math.min(
               visibleAttachments.length,
@@ -1256,6 +1612,7 @@ function MessageAttachments({ attachments, onOpen }) {
             <span>{getAttachmentSummary(regularAttachments)}</span>
           </button>
         </>
+        )
       ) : null}
     </div>
   );
@@ -1327,7 +1684,7 @@ function useAttachmentTextPreview(sourceUrl, enabled) {
   return textPreview;
 }
 
-function AttachmentDocumentPreview({ attachment }) {
+function AttachmentDocumentPreview({ attachment, initialPlayback = null }) {
   const previewUrl = useCachedMediaUrl(attachment);
   const label = getAttachmentLabel(attachment);
   const kind = getAttachmentKind(attachment);
@@ -1358,6 +1715,7 @@ function AttachmentDocumentPreview({ attachment }) {
       <div className="parent-layout-page__attachment-media-preview">
         <AttachmentMediaPlayer
           attachment={attachment}
+          initialPlayback={initialPlayback}
           label={label}
           type="video"
         />
@@ -1368,6 +1726,7 @@ function AttachmentDocumentPreview({ attachment }) {
       <div className="parent-layout-page__attachment-media-preview">
         <AttachmentMediaPlayer
           attachment={attachment}
+          initialPlayback={initialPlayback}
           label={label}
           type="audio"
         />
@@ -1421,6 +1780,7 @@ function AttachmentDocumentPreview({ attachment }) {
 
 function AttachmentViewerModal({
   attachments,
+  initialPlayback,
   selectedAttachmentId,
   onClose,
   onOpen,
@@ -1508,6 +1868,7 @@ function AttachmentViewerModal({
           <AttachmentDocumentPreview
             key={getAttachmentKey(selectedAttachment)}
             attachment={selectedAttachment}
+            initialPlayback={initialPlayback}
           />
           {hasManyAttachments ? (
             <button
@@ -1671,6 +2032,7 @@ function MessengerConversation({
   });
   const [attachmentViewer, setAttachmentViewer] = useState({
     attachments: [],
+    playback: null,
     selectedAttachmentId: "",
   });
   const [typingUserIds, setTypingUserIds] = useState([]);
@@ -2855,11 +3217,12 @@ function MessengerConversation({
     });
   }, []);
 
-  const handleOpenAttachmentViewer = useCallback((attachments, attachment) => {
+  const handleOpenAttachmentViewer = useCallback((attachments, attachment, options = {}) => {
     const selectedAttachment = attachment || attachments[0] || null;
 
     setAttachmentViewer({
       attachments,
+      playback: options.playback || null,
       selectedAttachmentId: selectedAttachment
         ? getAttachmentKey(selectedAttachment)
         : "",
@@ -2869,6 +3232,7 @@ function MessengerConversation({
   const handleCloseAttachmentViewer = useCallback(() => {
     setAttachmentViewer({
       attachments: [],
+      playback: null,
       selectedAttachmentId: "",
     });
   }, []);
@@ -3622,7 +3986,9 @@ function MessengerConversation({
       ) : null}
 
       <form
-        className="parent-layout-page__message-form"
+        className={`parent-layout-page__message-form${
+          isVoiceRecording ? " is-recording" : ""
+        }`}
         onSubmit={handleSendMessage}
       >
         {replyTarget ? (
@@ -3755,27 +4121,29 @@ function MessengerConversation({
               rows={1}
             />
             <button
-              type={hasComposedMessage ? "submit" : "button"}
-              className={`parent-layout-page__message-submit${
-                hasComposedMessage ? "" : " is-voice-idle"
-              }`}
-              onClick={
-                hasComposedMessage ? undefined : handleStartVoiceRecording
-              }
-              aria-label={
+              type="button"
+              className="parent-layout-page__message-voice"
+              onClick={handleStartVoiceRecording}
+              disabled={hasComposedMessage}
+              aria-label="Record voice note"
+              title={
                 hasComposedMessage
-                  ? isSendingMessage
-                    ? "Queue message"
-                    : "Send message"
+                  ? "Clear message to record voice note"
                   : "Record voice note"
               }
-              title={hasComposedMessage ? "Send" : "Record voice note"}
             >
-              {hasComposedMessage ? (
-                <Send size={20} aria-hidden="true" />
-              ) : (
-                <Mic size={20} aria-hidden="true" />
-              )}
+              <Mic size={19} aria-hidden="true" />
+            </button>
+            <button
+              type="submit"
+              className="parent-layout-page__message-submit"
+              disabled={!hasComposedMessage}
+              aria-label={
+                isSendingMessage ? "Queue message" : "Send message"
+              }
+              title="Send"
+            >
+              <Send size={20} aria-hidden="true" />
             </button>
           </>
         )}
@@ -3783,6 +4151,7 @@ function MessengerConversation({
       {attachmentViewer.attachments.length > 0 ? (
         <AttachmentViewerModal
           attachments={attachmentViewer.attachments}
+          initialPlayback={attachmentViewer.playback}
           selectedAttachmentId={attachmentViewer.selectedAttachmentId}
           onClose={handleCloseAttachmentViewer}
           onDownload={handleDownloadAttachment}
