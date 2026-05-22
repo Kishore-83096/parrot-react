@@ -1724,6 +1724,9 @@
 
 .parent-layout-page__message-bubble.has-attachments {
   --message-caption-width: 224px;
+  --message-attachment-width: 284px;
+
+  width: min(50%, calc(var(--message-attachment-width) + 24px));
 }
 
 .parent-layout-page__message-bubble.has-attachments.is-attachment-count-1 {
@@ -1809,7 +1812,7 @@
 }
 
 .parent-layout-page__message-attachments {
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   margin: 0 0 8px;
   display: grid;
@@ -1819,37 +1822,38 @@
 .parent-layout-page__message-attachment-grid {
   --message-attachment-collage-height: 236px;
 
-  width: min(284px, 100%);
+  width: 100%;
   height: var(--message-attachment-collage-height);
   max-width: 100%;
   box-sizing: border-box;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  gap: 5px;
   overflow: hidden;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.58), rgba(238, 232, 255, 0.24)),
+    rgba(255, 255, 255, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.56),
+    0 14px 28px rgba(95, 52, 167, 0.12);
+  backdrop-filter: blur(16px) saturate(150%);
 }
 
 .parent-layout-page__message-attachment-grid.is-count-1 {
   --message-attachment-collage-height: 224px;
 
-  width: min(284px, 100%);
+  width: 100%;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
-  gap: 0;
-  border: 1px solid rgba(124, 60, 255, 0.12);
-  border-radius: 16px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.32), rgba(244, 239, 255, 0.18)),
-    rgba(255, 255, 255, 0.16);
-  box-shadow: 0 12px 24px rgba(95, 52, 167, 0.08);
+  gap: 5px;
 }
 
 .parent-layout-page__message-attachment-grid.is-count-2 {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .parent-layout-page__message-attachment-grid.is-count-3 {
@@ -1873,7 +1877,9 @@
   overflow: hidden;
   border: 0;
   color: #ffffff;
-  background: rgba(25, 18, 38, 0.2);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(124, 60, 255, 0.12)),
+    rgba(25, 18, 38, 0.18);
   cursor: pointer;
 }
 
@@ -1886,8 +1892,8 @@
 
 .parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile.is-image {
   background:
-    linear-gradient(135deg, rgba(246, 242, 255, 0.72), rgba(234, 244, 255, 0.66)),
-    rgba(255, 255, 255, 0.28);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(238, 232, 255, 0.28)),
+    rgba(255, 255, 255, 0.22);
 }
 
 .parent-layout-page__message-attachment-tile img,
@@ -1906,6 +1912,8 @@
 
 .parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile.is-image img {
   object-fit: contain;
+  padding: 5px;
+  box-sizing: border-box;
 }
 
 .parent-layout-page__image-loading {
@@ -1995,7 +2003,8 @@
 .parent-layout-page__message-attachment-tile-shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2), transparent 42%, rgba(0, 0, 0, 0.42));
+  background:
+    linear-gradient(180deg, rgba(9, 8, 18, 0.08), transparent 48%, rgba(9, 8, 18, 0.36));
 }
 
 .parent-layout-page__message-attachment-grid.is-count-1 .parent-layout-page__message-attachment-tile.is-image .parent-layout-page__message-attachment-tile-shade,
@@ -2011,7 +2020,9 @@
   place-items: center;
   padding: 10px;
   color: #ffffff;
-  background: rgba(9, 8, 18, 0.62);
+  background:
+    linear-gradient(135deg, rgba(124, 60, 255, 0.42), rgba(63, 140, 255, 0.34)),
+    rgba(9, 8, 18, 0.54);
   text-align: center;
   font-size: 18px;
   line-height: 1.05;
@@ -2029,7 +2040,9 @@
   overflow: hidden;
   border-radius: 999px;
   color: #ffffff;
-  background: rgba(0, 0, 0, 0.44);
+  border: 1px solid rgba(255, 255, 255, 0.26);
+  background: rgba(9, 8, 18, 0.34);
+  backdrop-filter: blur(10px);
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 10px;
@@ -4876,6 +4889,10 @@ video.parent-layout-page__attachment-modal-media {
   max-width: min(50vw, 560px);
   padding: 10px 11px 8px;
   border-radius: 17px;
+}
+
+.parent-layout-page__message-bubble.has-attachments {
+  width: min(50vw, calc(var(--message-attachment-width) + 22px));
 }
 
 .parent-layout-page__message.is-mine .parent-layout-page__message-bubble {
