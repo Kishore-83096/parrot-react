@@ -13,7 +13,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
@@ -306,6 +306,16 @@ function buildProfilePayload(form) {
   };
 }
 
+function getHeaderProfileHydrationKey(user) {
+  return (
+    user?.id ||
+    user?.user_id ||
+    user?.account_number ||
+    user?.username ||
+    ""
+  );
+}
+
 function Header({
   user,
   defaultDevicePromptVersion = 0,
@@ -395,6 +405,7 @@ function Header({
     isConfirmNewDefaultDevicePasswordVisible,
     setIsConfirmNewDefaultDevicePasswordVisible,
   ] = useState(false);
+  const hydratedProfileUserKeyRef = useRef("");
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
   const username = accountDisplay?.username || user?.username || "parrot_user";
@@ -450,6 +461,29 @@ function Header({
       setIsProfileLoading(false);
     }
   }, [syncProfile]);
+
+  useEffect(() => {
+    const hydrationKey = getHeaderProfileHydrationKey(user);
+
+    if (!hydrationKey || hydratedProfileUserKeyRef.current === hydrationKey) {
+      return undefined;
+    }
+
+    hydratedProfileUserKeyRef.current = hydrationKey;
+    let isMounted = true;
+
+    getParentProfile()
+      .then((response) => {
+        if (isMounted) {
+          syncProfile(response.data || {});
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [syncProfile, user]);
 
   const loadCryptoDevices = useCallback(async ({ preserveMessage = false } = {}) => {
     const userId = user?.id || user?.user_id;
