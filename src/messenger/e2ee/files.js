@@ -53,7 +53,7 @@ export function isEncryptedAttachment(attachment) {
 
 export async function encryptSelectedFilesForMessage(
   selectedFiles,
-  { clientMessageId, recipientAccountNumber } = {},
+  { clientMessageId, onProgress, recipientAccountNumber } = {},
 ) {
   const files = Array.isArray(selectedFiles) ? selectedFiles : [];
   if (files.length === 0) {
@@ -65,10 +65,30 @@ export async function encryptSelectedFilesForMessage(
   }
 
   await sodium.ready;
+  emitFileTransferProgress(onProgress, {
+    phase: "encrypting",
+    percent: 0,
+  });
 
+  let encryptedFileCount = 0;
   const encryptedFiles = await Promise.all(
-    files.map((selectedFile, index) => encryptSelectedFile(selectedFile, index)),
+    files.map(async (selectedFile, index) => {
+      const encryptedFile = await encryptSelectedFile(selectedFile, index);
+      encryptedFileCount += 1;
+      emitFileTransferProgress(onProgress, {
+        completed: encryptedFileCount,
+        phase: "encrypting",
+        percent: Math.round((encryptedFileCount / files.length) * 100),
+        total: files.length,
+      });
+      return encryptedFile;
+    }),
   );
+  emitFileTransferProgress(onProgress, {
+    phase: "uploading",
+    percent: 0,
+  });
+
   const uploadIntentResponse = await createMessengerEncryptedFileUploadIntents({
     recipient_account_number: recipientAccountNumber,
     client_message_id: clientMessageId,
@@ -91,11 +111,46 @@ export async function encryptSelectedFilesForMessage(
     throw new Error("Attachment upload authorization did not match selected files.");
   }
 
+  const uploadBytesByIndex = new Map();
+  const totalUploadBytes = encryptedFiles.reduce(
+    (total, encryptedFile) => total + encryptedFile.encryptedBlob.size,
+    0,
+  );
+  const emitUploadProgress = (index, loadedBytes) => {
+    uploadBytesByIndex.set(index, loadedBytes);
+    const loaded = encryptedFiles.reduce((currentLoaded, encryptedFile, fileIndex) => {
+      const fileLoaded = uploadBytesByIndex.get(fileIndex) || 0;
+      return currentLoaded + Math.min(fileLoaded, encryptedFile.encryptedBlob.size);
+    }, 0);
+    const percent = totalUploadBytes
+      ? Math.min(Math.round((loaded / totalUploadBytes) * 100), 100)
+      : null;
+
+    emitFileTransferProgress(onProgress, {
+      loaded,
+      phase: "uploading",
+      percent,
+      total: totalUploadBytes,
+    });
+  };
+
   return Promise.all(
     encryptedFiles.map((encryptedFile, index) =>
-      uploadEncryptedFileWithIntent(encryptedFile, uploadIntents[index]),
+      uploadEncryptedFileWithIntent(encryptedFile, uploadIntents[index], {
+        onProgress: (progress) => {
+          emitUploadProgress(index, progress.loaded || 0);
+        },
+      }),
     ),
-  );
+  ).then((attachments) => {
+    emitFileTransferProgress(onProgress, {
+      loaded: totalUploadBytes,
+      phase: "uploading",
+      percent: 100,
+      total: totalUploadBytes,
+    });
+    return attachments;
+  });
 }
 
 async function encryptSelectedFile(selectedFile, index) {
@@ -124,6 +179,7 @@ async function encryptSelectedFile(selectedFile, index) {
     type: E2EE_FILE_TYPE,
     e2ee: true,
     encryptedBlob,
+    plaintextBlob: file,
     file_key: toBase64(fileKey),
     nonce: toBase64(nonce),
     file_name: file.name || `Attachment ${index + 1}`,
@@ -165,7 +221,11 @@ function normalizeOptionalWaveform(value) {
     .map((level) => Math.min(Math.max(level, 0), 1));
 }
 
-async function uploadEncryptedFileWithIntent(encryptedFile, uploadIntent) {
+async function uploadEncryptedFileWithIntent(
+  encryptedFile,
+  uploadIntent,
+  { onProgress } = {},
+) {
   if (!uploadIntent?.id || !uploadIntent?.upload_url || !uploadIntent?.parameters) {
     throw new Error("Attachment upload authorization is invalid.");
   }
@@ -176,17 +236,17 @@ async function uploadEncryptedFileWithIntent(encryptedFile, uploadIntent) {
   });
   formData.append("file", encryptedFile.encryptedBlob, `${encryptedFile.id}.txt`);
 
-  const uploadResponse = await fetch(uploadIntent.upload_url, {
-    method: "POST",
-    body: formData,
-  });
-  const uploadResult = await uploadResponse.json().catch(() => null);
-
-  if (!uploadResponse.ok || !uploadResult) {
-    throw new Error(
-      uploadResult?.error?.message || "Encrypted attachment upload failed.",
-    );
-  }
+  const uploadResult = await uploadFormDataWithProgress(
+    uploadIntent.upload_url,
+    formData,
+    (progress) => {
+      emitFileTransferProgress(onProgress, {
+        loaded: progress.loaded,
+        phase: "uploading",
+        total: progress.total,
+      });
+    },
+  );
 
   const completionResponse = await completeMessengerEncryptedFileUploadIntent(
     uploadIntent.id,
@@ -199,9 +259,8 @@ async function uploadEncryptedFileWithIntent(encryptedFile, uploadIntent) {
     throw new Error("Encrypted attachment upload did not return a file URL.");
   }
 
-  const { encryptedBlob, ...attachment } = encryptedFile;
-
-  return {
+  const { encryptedBlob, plaintextBlob, ...attachment } = encryptedFile;
+  const completedAttachment = {
     ...attachment,
     upload_intent_id: completedFile.upload_intent_id || uploadIntent.id,
     encrypted_file_url: encryptedFileUrl,
@@ -212,9 +271,78 @@ async function uploadEncryptedFileWithIntent(encryptedFile, uploadIntent) {
     cloudinary_resource_type: completedFile.cloudinary_resource_type || "raw",
     cloudinary_folder: completedFile.cloudinary_folder || "",
   };
+
+  if (plaintextBlob) {
+    decryptedAttachmentBlobCache.set(
+      getEncryptedAttachmentCacheKey(completedAttachment),
+      Promise.resolve(plaintextBlob),
+    );
+  }
+
+  return completedAttachment;
 }
 
-export async function decryptEncryptedAttachmentBlob(attachment) {
+function uploadFormDataWithProgress(uploadUrl, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+
+    request.open("POST", uploadUrl);
+    request.responseType = "json";
+
+    request.upload.onprogress = (event) => {
+      emitFileTransferProgress(onProgress, {
+        loaded: Number(event.loaded) || 0,
+        total: event.lengthComputable ? Number(event.total) || 0 : 0,
+      });
+    };
+    request.onerror = () => {
+      reject(new Error("Encrypted attachment upload failed."));
+    };
+    request.onabort = () => {
+      reject(new Error("Encrypted attachment upload was cancelled."));
+    };
+    request.onload = () => {
+      const uploadResult =
+        request.response ||
+        tryParseJson(request.responseText) ||
+        {};
+
+      if (request.status < 200 || request.status >= 300) {
+        reject(
+          new Error(
+            uploadResult?.error?.message || "Encrypted attachment upload failed.",
+          ),
+        );
+        return;
+      }
+
+      resolve(uploadResult);
+    };
+
+    request.send(formData);
+  });
+}
+
+function tryParseJson(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function emitFileTransferProgress(onProgress, progress) {
+  if (typeof onProgress !== "function") {
+    return;
+  }
+
+  onProgress(progress);
+}
+
+export async function decryptEncryptedAttachmentBlob(
+  attachment,
+  { onProgress } = {},
+) {
   if (!isEncryptedAttachment(attachment)) {
     throw new Error("Attachment is not encrypted.");
   }
@@ -229,13 +357,27 @@ export async function decryptEncryptedAttachmentBlob(attachment) {
   const cacheKey = getEncryptedAttachmentCacheKey(attachment);
 
   if (!decryptedAttachmentBlobCache.has(cacheKey)) {
+    emitFileTransferProgress(onProgress, {
+      phase: "downloading",
+      percent: 0,
+    });
+
     const decryptPromise = fetch(sourceUrl)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error("Unable to fetch encrypted attachment.");
         }
 
-        const ciphertext = new Uint8Array(await response.arrayBuffer());
+        const ciphertext = await readEncryptedAttachmentBytes(
+          response,
+          attachment,
+          onProgress,
+        );
+        emitFileTransferProgress(onProgress, {
+          phase: "decrypting",
+          percent: null,
+        });
+
         const plaintext = sodium.crypto_aead_xchacha20poly1305_ietf_decrypt(
           null,
           ciphertext,
@@ -248,13 +390,82 @@ export async function decryptEncryptedAttachmentBlob(attachment) {
           type: attachment.mime_type || "application/octet-stream",
         });
       })
+      .then((blob) => {
+        emitFileTransferProgress(onProgress, {
+          phase: "ready",
+          percent: 100,
+        });
+        return blob;
+      })
       .catch((error) => {
         decryptedAttachmentBlobCache.delete(cacheKey);
         throw error;
       });
 
     decryptedAttachmentBlobCache.set(cacheKey, decryptPromise);
+  } else {
+    emitFileTransferProgress(onProgress, {
+      phase: "decrypting",
+      percent: null,
+    });
   }
 
-  return decryptedAttachmentBlobCache.get(cacheKey);
+  return decryptedAttachmentBlobCache.get(cacheKey).then((blob) => {
+    emitFileTransferProgress(onProgress, {
+      phase: "ready",
+      percent: 100,
+    });
+    return blob;
+  });
+}
+
+async function readEncryptedAttachmentBytes(response, attachment, onProgress) {
+  const contentLength = Number(response.headers.get("content-length"));
+  const fallbackLength = Number(attachment?.encrypted_file_size_bytes);
+  const total = Number.isFinite(contentLength) && contentLength > 0
+    ? contentLength
+    : Number.isFinite(fallbackLength) && fallbackLength > 0
+      ? fallbackLength
+      : 0;
+
+  if (!response.body?.getReader) {
+    const buffer = await response.arrayBuffer();
+    emitFileTransferProgress(onProgress, {
+      loaded: buffer.byteLength,
+      phase: "downloading",
+      percent: 100,
+      total: total || buffer.byteLength,
+    });
+    return new Uint8Array(buffer);
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let loaded = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    chunks.push(value);
+    loaded += value.byteLength;
+    emitFileTransferProgress(onProgress, {
+      loaded,
+      phase: "downloading",
+      percent: total ? Math.min(Math.round((loaded / total) * 100), 100) : null,
+      total,
+    });
+  }
+
+  const bytes = new Uint8Array(loaded);
+  let offset = 0;
+  chunks.forEach((chunk) => {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  });
+
+  return bytes;
 }

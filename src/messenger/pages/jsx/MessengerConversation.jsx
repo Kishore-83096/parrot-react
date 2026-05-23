@@ -650,14 +650,6 @@ function getOfficePreviewUrl(fileUrl) {
   )}`;
 }
 
-function getPdfThumbnailUrl(fileUrl) {
-  const cleanUrl = String(fileUrl || "").split("#")[0];
-
-  return cleanUrl
-    ? `${cleanUrl}#page=1&toolbar=0&navpanes=0&scrollbar=0&view=FitH`
-    : "";
-}
-
 async function getCachedMediaResponse(url) {
   if (!url || !("caches" in globalThis)) {
     return null;
@@ -777,13 +769,56 @@ async function openCachedAttachment(attachment) {
   }
 }
 
-function useCachedMediaUrl(attachment) {
+function normalizeAttachmentTransferPercent(value) {
+  const percent = Number(value);
+
+  if (!Number.isFinite(percent)) {
+    return null;
+  }
+
+  return Math.min(Math.max(Math.round(percent), 0), 100);
+}
+
+function createAttachmentTransferState(phase, progress = {}) {
+  if (!phase) {
+    return null;
+  }
+
+  return {
+    loaded: Number(progress.loaded) || 0,
+    percent: normalizeAttachmentTransferPercent(progress.percent),
+    phase,
+    total: Number(progress.total) || 0,
+  };
+}
+
+function getAttachmentTransferStatusText(transfer) {
+  const phase = transfer?.phase || "";
+  const percent = normalizeAttachmentTransferPercent(transfer?.percent);
+  const labels = {
+    decrypting: "Decrypting",
+    downloading: "Downloading",
+    encrypting: "Encrypting",
+    queued: "Preparing",
+    sending: "Sending",
+    uploading: "Uploading",
+  };
+  const label = labels[phase] || "Preparing";
+
+  return percent === null ? label : `${label} ${percent}%`;
+}
+
+function useCachedMediaResource(attachment) {
   const fileUrl = attachment?.file_url || "";
   const encryptedFileUrl = attachment?.encrypted_file_url || "";
   const isEncrypted = isEncryptedAttachment(attachment);
   const sourceUrl = isEncrypted ? encryptedFileUrl : fileUrl;
   const [cachedMedia, setCachedMedia] = useState({
+    error: "",
+    phase: "",
+    percent: null,
     sourceUrl: "",
+    status: "idle",
     objectUrl: "",
   });
 
@@ -791,7 +826,11 @@ function useCachedMediaUrl(attachment) {
     let objectUrl = "";
     let isMounted = true;
     setCachedMedia({
+      error: "",
+      phase: isEncrypted && sourceUrl ? "downloading" : "",
+      percent: isEncrypted && sourceUrl ? 0 : null,
       sourceUrl,
+      status: sourceUrl ? (isEncrypted ? "loading" : "ready") : "idle",
       objectUrl: "",
     });
 
@@ -801,14 +840,37 @@ function useCachedMediaUrl(attachment) {
       }
 
       if (isEncrypted) {
-        const blob = await decryptEncryptedAttachmentBlob(attachment);
+        const blob = await decryptEncryptedAttachmentBlob(attachment, {
+          onProgress: (progress) => {
+            if (!isMounted) {
+              return;
+            }
+
+            const phase =
+              progress.phase === "ready"
+                ? ""
+                : progress.phase || "downloading";
+            setCachedMedia((currentMedia) => ({
+              ...currentMedia,
+              error: "",
+              phase,
+              percent: normalizeAttachmentTransferPercent(progress.percent),
+              sourceUrl,
+              status: progress.phase === "ready" ? "ready" : "loading",
+            }));
+          },
+        });
         if (!isMounted) {
           return;
         }
 
         objectUrl = URL.createObjectURL(blob);
         setCachedMedia({
+          error: "",
+          phase: "",
+          percent: 100,
           sourceUrl,
+          status: "ready",
           objectUrl,
         });
         return;
@@ -828,12 +890,29 @@ function useCachedMediaUrl(attachment) {
       const blob = await cachedResponse.blob();
       objectUrl = URL.createObjectURL(blob);
       setCachedMedia({
+        error: "",
+        phase: "",
+        percent: null,
         sourceUrl,
+        status: "ready",
         objectUrl,
       });
     }
 
-    loadCachedMedia().catch(() => {});
+    loadCachedMedia().catch(() => {
+      if (!isMounted) {
+        return;
+      }
+
+      setCachedMedia({
+        error: "Unable to decrypt attachment.",
+        phase: "",
+        percent: null,
+        sourceUrl,
+        status: "error",
+        objectUrl: "",
+      });
+    });
 
     return () => {
       isMounted = false;
@@ -848,13 +927,76 @@ function useCachedMediaUrl(attachment) {
     sourceUrl,
   ]);
 
-  if (isEncrypted) {
-    return cachedMedia.sourceUrl === sourceUrl ? cachedMedia.objectUrl : "";
+  const resolvedUrl =
+    cachedMedia.sourceUrl === sourceUrl && cachedMedia.objectUrl
+      ? cachedMedia.objectUrl
+      : isEncrypted
+        ? ""
+        : sourceUrl;
+
+  return {
+    error: cachedMedia.sourceUrl === sourceUrl ? cachedMedia.error : "",
+    isEncrypted,
+    phase: cachedMedia.sourceUrl === sourceUrl ? cachedMedia.phase : "",
+    percent: cachedMedia.sourceUrl === sourceUrl ? cachedMedia.percent : null,
+    status: cachedMedia.sourceUrl === sourceUrl ? cachedMedia.status : "idle",
+    url: resolvedUrl,
+  };
+}
+
+function AttachmentTransferOverlay({ transfer }) {
+  if (!transfer?.phase) {
+    return null;
   }
 
-  return cachedMedia.sourceUrl === sourceUrl && cachedMedia.objectUrl
-    ? cachedMedia.objectUrl
-    : sourceUrl;
+  const percent = normalizeAttachmentTransferPercent(transfer.percent);
+  const statusText = getAttachmentTransferStatusText(transfer);
+  const progressStyle =
+    percent === null
+      ? undefined
+      : {
+          "--attachment-transfer-progress": `${percent}%`,
+          "--attachment-transfer-progress-deg": `${percent * 3.6}deg`,
+        };
+
+  return (
+    <span
+      className={`parent-layout-page__attachment-transfer-overlay is-${transfer.phase}${
+        percent === null ? " is-indeterminate" : ""
+      }`}
+      role="status"
+      aria-label={statusText}
+      aria-live="polite"
+    >
+      <span
+        className="parent-layout-page__attachment-transfer-circle"
+        style={progressStyle}
+      >
+        {percent === null ? (
+          <LoaderCircle size={22} aria-hidden="true" />
+        ) : (
+          <strong>{percent}%</strong>
+        )}
+      </span>
+      <span className="parent-layout-page__attachment-transfer-label">
+        {percent === null ? statusText : statusText.replace(/\s+\d+%$/, "")}
+      </span>
+    </span>
+  );
+}
+
+function getMediaResourceTransfer(mediaResource) {
+  if (
+    mediaResource?.isEncrypted &&
+    mediaResource.status === "loading" &&
+    mediaResource.phase
+  ) {
+    return createAttachmentTransferState(mediaResource.phase, {
+      percent: mediaResource.percent,
+    });
+  }
+
+  return null;
 }
 
 function CachedImage({
@@ -901,9 +1043,14 @@ function AttachmentPreviewTile({
   overflowCount,
   onOpen,
 }) {
-  const previewUrl = useCachedMediaUrl(attachment);
   const label = getAttachmentLabel(attachment);
   const kind = getAttachmentKind(attachment);
+  const shouldLoadPreview = kind === "image" || kind === "video";
+  const mediaResource = useCachedMediaResource(
+    shouldLoadPreview ? attachment : null,
+  );
+  const previewUrl = mediaResource.url;
+  const transfer = getMediaResourceTransfer(mediaResource);
   const shouldShowMediaPreview =
     kind === "image" || kind === "video" || kind === "pdf";
 
@@ -926,8 +1073,9 @@ function AttachmentPreviewTile({
         <video src={previewUrl} muted playsInline preload="metadata" />
       ) : null}
       {kind === "pdf" ? (
-        <PdfAttachmentThumbnail label={label} sourceUrl={previewUrl} />
+        <PdfAttachmentThumbnail label={label} />
       ) : null}
+      <AttachmentTransferOverlay transfer={transfer} />
       {!shouldShowMediaPreview ? (
         <span className="parent-layout-page__message-attachment-tile-icon">
           <AttachmentIcon fileType={kind} size={22} />
@@ -946,24 +1094,14 @@ function AttachmentPreviewTile({
   );
 }
 
-function PdfAttachmentThumbnail({ label, sourceUrl }) {
-  const thumbnailUrl = getPdfThumbnailUrl(sourceUrl);
-
+function PdfAttachmentThumbnail({ label }) {
   return (
     <span
       className="parent-layout-page__message-attachment-pdf-thumb"
       aria-hidden="true"
     >
-      {thumbnailUrl ? (
-        <iframe
-          src={thumbnailUrl}
-          title={`${label} first page`}
-          loading="lazy"
-          tabIndex="-1"
-        />
-      ) : (
-        <AttachmentIcon fileType="pdf" size={28} />
-      )}
+      <AttachmentIcon fileType="pdf" size={30} />
+      <span>{label}</span>
     </span>
   );
 }
@@ -974,7 +1112,9 @@ function AttachmentMediaPlayer({
   label,
   type,
 }) {
-  const sourceUrl = useCachedMediaUrl(attachment);
+  const mediaResource = useCachedMediaResource(attachment);
+  const sourceUrl = mediaResource.url;
+  const transfer = getMediaResourceTransfer(mediaResource);
   const mediaRef = useRef(null);
   const didApplyInitialPlaybackRef = useRef(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1062,7 +1202,7 @@ function AttachmentMediaPlayer({
   const handleTogglePlay = useCallback(() => {
     const media = mediaRef.current;
 
-    if (!media) {
+    if (!media || !sourceUrl) {
       return;
     }
 
@@ -1079,7 +1219,7 @@ function AttachmentMediaPlayer({
     } else {
       media.pause();
     }
-  }, []);
+  }, [sourceUrl]);
 
   const handleSeek = useCallback((event) => {
     const media = mediaRef.current;
@@ -1167,6 +1307,7 @@ function AttachmentMediaPlayer({
           </audio>
         </div>
       )}
+      <AttachmentTransferOverlay transfer={transfer} />
 
       <div className="parent-layout-page__attachment-player-controls">
         <button
@@ -1175,6 +1316,7 @@ function AttachmentMediaPlayer({
           onClick={handleTogglePlay}
           aria-label={isPlaying ? "Pause attachment" : "Play attachment"}
           title={isPlaying ? "Pause" : "Play"}
+          disabled={!sourceUrl}
         >
           {isPlaying ? (
             <Pause size={18} aria-hidden="true" />
@@ -1239,7 +1381,9 @@ function AttachmentMediaPlayer({
 }
 
 function InlineMediaAttachmentPlayer({ attachment, onMaximize }) {
-  const sourceUrl = useCachedMediaUrl(attachment);
+  const mediaResource = useCachedMediaResource(attachment);
+  const sourceUrl = mediaResource.url;
+  const transfer = getMediaResourceTransfer(mediaResource);
   const mediaRef = useRef(null);
   const label = getAttachmentLabel(attachment);
   const kind = getAttachmentKind(attachment);
@@ -1386,6 +1530,7 @@ function InlineMediaAttachmentPlayer({ attachment, onMaximize }) {
           >
             {playButtonIcon}
           </button>
+          <AttachmentTransferOverlay transfer={transfer} />
         </div>
       ) : (
         <>
@@ -1425,6 +1570,7 @@ function InlineMediaAttachmentPlayer({ attachment, onMaximize }) {
             >
               {playButtonIcon}
             </button>
+            <AttachmentTransferOverlay transfer={transfer} />
           </div>
         </>
       )}
@@ -1434,10 +1580,13 @@ function InlineMediaAttachmentPlayer({ attachment, onMaximize }) {
 
 function VoiceNotePlayer({ attachment }) {
   const audioRef = useRef(null);
-  const sourceUrl = useCachedMediaUrl(attachment);
+  const mediaResource = useCachedMediaResource(attachment);
+  const sourceUrl = mediaResource.url;
+  const transfer = getMediaResourceTransfer(mediaResource);
   const declaredDuration = getVoiceNoteDuration(attachment);
   const waveform = getVoiceNoteWaveform(attachment);
-  const isLoadingAudio = isEncryptedAttachment(attachment) && !sourceUrl;
+  const isLoadingAudio =
+    Boolean(transfer) || (isEncryptedAttachment(attachment) && !sourceUrl);
   const [playbackState, setPlaybackState] = useState({
     currentTime: 0,
     duration: declaredDuration,
@@ -1597,7 +1746,11 @@ function VoiceNotePlayer({ attachment }) {
           ))}
         </button>
         <span className="parent-layout-page__voice-note-time">
-          {formatMediaTime(displayCurrentTime)} / {formatMediaTime(duration)}
+          {transfer
+            ? getAttachmentTransferStatusText(transfer)
+            : `${formatMediaTime(displayCurrentTime)} / ${formatMediaTime(
+                duration,
+              )}`}
         </span>
       </div>
       <audio
@@ -1615,7 +1768,7 @@ function VoiceNotePlayer({ attachment }) {
   );
 }
 
-function MessageAttachments({ attachments, onOpen }) {
+function MessageAttachments({ attachments, onOpen, transfer = null }) {
   const voiceNoteAttachments = attachments.filter(isVoiceNoteAttachment);
   const regularAttachments = attachments.filter(
     (attachment) => !isVoiceNoteAttachment(attachment),
@@ -1695,6 +1848,7 @@ function MessageAttachments({ attachments, onOpen }) {
           </>
         )
       ) : null}
+      <AttachmentTransferOverlay transfer={transfer} />
     </div>
   );
 }
@@ -1766,7 +1920,9 @@ function useAttachmentTextPreview(sourceUrl, enabled) {
 }
 
 function AttachmentDocumentPreview({ attachment, initialPlayback = null }) {
-  const previewUrl = useCachedMediaUrl(attachment);
+  const mediaResource = useCachedMediaResource(attachment);
+  const previewUrl = mediaResource.url;
+  const transfer = getMediaResourceTransfer(mediaResource);
   const label = getAttachmentLabel(attachment);
   const kind = getAttachmentKind(attachment);
   const previewMode = getDocumentPreviewMode(attachment);
@@ -1780,7 +1936,14 @@ function AttachmentDocumentPreview({ attachment, initialPlayback = null }) {
 
   let stageContent = null;
 
-  if (kind === "image") {
+  if (transfer) {
+    stageContent = (
+      <div className="parent-layout-page__attachment-document-message">
+        <LoaderCircle size={22} aria-hidden="true" />
+        <span>{getAttachmentTransferStatusText(transfer)}</span>
+      </div>
+    );
+  } else if (kind === "image") {
     stageContent = (
       <div className="parent-layout-page__attachment-media-preview">
         <CachedImage
@@ -3908,6 +4071,26 @@ function MessengerConversation({
     );
   }, []);
 
+  const updateQueuedMessageTransfer = useCallback((clientMessageId, transfer) => {
+    const normalizedClientMessageId = String(clientMessageId || "");
+
+    if (!normalizedClientMessageId) {
+      return;
+    }
+
+    setRoomMessages((currentMessages) =>
+      currentMessages.map((message) =>
+        String(message.client_message_id || "") === normalizedClientMessageId
+          ? {
+              ...message,
+              attachment_transfer: transfer,
+              status: "sending",
+            }
+          : message,
+      ),
+    );
+  }, []);
+
   const processSendQueue = useCallback(async () => {
     if (isProcessingSendQueueRef.current) {
       return;
@@ -3921,13 +4104,39 @@ function MessengerConversation({
         const queuedMessage = sendQueueRef.current[0];
 
         try {
+          const reportQueuedAttachmentTransfer = (phase, progress = {}) => {
+            if (!isQueuedMessageForActiveConversation(queuedMessage)) {
+              return;
+            }
+
+            updateQueuedMessageTransfer(
+              queuedMessage.clientMessageId,
+              createAttachmentTransferState(phase, progress),
+            );
+          };
+
           const encryptedAttachments =
             queuedMessage.filesToSend.length > 0
-              ? await encryptSelectedFilesForMessage(queuedMessage.filesToSend, {
-                  clientMessageId: queuedMessage.clientMessageId,
-                  recipientAccountNumber: queuedMessage.recipientAccountNumber,
-                })
+              ? await encryptSelectedFilesForMessage(
+                  queuedMessage.filesToSend,
+                  {
+                    clientMessageId: queuedMessage.clientMessageId,
+                    onProgress: (progress) => {
+                      reportQueuedAttachmentTransfer(
+                        progress.phase,
+                        progress,
+                      );
+                    },
+                    recipientAccountNumber:
+                      queuedMessage.recipientAccountNumber,
+                  },
+                )
               : [];
+
+          if (encryptedAttachments.length > 0) {
+            reportQueuedAttachmentTransfer(null);
+          }
+
           const encryptedText = await encryptMessageText({
             attachments: encryptedAttachments,
             recipientAccountNumber: queuedMessage.recipientAccountNumber,
@@ -4014,6 +4223,7 @@ function MessengerConversation({
     focusMessageDraftUnlessTextEntryIsActive,
     isQueuedMessageForActiveConversation,
     onRoomMessage,
+    updateQueuedMessageTransfer,
     user,
   ]);
 
@@ -4056,6 +4266,10 @@ function MessengerConversation({
         client_message_id: clientMessageId,
         status: "sending",
         attachments: [],
+        attachment_transfer:
+          optimisticAttachments.length > 0
+            ? createAttachmentTransferState("encrypting", { percent: 0 })
+            : null,
         reactions: [],
         my_reaction: null,
         created_at: new Date().toISOString(),
@@ -4364,6 +4578,7 @@ function MessengerConversation({
                       <MessageAttachments
                         attachments={messageAttachments}
                         onOpen={handleOpenAttachmentViewer}
+                        transfer={message.attachment_transfer}
                       />
                     ) : null}
 

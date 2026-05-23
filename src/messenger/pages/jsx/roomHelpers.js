@@ -10,6 +10,15 @@ import {
 } from "../../e2ee/messages.js";
 
 const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
+const ATTACHMENT_KIND_LABELS = {
+  attachment: ["Attachment", "attachments"],
+  audio: ["Audio", "audio attachments"],
+  file: ["Attachment", "attachments"],
+  image: ["Image", "images"],
+  pdf: ["PDF", "PDFs"],
+  video: ["Video", "videos"],
+  voice_note: ["Voice note", "voice notes"],
+};
 
 export {
   getContactInitials,
@@ -80,28 +89,35 @@ export function getRoomInitials(room, contact, peer) {
 }
 
 export function getLastMessagePreview(room, currentUser) {
+  return getLastMessagePreviewDetails(room, currentUser).text;
+}
+
+export function getLastMessagePreviewDetails(room, currentUser) {
   const message = room?.last_message;
 
   if (!message) {
-    return "No messages yet.";
+    return {
+      icon: "",
+      text: "No messages yet.",
+    };
   }
 
   const messageText = getMessagePreviewLabel(message);
-  const attachmentCount = Array.isArray(message.decrypted_attachments)
-    ? message.decrypted_attachments.length
-    : Array.isArray(message.attachments)
-      ? message.attachments.length
-      : 0;
   const attachments = Array.isArray(message.decrypted_attachments)
     ? message.decrypted_attachments
     : Array.isArray(message.attachments)
       ? message.attachments
       : [];
-  const voiceNoteCount = attachments.filter(isVoiceNoteAttachment).length;
+  const attachmentPreview = getAttachmentPreviewDetails(attachments);
+  const hasEncryptedPlaceholder =
+    isEncryptedMessageText(message.text) ||
+    messageText.toLowerCase() === "encrypted message";
   let preview = messageText;
+  let icon = "";
 
-  if (!preview && voiceNoteCount > 0 && voiceNoteCount === attachmentCount) {
-    preview = voiceNoteCount === 1 ? "Voice note" : `${voiceNoteCount} voice notes`;
+  if (attachmentPreview && (!preview || hasEncryptedPlaceholder)) {
+    preview = attachmentPreview.text;
+    icon = attachmentPreview.icon;
   }
 
   if (!preview && isEncryptedMessageText(message.text)) {
@@ -109,15 +125,22 @@ export function getLastMessagePreview(room, currentUser) {
   }
 
   if (!preview) {
-    preview = attachmentCount ? "Attachment" : "Message";
+    preview = attachmentPreview?.text || "Message";
+    icon = attachmentPreview?.icon || "";
   }
   const currentUserId = getCurrentUserId(currentUser);
 
   if (currentUserId && Number(message.sender_user_id) === currentUserId) {
-    return `You: ${preview}`;
+    return {
+      icon,
+      text: `You: ${preview}`,
+    };
   }
 
-  return preview;
+  return {
+    icon,
+    text: preview,
+  };
 }
 
 function isVoiceNoteAttachment(attachment) {
@@ -127,6 +150,81 @@ function isVoiceNoteAttachment(attachment) {
     attachment?.kind === VOICE_NOTE_ATTACHMENT_KIND ||
     attachment?.is_voice_note === true
   );
+}
+
+function getAttachmentPreviewDetails(attachments) {
+  const safeAttachments = Array.isArray(attachments) ? attachments : [];
+
+  if (safeAttachments.length === 0) {
+    return null;
+  }
+
+  const voiceNoteCount = safeAttachments.filter(isVoiceNoteAttachment).length;
+
+  if (voiceNoteCount === safeAttachments.length) {
+    return {
+      icon: "voice_note",
+      text: getAttachmentKindLabel("voice_note", voiceNoteCount),
+    };
+  }
+
+  const regularAttachments = safeAttachments.filter(
+    (attachment) => !isVoiceNoteAttachment(attachment),
+  );
+  const kinds = regularAttachments.map(getAttachmentKind);
+  const primaryKind = kinds[0] || "attachment";
+  const isSingleKind =
+    kinds.length > 0 && kinds.every((kind) => kind === primaryKind);
+
+  if (safeAttachments.length === 1) {
+    return {
+      icon: primaryKind,
+      text: getAttachmentKindLabel(primaryKind, 1),
+    };
+  }
+
+  if (isSingleKind && regularAttachments.length === safeAttachments.length) {
+    return {
+      icon: primaryKind,
+      text: getAttachmentKindLabel(primaryKind, safeAttachments.length),
+    };
+  }
+
+  return {
+    icon: "attachment",
+    text: getAttachmentKindLabel("attachment", safeAttachments.length),
+  };
+}
+
+function getAttachmentKind(attachment) {
+  const fileType = String(attachment?.file_type || "").toLowerCase();
+  const mimeType = String(attachment?.mime_type || "").toLowerCase();
+  const fileName = String(attachment?.file_name || "").toLowerCase();
+
+  if (fileType === "image" || mimeType.startsWith("image/")) {
+    return "image";
+  }
+
+  if (fileType === "video" || mimeType.startsWith("video/")) {
+    return "video";
+  }
+
+  if (fileType === "audio" || mimeType.startsWith("audio/")) {
+    return "audio";
+  }
+
+  if (mimeType === "application/pdf" || fileName.endsWith(".pdf")) {
+    return "pdf";
+  }
+
+  return "file";
+}
+
+function getAttachmentKindLabel(kind, count) {
+  const [singleLabel, pluralLabel] =
+    ATTACHMENT_KIND_LABELS[kind] || ATTACHMENT_KIND_LABELS.attachment;
+
+  return count === 1 ? singleLabel : `${count} ${pluralLabel}`;
 }
 
 export function formatRoomTime(value) {

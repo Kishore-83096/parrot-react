@@ -1,4 +1,14 @@
-import { MessagesSquare, Search } from "lucide-react";
+import {
+  File as FileIcon,
+  FileText,
+  Image as ImageIcon,
+  MessagesSquare,
+  Mic,
+  Music,
+  Paperclip,
+  Search,
+  Video,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -11,9 +21,20 @@ import {
   formatRoomTime,
   getContactName,
   getLastMessagePreview,
+  getLastMessagePreviewDetails,
   getRoomInitials,
   getRoomPeer,
 } from "./roomHelpers.js";
+
+const ROOM_PREVIEW_ICONS = {
+  attachment: Paperclip,
+  audio: Music,
+  file: FileIcon,
+  image: ImageIcon,
+  pdf: FileText,
+  video: Video,
+  voice_note: Mic,
+};
 
 function MessengerRoomList({
   contacts,
@@ -181,6 +202,9 @@ function MessengerRoomList({
             const lastMessageTime = formatRoomTime(
               room.last_message?.created_at || room.updated_at,
             );
+            const lastMessagePreview = getLastMessagePreviewDetails(room, user);
+            const LastMessagePreviewIcon =
+              ROOM_PREVIEW_ICONS[lastMessagePreview.icon] || null;
 
             return (
               <button
@@ -214,8 +238,15 @@ function MessengerRoomList({
                       {peerAccountNumber || "Account number unavailable"}
                     </small>
                   ) : null}
-                  <small className="parent-layout-page__chat-preview">
-                    {getLastMessagePreview(room, user)}
+                  <small
+                    className={`parent-layout-page__chat-preview${
+                      LastMessagePreviewIcon ? " has-icon" : ""
+                    }`}
+                  >
+                    {LastMessagePreviewIcon ? (
+                      <LastMessagePreviewIcon size={13} aria-hidden="true" />
+                    ) : null}
+                    <span>{lastMessagePreview.text}</span>
                   </small>
                 </span>
 
