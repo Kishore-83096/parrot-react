@@ -1,4 +1,4 @@
-import { MessagesSquare, UsersRound } from "lucide-react";
+import { Images, MessagesSquare, UsersRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Layout from "../../../components/Layout.jsx";
@@ -29,6 +29,10 @@ import MessengerInboxListener from "../../../messenger/MessengerInboxListener.js
 import MessengerConversation from "../../../messenger/pages/jsx/MessengerConversation.jsx";
 import MessengerRoomHeader from "../../../messenger/pages/jsx/MessengerRoomHeader.jsx";
 import MessengerRoomList from "../../../messenger/pages/jsx/MessengerRoomList.jsx";
+import {
+  StoriesListPanel,
+  useStoriesController,
+} from "../../../messenger/pages/jsx/StoriesPanel.jsx";
 import {
   findRoomByAccountNumber,
   getCurrentUserId,
@@ -78,8 +82,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const initialMessengerUiCache = initialMessengerUiCacheRef.current;
   const [activePanelTab, setActivePanelTab] = useState(() => {
     const historyView = getLoggedInHistoryView();
-    return historyView?.panelTab === "contacts" ? "contacts" : "chats";
+    return ["chats", "contacts", "stories"].includes(historyView?.panelTab)
+      ? historyView.panelTab
+      : "chats";
   });
+  const activePanelTabRef = useRef(activePanelTab);
   const [contacts, setContacts] = useState(
     () => initialMessengerUiCache.contacts,
   );
@@ -106,6 +113,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [isRecoverySetupOpen, setIsRecoverySetupOpen] = useState(false);
   const [isRecoveryVerifyOpen, setIsRecoveryVerifyOpen] = useState(false);
   const [isRecoveryVerifyRequired, setIsRecoveryVerifyRequired] = useState(false);
+  const [storyUnreadCount, setStoryUnreadCount] = useState(0);
   const [toast, setToast] = useState(null);
   const onlineUserTimeoutsRef = useRef(new Map());
   const isLogoutInProgressRef = useRef(false);
@@ -494,9 +502,21 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     setToast(null);
   }, []);
 
+  useEffect(() => {
+    activePanelTabRef.current = activePanelTab;
+
+    if (activePanelTab === "stories") {
+      setStoryUnreadCount(0);
+    }
+  }, [activePanelTab]);
+
   const changePanelTab = (nextTab) => {
     if (activePanelTab === nextTab) {
       return;
+    }
+
+    if (nextTab === "stories") {
+      setStoryUnreadCount(0);
     }
 
     setActivePanelTab(nextTab);
@@ -927,6 +947,14 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         handleMaybeEncryptedRoomMessage(eventPayload.room, eventPayload.message);
       }
 
+      if (eventPayload?.type === "story.created") {
+        if (activePanelTabRef.current !== "stories") {
+          setStoryUnreadCount((currentCount) =>
+            Math.min(currentCount + 1, 100),
+          );
+        }
+      }
+
       if (eventPayload?.type === "device.revoked") {
         getStoredMessengerDeviceIdentity(user)
           .then(async (identity) => {
@@ -1040,8 +1068,23 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     [rooms],
   );
 
+  const storiesController = useStoriesController({
+    contacts,
+    enabled: activePanelTab === "stories",
+    onContactsChange: handleContactsChange,
+    onRoomMessage: handleRoomMessage,
+    onToast: setToast,
+    user,
+  });
+
   const contactPanelContent =
-    activePanelTab === "contacts" ? (
+    activePanelTab === "stories" ? (
+      <StoriesListPanel
+        contacts={contacts}
+        controller={storiesController}
+        user={user}
+      />
+    ) : activePanelTab === "contacts" ? (
       <ContactPanel
         contacts={contacts}
         selectedContact={selectedContact}
@@ -1075,6 +1118,20 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         {totalUnreadCount > 0 ? (
           <span className="parent-layout-page__tab-badge">
             {totalUnreadCount > 99 ? "99+" : totalUnreadCount}
+          </span>
+        ) : null}
+      </button>
+      <button
+        className={activePanelTab === "stories" ? "is-active" : ""}
+        type="button"
+        onClick={() => changePanelTab("stories")}
+        aria-label="Stories"
+        title="Stories"
+      >
+        <Images size={22} aria-hidden="true" />
+        {storyUnreadCount > 0 ? (
+          <span className="parent-layout-page__tab-badge">
+            {storyUnreadCount > 99 ? "99+" : storyUnreadCount}
           </span>
         ) : null}
       </button>

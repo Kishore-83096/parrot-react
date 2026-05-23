@@ -66,6 +66,11 @@ import {
   getMessageStatusLabel,
   upsertMessage,
 } from "./roomHelpers.js";
+import {
+  getReactionConfig,
+  MESSAGE_REACTION_KEYS,
+  MESSAGE_REACTIONS,
+} from "../../reactions.js";
 
 const MESSAGE_PAGE_SIZE = 20;
 const OLDER_MESSAGES_SCROLL_THRESHOLD = 8;
@@ -97,14 +102,6 @@ const DEFAULT_VOICE_NOTE_WAVEFORM = [
   0.6, 0.34, 0.74, 0.54, 0.42, 0.8, 0.48, 0.66, 0.36, 0.58,
   0.86, 0.4, 0.62, 0.5, 0.78, 0.32, 0.68, 0.44, 0.56, 0.72,
 ];
-const MESSAGE_REACTIONS = [
-  { key: "thumbs_up", emoji: "\u{1F44D}", label: "Thumbs up" },
-  { key: "heart", emoji: "\u2764\uFE0F", label: "Heart" },
-  { key: "laugh", emoji: "\u{1F602}", label: "Laugh" },
-  { key: "surprised", emoji: "\u{1F62E}", label: "Surprised" },
-  { key: "sad", emoji: "\u{1F622}", label: "Sad" },
-];
-const MESSAGE_REACTION_KEYS = MESSAGE_REACTIONS.map((reaction) => reaction.key);
 function getEmptyMessagePagination() {
   return {
     hasMore: false,
@@ -128,12 +125,6 @@ const OFFICE_DOCUMENT_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 ]);
-
-function getReactionConfig(reactionKey) {
-  return (
-    MESSAGE_REACTIONS.find((reaction) => reaction.key === reactionKey) || null
-  );
-}
 
 function normalizeReactionGroups(reactions, myReaction = null) {
   const countByReaction = new Map();
@@ -263,10 +254,15 @@ function supportsMobileMessageTap() {
 }
 
 function getMessagePreviewText(message) {
+  const storyContext = getStoryContext(message);
   const text = getRenderableMessageText(message).trim();
 
   if (text) {
     return text;
+  }
+
+  if (storyContext) {
+    return storyContext.type === "reaction" ? "Story reaction" : "Story reply";
   }
 
   const attachments = getMessageAttachments(message);
@@ -279,6 +275,43 @@ function getMessagePreviewText(message) {
   const attachmentCount = getMessageAttachmentCount(message);
 
   return attachmentCount > 0 ? "Attachment" : "Message";
+}
+
+function getStoryContext(message) {
+  const storyContext = message?.story_context;
+
+  if (!storyContext || typeof storyContext !== "object" || !storyContext.story_id) {
+    return null;
+  }
+
+  return storyContext;
+}
+
+function StoryContextPreview({ context }) {
+  if (!context) {
+    return null;
+  }
+
+  const label = context.preview_label || "Story";
+  const typeLabel = context.type === "reaction" ? "Reacted to" : "Replied to";
+  const mediaLabel =
+    context.media_type === "video"
+      ? "Video story"
+      : context.media_type === "image"
+        ? "Photo story"
+        : "Story";
+
+  return (
+    <div className="parent-layout-page__message-story-context">
+      <span aria-hidden="true">
+        <ImageIcon size={16} />
+      </span>
+      <div>
+        <strong>{typeLabel} {label}</strong>
+        <small>{mediaLabel}</small>
+      </div>
+    </div>
+  );
 }
 
 function getMessageAttachments(message) {
@@ -4493,6 +4526,7 @@ function MessengerConversation({
               isReactionPickerOpen ||
               Number(activeMessageActionsId) === Number(message.id);
             const messageText = getRenderableMessageText(message);
+            const storyContext = getStoryContext(message);
             const messageAttachments = getMessageAttachments(message);
             const attachmentCountClass =
               messageAttachments.length > 0
@@ -4572,6 +4606,10 @@ function MessengerConversation({
                         <span>Original message</span>
                         <p>Message unavailable</p>
                       </div>
+                    ) : null}
+
+                    {storyContext ? (
+                      <StoryContextPreview context={storyContext} />
                     ) : null}
 
                     {messageAttachments.length > 0 ? (

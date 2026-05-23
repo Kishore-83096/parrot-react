@@ -264,6 +264,40 @@ export const completeMessengerEncryptedFileUploadIntent = (
     data,
   );
 
+export const getMessengerStoryFeed = () => messengerAxios.get("/stories/feed/");
+
+export const getMessengerMyStories = () => messengerAxios.get("/stories/mine/");
+
+export const createMessengerStoryUploadIntents = (data) =>
+  messengerAxios.post("/stories/upload-intents/", data);
+
+export const completeMessengerStoryUploadIntent = (uploadIntentId, data) =>
+  messengerAxios.post(
+    `/stories/upload-intents/${encodeURIComponent(uploadIntentId)}/complete/`,
+    data,
+  );
+
+export const createMessengerStory = (data) =>
+  messengerAxios.post("/stories/", data);
+
+export const deleteMessengerStory = (storyId) =>
+  messengerAxios.delete(`/stories/${encodeURIComponent(storyId)}/`);
+
+export const markMessengerStoryViewed = (storyId) =>
+  messengerAxios.post(`/stories/${encodeURIComponent(storyId)}/view/`, {});
+
+export const getMessengerStoryViewers = (storyId) =>
+  messengerAxios.get(`/stories/${encodeURIComponent(storyId)}/viewers/`);
+
+export const reactToMessengerStory = (storyId, data) =>
+  messengerAxios.post(
+    `/stories/${encodeURIComponent(storyId)}/reaction/`,
+    data,
+  );
+
+export const replyToMessengerStory = (storyId, data) =>
+  messengerAxios.post(`/stories/${encodeURIComponent(storyId)}/reply/`, data);
+
 export const getMessengerCryptoKeyBackup = () =>
   messengerAxios.get("/crypto/key-backup/");
 
