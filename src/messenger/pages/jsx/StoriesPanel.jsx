@@ -6,8 +6,10 @@ import {
   Images,
   LoaderCircle,
   Plus,
+  Save,
   Send,
   Trash2,
+  Type,
   UploadCloud,
   UsersRound,
   X,
@@ -22,19 +24,23 @@ import {
   getMessengerErrorMessage,
   getMessengerMyStories,
   getMessengerStoryFeed,
+  getMessengerStorySettings,
   getMessengerStoryViewers,
   MESSENGER_INBOX_EVENT_NAME,
   markMessengerStoryViewed,
   reactToMessengerStory,
   replyToMessengerStory,
+  updateMessengerStorySettings,
 } from "../../api.js";
 import { decryptMessageForUser, encryptMessageText } from "../../e2ee/messages.js";
 import {
   createStoryClientId,
+  createStoryTextPayload,
   decryptStoryMediaBlob,
   encryptSelectedFilesForStory,
   isSupportedStoryMediaFile,
   mergeStoryMediaCrypto,
+  parseStoryTextPayload,
 } from "../../e2ee/stories.js";
 import { getParentContacts } from "../../../parent/api.js";
 import {
@@ -46,9 +52,152 @@ import { getReactionConfig, MESSAGE_REACTIONS } from "../../reactions.js";
 
 const EXPIRY_OPTIONS = [24, 12, 6];
 const IMAGE_STORY_DURATION_MS = 6000;
+const TEXT_STORY_MAX_LENGTH = 700;
+const DEFAULT_STORY_SETTINGS = {
+  audience_account_numbers: [],
+  expiry_hours: 24,
+  visibility: "all_contacts",
+};
+const VIEWED_STORY_CACHE_PREFIX = "parrot:messenger:viewed-stories";
+const TEXT_STORY_THEMES = [
+  {
+    key: "lavender",
+    label: "Lavender",
+    background: "linear-gradient(135deg, #7a35f5 0%, #3f8cff 52%, #ff68d1 100%)",
+    color: "#ffffff",
+  },
+  {
+    key: "blue",
+    label: "Blue",
+    background: "linear-gradient(135deg, #2656f6 0%, #47c2ff 100%)",
+    color: "#ffffff",
+  },
+  {
+    key: "pink",
+    label: "Pink",
+    background: "linear-gradient(135deg, #ff68d1 0%, #ff8fbe 45%, #8f68ff 100%)",
+    color: "#ffffff",
+  },
+  {
+    key: "white",
+    label: "White",
+    background: "linear-gradient(135deg, #ffffff 0%, #f2edff 56%, #eaf4ff 100%)",
+    color: "#372553",
+  },
+];
 
 function getResult(response) {
   return response?.data?.result || response?.data || {};
+}
+
+function normalizeStorySettings(value) {
+  const settings = value && typeof value === "object" ? value : {};
+  const expiryHours = EXPIRY_OPTIONS.includes(Number(settings.expiry_hours))
+    ? Number(settings.expiry_hours)
+    : DEFAULT_STORY_SETTINGS.expiry_hours;
+  const visibility =
+    settings.visibility === "specific_contacts"
+      ? "specific_contacts"
+      : DEFAULT_STORY_SETTINGS.visibility;
+  const audienceAccountNumbers = Array.isArray(settings.audience_account_numbers)
+    ? settings.audience_account_numbers
+        .map((accountNumber) => String(accountNumber || "").trim())
+        .filter(Boolean)
+    : [];
+
+  return {
+    audience_account_numbers:
+      visibility === "specific_contacts" ? audienceAccountNumbers : [],
+    expiry_hours: expiryHours,
+    visibility,
+  };
+}
+
+function getTextStoryTheme(themeKey) {
+  return (
+    TEXT_STORY_THEMES.find((theme) => theme.key === themeKey) ||
+    TEXT_STORY_THEMES[0]
+  );
+}
+
+function getStoryText(story) {
+  if (story?.story_type !== "text") {
+    return null;
+  }
+
+  return parseStoryTextPayload(story.encrypted_payload);
+}
+
+function getViewedStoryCacheKey(user) {
+  const userKey = user?.id || user?.user_id || user?.account_number || "anonymous";
+  return `${VIEWED_STORY_CACHE_PREFIX}:${userKey}`;
+}
+
+function readViewedStoryCache(user) {
+  if (typeof localStorage === "undefined") {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getViewedStoryCacheKey(user)) || "{}");
+    const now = Date.now();
+    const nextCache = {};
+
+    Object.entries(parsed || {}).forEach(([storyId, expiresAt]) => {
+      const expiresAtMs = new Date(expiresAt).getTime();
+      if (storyId && expiresAtMs > now) {
+        nextCache[storyId] = expiresAt;
+      }
+    });
+
+    if (Object.keys(nextCache).length !== Object.keys(parsed || {}).length) {
+      localStorage.setItem(getViewedStoryCacheKey(user), JSON.stringify(nextCache));
+    }
+
+    return nextCache;
+  } catch {
+    return {};
+  }
+}
+
+function writeViewedStoryCache(user, cache) {
+  if (typeof localStorage === "undefined") {
+    return;
+  }
+
+  try {
+    localStorage.setItem(getViewedStoryCacheKey(user), JSON.stringify(cache));
+  } catch {
+    // Cache writes are best-effort only.
+  }
+}
+
+function cacheViewedStory(user, story) {
+  if (!story?.id || !story?.expires_at) {
+    return;
+  }
+
+  writeViewedStoryCache(user, {
+    ...readViewedStoryCache(user),
+    [String(story.id)]: story.expires_at,
+  });
+}
+
+function applyViewedStoryCache(groups, user) {
+  const viewedCache = readViewedStoryCache(user);
+
+  return groups.map((group) => {
+    const stories = group.stories.map((story) => ({
+      ...story,
+      viewed: Boolean(story.viewed || viewedCache[String(story.id)]),
+    }));
+
+    return {
+      ...group,
+      stories,
+      unviewed_count: stories.filter((story) => !story.viewed).length,
+    };
+  });
 }
 
 function formatStoryTime(value) {
@@ -141,7 +290,16 @@ function normalizeStoryGroup(group) {
 }
 
 function StoryAvatar({ accountNumber, contacts, contact, hasRing = false }) {
-  const displayContact = contact || getContactByAccount(contacts, accountNumber);
+  const savedContact = getContactByAccount(contacts, accountNumber);
+  const displayContact =
+    (contact || savedContact)
+      ? {
+          ...(savedContact || {}),
+          ...(contact || {}),
+          profile_picture:
+            contact?.profile_picture || savedContact?.profile_picture || "",
+        }
+      : null;
 
   return (
     <span
@@ -177,9 +335,9 @@ export function useStoriesController({
   const [viewerState, setViewerState] = useState(null);
   const [viewersModal, setViewersModal] = useState(null);
 
-  const loadStories = useCallback(async () => {
-    if (!enabled) {
-      return;
+  const loadStories = useCallback(async ({ force = false } = {}) => {
+    if (!enabled && !force) {
+      return null;
     }
 
     setIsLoading(true);
@@ -192,21 +350,27 @@ export function useStoriesController({
       ]);
       const feedResult = getResult(feedResponse);
       const myStoriesResult = getResult(myStoriesResponse);
+      const nextFeedGroups = Array.isArray(feedResult.contacts)
+        ? applyViewedStoryCache(feedResult.contacts.map(normalizeStoryGroup), user)
+        : [];
+      const nextMyStories = Array.isArray(myStoriesResult.stories)
+        ? myStoriesResult.stories
+        : [];
 
-      setFeedGroups(
-        Array.isArray(feedResult.contacts)
-          ? feedResult.contacts.map(normalizeStoryGroup)
-          : [],
-      );
-      setMyStories(
-        Array.isArray(myStoriesResult.stories) ? myStoriesResult.stories : [],
-      );
+      setFeedGroups(nextFeedGroups);
+      setMyStories(nextMyStories);
+
+      return {
+        feedGroups: nextFeedGroups,
+        myStories: nextMyStories,
+      };
     } catch (error) {
       setMessage(getMessengerErrorMessage(error, "Unable to load stories."));
+      return null;
     } finally {
       setIsLoading(false);
     }
-  }, [enabled]);
+  }, [enabled, user]);
 
   useEffect(() => {
     if (enabled) {
@@ -319,15 +483,78 @@ export function useStoriesController({
     });
   }, [contacts]);
 
+  const openStoryReference = useCallback(
+    async (context) => {
+      const storyId = String(context?.story_id || "");
+
+      if (!storyId) {
+        return;
+      }
+
+      const storySnapshot = await loadStories({ force: true });
+      const availableMyStories = storySnapshot?.myStories || [];
+      const availableFeedGroups = storySnapshot?.feedGroups || [];
+      const myStoryIndex = availableMyStories.findIndex(
+        (story) => String(story.id) === storyId,
+      );
+
+      if (myStoryIndex >= 0) {
+        setViewerState({
+          contact: {
+            account_number: user?.account_number,
+            alias_name: "My Stories",
+          },
+          contactName: "My Stories",
+          isMine: true,
+          stories: availableMyStories,
+          storyIndex: myStoryIndex,
+        });
+        return;
+      }
+
+      for (const group of availableFeedGroups) {
+        const storyIndex = group.stories.findIndex(
+          (story) => String(story.id) === storyId,
+        );
+
+        if (storyIndex < 0) {
+          continue;
+        }
+
+        setViewerState({
+          contact: group.contact,
+          contactName: getStoryContactName({
+            accountNumber: group.account_number,
+            contacts,
+            fallbackContact: group.contact,
+          }),
+          isMine: false,
+          stories: group.stories,
+          storyIndex,
+        });
+        return;
+      }
+
+      onToast?.({
+        type: "error",
+        title: "Story unavailable",
+        message: "This story may have expired or is no longer visible.",
+      });
+    },
+    [contacts, loadStories, onToast, user?.account_number],
+  );
+
   const handleStoryViewed = useCallback((storyId) => {
     setFeedGroups((currentGroups) =>
       currentGroups.map((group) => {
         const stories = group.stories.map((story) =>
-          String(story.id) === String(storyId)
-            ? { ...story, viewed: true }
-            : story,
+          String(story.id) === String(storyId) ? { ...story, viewed: true } : story,
         );
         const unviewedCount = stories.filter((story) => !story.viewed).length;
+        const viewedStory = stories.find((story) => String(story.id) === String(storyId));
+        if (viewedStory) {
+          cacheViewedStory(user, viewedStory);
+        }
 
         return {
           ...group,
@@ -336,7 +563,7 @@ export function useStoriesController({
         };
       }),
     );
-  }, []);
+  }, [user]);
 
   const handleStoryDeleted = useCallback(
     (storyId) => {
@@ -421,6 +648,7 @@ export function useStoriesController({
     openComposer,
     openGroup,
     openMyStories,
+    openStoryReference,
     openViewersModal,
     recentGroups,
     setViewerState,
@@ -520,9 +748,15 @@ export function StoriesListPanel({ contacts, controller, user }) {
             onOpenGroup={controller.openGroup}
             title="Seen Stories"
           />
-        </div>
-      </section>
+      </div>
+    </section>
+    </>
+  );
+}
 
+export function StoriesOverlayHost({ contacts, controller, user }) {
+  return (
+    <>
       {controller.isComposerOpen ? (
         <StoryComposer
           contacts={contacts}
@@ -677,11 +911,16 @@ function StoryGroupList({ contacts, emptyLabel, groups, onOpenGroup, title }) {
 
 function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [storyMode, setStoryMode] = useState("media");
+  const [textStoryText, setTextStoryText] = useState("");
+  const [textStoryTheme, setTextStoryTheme] = useState(TEXT_STORY_THEMES[0].key);
   const [expiryHours, setExpiryHours] = useState(24);
   const [visibility, setVisibility] = useState("all_contacts");
   const [selectedAudience, setSelectedAudience] = useState([]);
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(null);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
   const fileInputRef = useRef(null);
@@ -728,12 +967,48 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
     };
   }, [contacts.length, onContactsChange]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    setIsLoadingSettings(true);
+    getMessengerStorySettings()
+      .then((response) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const settings = normalizeStorySettings(getResult(response).settings);
+        setExpiryHours(settings.expiry_hours);
+        setVisibility(settings.visibility);
+        setSelectedAudience(settings.audience_account_numbers);
+      })
+      .catch((error) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setMessage(getMessengerErrorMessage(error, "Unable to load story settings."));
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingSettings(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleFilesChange = (event) => {
     const files = Array.from(event.target.files || []);
     const unsupportedFiles = files.filter((file) => !isSupportedStoryMediaFile(file));
     const supportedFiles = files.filter(isSupportedStoryMediaFile).slice(0, 10);
 
     setSelectedFiles(supportedFiles);
+    if (supportedFiles.length > 0) {
+      setStoryMode("media");
+    }
     setMessage(
       unsupportedFiles.length > 0
         ? "Stories support image and video files only."
@@ -741,22 +1016,88 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
     );
   };
 
+  const handleTextStoryChange = (event) => {
+    setTextStoryText(event.target.value.slice(0, TEXT_STORY_MAX_LENGTH));
+  };
+
   const toggleAudience = (accountNumber) => {
     setSelectedAudience((currentAudience) =>
       currentAudience.includes(accountNumber)
         ? currentAudience.filter((item) => item !== accountNumber)
-        : [...currentAudience, accountNumber],
+      : [...currentAudience, accountNumber],
     );
+  };
+
+  const buildSettingsPayload = () => {
+    const audienceAccountNumbers =
+      visibility === "specific_contacts" ? selectedAudience : [];
+
+    return {
+      audience_account_numbers: audienceAccountNumbers,
+      expiry_hours: expiryHours,
+      visibility,
+    };
+  };
+
+  const saveStorySettings = async ({ silent = false } = {}) => {
+    if (isLoadingSettings) {
+      setMessage("Story settings are still loading.");
+      return null;
+    }
+
+    if (visibility === "specific_contacts" && selectedAudience.length === 0) {
+      setMessage("Select at least one contact.");
+      return null;
+    }
+
+    setIsSavingSettings(true);
+    if (!silent) {
+      setMessage("");
+    }
+
+    try {
+      const response = await updateMessengerStorySettings(buildSettingsPayload());
+      const nextSettings = normalizeStorySettings(getResult(response).settings);
+
+      setExpiryHours(nextSettings.expiry_hours);
+      setVisibility(nextSettings.visibility);
+      setSelectedAudience(nextSettings.audience_account_numbers);
+      if (!silent) {
+        setMessage("Story settings saved.");
+      }
+      return nextSettings;
+    } catch (error) {
+      setMessage(getMessengerErrorMessage(error, "Unable to save story settings."));
+      return null;
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleSaveSettings = () => {
+    if (isSubmitting || isSavingSettings) {
+      return;
+    }
+
+    saveStorySettings();
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (isSubmitting) {
+    if (isSubmitting || isSavingSettings) {
       return;
     }
 
-    if (selectedFiles.length === 0) {
+    const isTextStory = storyMode === "text";
+    const trimmedTextStory = textStoryText.trim();
+
+    if (!isTextStory && selectedFiles.length === 0) {
       setMessage("Choose at least one image or video.");
+      return;
+    }
+
+    if (isTextStory && !trimmedTextStory) {
+      setMessage("Write text for your story.");
       return;
     }
 
@@ -765,30 +1106,53 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
       return;
     }
 
+    const savedSettings = await saveStorySettings({ silent: true });
+    if (!savedSettings) {
+      return;
+    }
+
     const clientStoryId = createStoryClientId();
     const audienceAccountNumbers =
-      visibility === "specific_contacts" ? selectedAudience : [];
+      savedSettings.visibility === "specific_contacts"
+        ? savedSettings.audience_account_numbers
+        : [];
 
     setIsSubmitting(true);
     setMessage("");
-    setProgress({ phase: "encrypting", percent: 0 });
+    setProgress({ phase: isTextStory ? "creating" : "encrypting", percent: 0 });
 
     try {
-      const encryptedStoryMedia = await encryptSelectedFilesForStory(selectedFiles, {
-        audienceAccountNumbers,
-        clientStoryId,
-        onProgress: setProgress,
-      });
+      if (isTextStory) {
+        await createMessengerStory({
+          audience_account_numbers: audienceAccountNumbers,
+          client_story_id: clientStoryId,
+          encrypted_payload: createStoryTextPayload({
+            text: trimmedTextStory,
+            theme: textStoryTheme,
+          }),
+          encrypted_upload_intent_ids: [],
+          expiry_hours: savedSettings.expiry_hours,
+          story_type: "text",
+          visibility: savedSettings.visibility,
+        });
+      } else {
+        const encryptedStoryMedia = await encryptSelectedFilesForStory(selectedFiles, {
+          audienceAccountNumbers,
+          clientStoryId,
+          onProgress: setProgress,
+        });
 
-      setProgress({ phase: "creating", percent: 100 });
-      await createMessengerStory({
-        audience_account_numbers: audienceAccountNumbers,
-        client_story_id: clientStoryId,
-        encrypted_payload: encryptedStoryMedia.encryptedPayload,
-        encrypted_upload_intent_ids: encryptedStoryMedia.uploadIntentIds,
-        expiry_hours: expiryHours,
-        visibility,
-      });
+        setProgress({ phase: "creating", percent: 100 });
+        await createMessengerStory({
+          audience_account_numbers: audienceAccountNumbers,
+          client_story_id: clientStoryId,
+          encrypted_payload: encryptedStoryMedia.encryptedPayload,
+          encrypted_upload_intent_ids: encryptedStoryMedia.uploadIntentIds,
+          expiry_hours: savedSettings.expiry_hours,
+          story_type: "media",
+          visibility: savedSettings.visibility,
+        });
+      }
       onCreated();
     } catch (error) {
       setMessage(getMessengerErrorMessage(error, error.message || "Unable to upload story."));
@@ -798,16 +1162,21 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
     }
   };
 
+  const activeTextTheme = getTextStoryTheme(textStoryTheme);
+
   const modal = (
-    <div className="parent-layout-page__story-modal-backdrop" role="presentation">
+    <div
+      className="parent-layout-page__modal-backdrop parent-layout-page__story-modal-backdrop"
+      role="presentation"
+    >
       <form
-        className="parent-layout-page__story-composer"
+        className="parent-layout-page__modal parent-layout-page__modal--story parent-layout-page__story-composer"
         onSubmit={handleSubmit}
         aria-modal="true"
         role="dialog"
       >
         <button
-          className="parent-layout-page__story-modal-close"
+          className="parent-layout-page__modal-close parent-layout-page__story-modal-close"
           type="button"
           onClick={onClose}
           aria-label="Close story composer"
@@ -816,45 +1185,113 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           <X size={24} aria-hidden="true" />
         </button>
 
-        <header>
+        <header className="parent-layout-page__modal-header parent-layout-page__story-modal-header">
           <div>
             <h2>Add Story</h2>
-            <p>Photos and videos only</p>
+            <p>Photos, videos, or text board</p>
           </div>
           <UploadCloud size={24} aria-hidden="true" />
         </header>
 
-        <button
-          className="parent-layout-page__story-file-drop"
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
+        <div
+          className="parent-layout-page__story-mode-switch"
+          role="tablist"
+          aria-label="Story type"
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,video/*"
-            multiple
-            onChange={handleFilesChange}
-          />
-          <ImageIcon size={28} aria-hidden="true" />
-          <span>
-            {selectedFiles.length
-              ? `${selectedFiles.length} media selected`
-              : "Choose image or video"}
-          </span>
-        </button>
+          <button
+            className={storyMode === "media" ? "is-active" : ""}
+            type="button"
+            onClick={() => setStoryMode("media")}
+            role="tab"
+            aria-selected={storyMode === "media"}
+          >
+            <ImageIcon size={17} aria-hidden="true" />
+            <span>Media</span>
+          </button>
+          <button
+            className={storyMode === "text" ? "is-active" : ""}
+            type="button"
+            onClick={() => setStoryMode("text")}
+            role="tab"
+            aria-selected={storyMode === "text"}
+          >
+            <Type size={17} aria-hidden="true" />
+            <span>Text</span>
+          </button>
+        </div>
 
-        {selectedFiles.length > 0 ? (
-          <div className="parent-layout-page__story-selected-media">
-            {selectedFiles.map((file) => (
-              <span key={`${file.name}-${file.size}-${file.lastModified}`}>
-                {file.name}
+        {storyMode === "media" ? (
+          <>
+            <button
+              className="parent-layout-page__story-file-drop"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                multiple
+                onChange={handleFilesChange}
+              />
+              <ImageIcon size={28} aria-hidden="true" />
+              <span>
+                {selectedFiles.length
+                  ? `${selectedFiles.length} media selected`
+                  : "Choose image or video"}
               </span>
-            ))}
-          </div>
-        ) : null}
+            </button>
 
-        <fieldset className="parent-layout-page__story-fieldset">
+            {selectedFiles.length > 0 ? (
+              <div className="parent-layout-page__story-selected-media">
+                {selectedFiles.map((file) => (
+                  <span key={`${file.name}-${file.size}-${file.lastModified}`}>
+                    {file.name}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <section
+            className="parent-layout-page__story-text-composer"
+            style={{
+              "--story-text-background": activeTextTheme.background,
+              "--story-text-color": activeTextTheme.color,
+            }}
+          >
+            <textarea
+              value={textStoryText}
+              onChange={handleTextStoryChange}
+              placeholder="Write a story"
+              aria-label="Write story text"
+              maxLength={TEXT_STORY_MAX_LENGTH}
+            />
+            <div className="parent-layout-page__story-text-tools">
+              <div className="parent-layout-page__story-theme-swatches" aria-label="Story color">
+                {TEXT_STORY_THEMES.map((theme) => (
+                  <button
+                    className={textStoryTheme === theme.key ? "is-active" : ""}
+                    key={theme.key}
+                    type="button"
+                    onClick={() => setTextStoryTheme(theme.key)}
+                    style={{ "--story-theme-background": theme.background }}
+                    aria-label={theme.label}
+                    title={theme.label}
+                  />
+                ))}
+              </div>
+              <span>
+                {textStoryText.length}/{TEXT_STORY_MAX_LENGTH}
+              </span>
+            </div>
+          </section>
+        )}
+
+        <fieldset
+          className="parent-layout-page__story-fieldset"
+          disabled={isSubmitting || isLoadingSettings}
+        >
           <legend>Expiry</legend>
           <div className="parent-layout-page__story-segments">
             {EXPIRY_OPTIONS.map((hours) => (
@@ -870,7 +1307,10 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           </div>
         </fieldset>
 
-        <fieldset className="parent-layout-page__story-fieldset">
+        <fieldset
+          className="parent-layout-page__story-fieldset"
+          disabled={isSubmitting || isLoadingSettings}
+        >
           <legend>Audience</legend>
           <div className="parent-layout-page__story-segments">
             <button
@@ -898,6 +1338,7 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
               onChange={(event) => setContactSearch(event.target.value)}
               placeholder="Search contacts"
               aria-label="Search contacts"
+              disabled={isSubmitting || isLoadingSettings}
             />
             <div>
               {filteredContacts.length === 0 ? (
@@ -909,6 +1350,7 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
                       type="checkbox"
                       checked={selectedAudience.includes(contact.account_number)}
                       onChange={() => toggleAudience(contact.account_number)}
+                      disabled={isSubmitting || isLoadingSettings}
                     />
                     <StoryAvatar
                       accountNumber={contact.account_number}
@@ -944,18 +1386,38 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           </p>
         ) : null}
 
-        <button
-          className="parent-layout-page__story-submit"
-          type="submit"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? (
-            <LoaderCircle size={18} className="is-spinning" aria-hidden="true" />
-          ) : (
-            <UploadCloud size={18} aria-hidden="true" />
-          )}
-          <span>{isSubmitting ? "Uploading" : "Upload Story"}</span>
-        </button>
+        <div className="parent-layout-page__story-actions">
+          <button
+            className="parent-layout-page__story-settings-submit"
+            type="button"
+            onClick={handleSaveSettings}
+            disabled={isSubmitting || isSavingSettings || isLoadingSettings}
+          >
+            {isSavingSettings ? (
+              <LoaderCircle size={18} className="is-spinning" aria-hidden="true" />
+            ) : (
+              <Save size={18} aria-hidden="true" />
+            )}
+            <span>{isSavingSettings ? "Saving" : "Save Settings"}</span>
+          </button>
+
+          <button
+            className="parent-layout-page__story-submit"
+            type="submit"
+            disabled={isSubmitting || isSavingSettings || isLoadingSettings}
+          >
+            {isSubmitting ? (
+              <LoaderCircle size={18} className="is-spinning" aria-hidden="true" />
+            ) : storyMode === "text" ? (
+              <Type size={18} aria-hidden="true" />
+            ) : (
+              <UploadCloud size={18} aria-hidden="true" />
+            )}
+            <span>
+              {isSubmitting ? "Posting" : storyMode === "text" ? "Post Story" : "Upload Story"}
+            </span>
+          </button>
+        </div>
       </form>
     </div>
   );
@@ -979,6 +1441,8 @@ function StoryViewer({
   const { contact, contactName, isMine, stories, storyIndex } = viewerState;
   const story = stories[storyIndex] || null;
   const media = useMemo(() => (story ? getStoryFirstMedia(story) : null), [story]);
+  const textStory = useMemo(() => (story ? getStoryText(story) : null), [story]);
+  const isTextStory = story?.story_type === "text";
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaError, setMediaError] = useState("");
   const [progress, setProgress] = useState(0);
@@ -1016,7 +1480,25 @@ function StoryViewer({
     setMessage("");
     setIsDeleting(false);
 
-    if (!story || !media) {
+    if (!story) {
+      return undefined;
+    }
+
+    if (isTextStory) {
+      if (!textStory?.text) {
+        setMediaError("Story text is unavailable.");
+      }
+
+      if (!isMine) {
+        markMessengerStoryViewed(story.id)
+          .then(() => onStoryViewed(story.id))
+          .catch(() => {});
+      }
+
+      return undefined;
+    }
+
+    if (!media) {
       setMediaError("Story media is unavailable.");
       return undefined;
     }
@@ -1053,7 +1535,7 @@ function StoryViewer({
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [isMine, media, onStoryViewed, story]);
+  }, [isMine, isTextStory, media, onStoryViewed, story, textStory]);
 
   useEffect(() => {
     if (!story) {
@@ -1168,6 +1650,7 @@ function StoryViewer({
     return null;
   }
 
+  const activeTextTheme = getTextStoryTheme(textStory?.theme);
   const modal = (
     <div
       className={`parent-layout-page__story-viewer${inline ? " parent-layout-page__story-viewer--room" : ""}`}
@@ -1260,7 +1743,17 @@ function StoryViewer({
       />
 
       <main className="parent-layout-page__story-stage">
-        {mediaError ? (
+        {isTextStory && textStory?.text ? (
+          <div
+            className="parent-layout-page__story-text-board"
+            style={{
+              "--story-text-background": activeTextTheme.background,
+              "--story-text-color": activeTextTheme.color,
+            }}
+          >
+            <p>{textStory.text}</p>
+          </div>
+        ) : mediaError ? (
           <div className="parent-layout-page__story-stage-message">
             <AlertCircle size={28} aria-hidden="true" />
             <span>{mediaError}</span>
@@ -1336,14 +1829,17 @@ async function handleStoryMessageResponse(response, user, onRoomMessage) {
 
 function StoryViewersModal({ contacts, modal, onClose }) {
   const content = (
-    <div className="parent-layout-page__story-modal-backdrop" role="presentation">
+    <div
+      className="parent-layout-page__modal-backdrop parent-layout-page__story-modal-backdrop"
+      role="presentation"
+    >
       <section
-        className="parent-layout-page__story-viewers-modal"
+        className="parent-layout-page__modal parent-layout-page__modal--story parent-layout-page__story-viewers-modal"
         aria-modal="true"
         role="dialog"
       >
         <button
-          className="parent-layout-page__story-modal-close"
+          className="parent-layout-page__modal-close parent-layout-page__story-modal-close"
           type="button"
           onClick={onClose}
           aria-label="Close viewers"
@@ -1351,7 +1847,7 @@ function StoryViewersModal({ contacts, modal, onClose }) {
         >
           <X size={24} aria-hidden="true" />
         </button>
-        <header>
+        <header className="parent-layout-page__modal-header parent-layout-page__story-modal-header">
           <div>
             <h2>Viewers</h2>
             <p>{modal.viewCount || modal.viewers.length || 0} total</p>

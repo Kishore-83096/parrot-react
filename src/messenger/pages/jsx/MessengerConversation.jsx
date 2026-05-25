@@ -287,7 +287,7 @@ function getStoryContext(message) {
   return storyContext;
 }
 
-function StoryContextPreview({ context }) {
+function StoryContextPreview({ context, onOpen }) {
   if (!context) {
     return null;
   }
@@ -302,7 +302,17 @@ function StoryContextPreview({ context }) {
         : "Story";
 
   return (
-    <div className="parent-layout-page__message-story-context">
+    <button
+      className="parent-layout-page__message-story-context"
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen?.(context);
+      }}
+      aria-label={`Open ${label}`}
+      title={`Open ${label}`}
+    >
       <span aria-hidden="true">
         <ImageIcon size={16} />
       </span>
@@ -310,7 +320,7 @@ function StoryContextPreview({ context }) {
         <strong>{typeLabel} {label}</strong>
         <small>{mediaLabel}</small>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -2355,6 +2365,7 @@ function MessengerConversation({
   onRoomMessage,
   onRoomRead,
   onConversationCacheChange,
+  onOpenStoryReference,
 }) {
   const [roomMessages, setRoomMessages] = useState([]);
   const [roomMessagesCacheRoomId, setRoomMessagesCacheRoomId] = useState(null);
@@ -4609,7 +4620,10 @@ function MessengerConversation({
                     ) : null}
 
                     {storyContext ? (
-                      <StoryContextPreview context={storyContext} />
+                      <StoryContextPreview
+                        context={storyContext}
+                        onOpen={onOpenStoryReference}
+                      />
                     ) : null}
 
                     {messageAttachments.length > 0 ? (

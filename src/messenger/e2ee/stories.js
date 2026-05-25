@@ -14,6 +14,8 @@ import { toBase64 } from "./devices/index.js";
 const E2EE_FILE_AAD = "parrot:e2ee.file:v1";
 const STORY_MEDIA_PAYLOAD_TYPE = "parrot.story.media";
 const STORY_MEDIA_PAYLOAD_VERSION = 1;
+const STORY_TEXT_PAYLOAD_TYPE = "parrot.story.text";
+const STORY_TEXT_PAYLOAD_VERSION = 1;
 
 let fileAdditionalData = null;
 
@@ -350,6 +352,39 @@ export function parseStoryMediaPayload(value) {
     return payload.media;
   } catch {
     return [];
+  }
+}
+
+export function createStoryTextPayload({ text, theme } = {}) {
+  return JSON.stringify({
+    v: STORY_TEXT_PAYLOAD_VERSION,
+    type: STORY_TEXT_PAYLOAD_TYPE,
+    text: String(text || "").trim(),
+    theme: String(theme || "lavender"),
+  });
+}
+
+export function parseStoryTextPayload(value) {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(value);
+    if (
+      payload?.type !== STORY_TEXT_PAYLOAD_TYPE ||
+      Number(payload?.v) !== STORY_TEXT_PAYLOAD_VERSION ||
+      typeof payload?.text !== "string"
+    ) {
+      return null;
+    }
+
+    return {
+      text: payload.text,
+      theme: typeof payload.theme === "string" ? payload.theme : "lavender",
+    };
+  } catch {
+    return null;
   }
 }
 
