@@ -1690,7 +1690,7 @@ function StoryComposer({
             aria-selected={storyMode === "media"}
           >
             <ImageIcon size={17} aria-hidden="true" />
-            <span>Media</span>
+            <span>Visual Moment</span>
           </button>
           <button
             className={storyMode === "text" ? "is-active" : ""}
@@ -1700,7 +1700,7 @@ function StoryComposer({
             aria-selected={storyMode === "text"}
           >
             <Type size={17} aria-hidden="true" />
-            <span>Text</span>
+            <span>Text Canvas</span>
           </button>
         </div>
 
