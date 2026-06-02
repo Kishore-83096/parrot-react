@@ -61,6 +61,7 @@ import { getReactionConfig, MESSAGE_REACTIONS } from "../../reactions.js";
 const EXPIRY_OPTIONS = [24, 12, 6];
 const IMAGE_STORY_DURATION_MS = 6000;
 const MIN_STORY_VIDEO_TRIM_SECONDS = 0.5;
+const STORY_HOLD_SUPPRESS_TAP_MS = 250;
 const STORY_VIDEO_TRIM_EPSILON_SECONDS = 0.05;
 const TEXT_STORY_MAX_LENGTH = 700;
 const DEFAULT_STORY_SETTINGS = {
@@ -2196,9 +2197,17 @@ function StoryViewer({
   const [isDeleting, setIsDeleting] = useState(false);
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const [isStoryVideoMuted, setIsStoryVideoMuted] = useState(true);
+  const [isHoldPaused, setIsHoldPaused] = useState(false);
+  const [isReplyFocused, setIsReplyFocused] = useState(false);
+  const isStoryPaused =
+    isHoldPaused || isReplyFocused || isReactionPickerOpen || isSending;
   const reactionPickerRef = useRef(null);
+  const replyTextRef = useRef(null);
   const storyVideoRef = useRef(null);
   const timerRef = useRef(null);
+  const progressRef = useRef(0);
+  const holdStartedAtRef = useRef(0);
+  const suppressStoryTapRef = useRef(false);
 
   const goToStory = useCallback(
     (nextIndex) => {
@@ -2229,6 +2238,9 @@ function StoryViewer({
     setIsDeleting(false);
     setIsReactionPickerOpen(false);
     setIsStoryVideoMuted(true);
+    setIsHoldPaused(false);
+    setIsReplyFocused(false);
+    progressRef.current = 0;
 
     if (!story) {
       return undefined;
@@ -2288,18 +2300,21 @@ function StoryViewer({
   }, [isMine, isTextStory, media, onStoryViewed, story, textStory]);
 
   useEffect(() => {
-    if (!story || isVideoStory) {
+    if (!story || isVideoStory || isStoryPaused) {
       return undefined;
     }
 
     window.clearInterval(timerRef.current);
+    const startingProgress = progressRef.current;
     const startedAt = Date.now();
 
     timerRef.current = window.setInterval(() => {
       const nextProgress = Math.min(
-        ((Date.now() - startedAt) / IMAGE_STORY_DURATION_MS) * 100,
+        startingProgress +
+          ((Date.now() - startedAt) / IMAGE_STORY_DURATION_MS) * 100,
         100,
       );
+      progressRef.current = nextProgress;
       setProgress(nextProgress);
 
       if (nextProgress >= 100) {
@@ -2311,7 +2326,31 @@ function StoryViewer({
     return () => {
       window.clearInterval(timerRef.current);
     };
-  }, [goToStory, isVideoStory, story, storyIndex]);
+  }, [goToStory, isStoryPaused, isVideoStory, story, storyIndex]);
+
+  useEffect(() => {
+    const video = storyVideoRef.current;
+    if (!video || !isVideoStory) {
+      return;
+    }
+
+    if (isStoryPaused) {
+      video.pause();
+      return;
+    }
+
+    video.play().catch(() => {});
+  }, [isStoryPaused, isVideoStory, mediaUrl]);
+
+  useEffect(() => {
+    const textarea = replyTextRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [replyText]);
 
   useEffect(() => {
     if (!isReactionPickerOpen) {
@@ -2420,14 +2459,60 @@ function StoryViewer({
       return;
     }
 
-    setProgress(
-      Math.min(Math.max((event.currentTarget.currentTime / duration) * 100, 0), 100),
+    const nextProgress = Math.min(
+      Math.max((event.currentTarget.currentTime / duration) * 100, 0),
+      100,
     );
+    progressRef.current = nextProgress;
+    setProgress(nextProgress);
+  };
+
+  const handleStoryVideoCanPlay = (event) => {
+    if (!isStoryPaused) {
+      event.currentTarget.play().catch(() => {});
+    }
+  };
+
+  const handleStoryVideoError = () => {
+    setMediaError("Unable to play this story video.");
   };
 
   const toggleStoryVideoMuted = () => {
     setIsStoryVideoMuted((isMuted) => !isMuted);
-    storyVideoRef.current?.play().catch(() => {});
+    if (!isStoryPaused) {
+      storyVideoRef.current?.play().catch(() => {});
+    }
+  };
+
+  const handleStoryPointerDown = (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    holdStartedAtRef.current = Date.now();
+    suppressStoryTapRef.current = false;
+    setIsHoldPaused(true);
+  };
+
+  const handleStoryPointerRelease = () => {
+    if (
+      holdStartedAtRef.current &&
+      Date.now() - holdStartedAtRef.current >= STORY_HOLD_SUPPRESS_TAP_MS
+    ) {
+      suppressStoryTapRef.current = true;
+    }
+
+    holdStartedAtRef.current = 0;
+    setIsHoldPaused(false);
+  };
+
+  const handleStoryTap = (nextIndex) => {
+    if (suppressStoryTapRef.current) {
+      suppressStoryTapRef.current = false;
+      return;
+    }
+
+    goToStory(nextIndex);
   };
 
   if (!story) {
@@ -2437,9 +2522,13 @@ function StoryViewer({
   const activeTextTheme = getTextStoryTheme(textStory?.theme);
   const modal = (
     <div
-      className={`parent-layout-page__story-viewer${inline ? " parent-layout-page__story-viewer--room" : ""}${!isMine ? " has-response-controls" : ""}${isTextStory ? " is-text-story" : ""}`}
+      className={`parent-layout-page__story-viewer${inline ? " parent-layout-page__story-viewer--room" : ""}${!isMine ? " has-response-controls" : ""}${isTextStory ? " is-text-story" : ""}${isStoryPaused ? " is-paused" : ""}`}
       role="dialog"
       aria-modal={inline ? undefined : "true"}
+      onPointerCancel={handleStoryPointerRelease}
+      onPointerDown={handleStoryPointerDown}
+      onPointerLeave={handleStoryPointerRelease}
+      onPointerUp={handleStoryPointerRelease}
     >
       <div className="parent-layout-page__story-progress-row">
         {stories.map((item, index) => (
@@ -2516,13 +2605,13 @@ function StoryViewer({
       <button
         className="parent-layout-page__story-tap-zone is-prev"
         type="button"
-        onClick={() => goToStory(storyIndex - 1)}
+        onClick={() => handleStoryTap(storyIndex - 1)}
         aria-label="Previous story"
       />
       <button
         className="parent-layout-page__story-tap-zone is-next"
         type="button"
-        onClick={() => goToStory(storyIndex + 1)}
+        onClick={() => handleStoryTap(storyIndex + 1)}
         aria-label="Next story"
       />
 
@@ -2561,10 +2650,13 @@ function StoryViewer({
                     src={mediaUrl}
                     autoPlay
                     muted={isStoryVideoMuted}
+                    onCanPlay={handleStoryVideoCanPlay}
                     onEnded={() => goToStory(storyIndex + 1)}
+                    onError={handleStoryVideoError}
                     onLoadedMetadata={handleStoryVideoProgress}
                     onTimeUpdate={handleStoryVideoProgress}
                     playsInline
+                    preload="auto"
                   />
                   <button
                     className="parent-layout-page__story-video-mute"
@@ -2600,11 +2692,15 @@ function StoryViewer({
               className="parent-layout-page__story-reply-input"
               ref={reactionPickerRef}
             >
-              <input
+              <textarea
+                ref={replyTextRef}
                 value={replyText}
                 onChange={(event) => setReplyText(event.target.value)}
-                placeholder={`Reply privately to ${contactName}`}
+                onBlur={() => setIsReplyFocused(false)}
+                onFocus={() => setIsReplyFocused(true)}
+                placeholder={`Reply to ${contactName}'s story`}
                 aria-label="Reply to story"
+                rows={1}
               />
               <button
                 className="parent-layout-page__story-emoji-trigger"

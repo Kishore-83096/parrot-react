@@ -417,15 +417,33 @@ export function mergeStoryMediaCrypto(story) {
       media,
     ]),
   );
+  const previewMedia = Array.isArray(story?.media_preview)
+    ? story.media_preview
+    : [];
+  const previewMediaByIndex = new Map(
+    previewMedia.map((media, index) => [
+      Number(media.sort_order ?? index),
+      media,
+    ]),
+  );
+  const storyMedia =
+    Array.isArray(story?.media) && story.media.length > 0
+      ? story.media
+      : previewMedia;
 
-  return (Array.isArray(story?.media) ? story.media : []).map((media, index) => {
+  return storyMedia.map((media, index) => {
     const mediaIndex = Number(media.sort_order ?? index);
+    const previewData = previewMediaByIndex.get(mediaIndex) || {};
     const keyData = mediaKeysByIndex.get(mediaIndex) || {};
 
     return {
+      ...previewData,
       ...media,
       ...keyData,
-      encrypted_file_url: media.encrypted_file_url,
+      encrypted_file_url:
+        media.encrypted_file_url ||
+        previewData.encrypted_file_url ||
+        keyData.encrypted_file_url,
       id: media.id || keyData.id || `story-media-${index}`,
       media_index: mediaIndex,
       media_type: media.media_type || keyData.media_type,

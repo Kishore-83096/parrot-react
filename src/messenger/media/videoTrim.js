@@ -204,14 +204,12 @@ export async function trimStoryVideoFile(
       sourceCaptureStream = null;
     }
 
-    let drawFrame = () => {};
-    if (sourceCaptureStream?.getVideoTracks().length > 0) {
-      capturedStream = sourceCaptureStream;
-    } else {
-      const canvasCapture = createCanvasCaptureStream(video);
-      capturedStream = canvasCapture.stream;
-      drawFrame = canvasCapture.drawFrame;
-    }
+    const canvasCapture = createCanvasCaptureStream(video);
+    capturedStream = canvasCapture.stream;
+    sourceCaptureStream
+      ?.getAudioTracks()
+      .forEach((track) => capturedStream.addTrack(track));
+    canvasCapture.drawFrame();
     audioContext = await addAudioTrackFallback(video, capturedStream);
 
     const outputType = getVideoOutputType();
@@ -236,7 +234,7 @@ export async function trimStoryVideoFile(
     const waitForTrimEnd = new Promise((resolve, reject) => {
       const drawNextFrame = () => {
         try {
-          drawFrame();
+          canvasCapture.drawFrame();
         } catch {
           // Some browsers need one playback frame before canvas drawing succeeds.
         }
