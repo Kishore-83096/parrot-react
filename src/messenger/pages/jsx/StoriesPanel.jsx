@@ -40,6 +40,7 @@ import {
   createStoryTextPayload,
   decryptStoryMediaBlob,
   encryptSelectedFilesForStory,
+  getStoryMediaText,
   isSupportedStoryMediaFile,
   mergeStoryMediaCrypto,
   parseStoryTextPayload,
@@ -334,8 +335,27 @@ export function useStoriesController({
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [isComposerOpen, setIsComposerOpen] = useState(false);
+  const [hasSavedStorySettings, setHasSavedStorySettings] = useState(false);
+  const [isStorySettingsModalOpen, setIsStorySettingsModalOpen] = useState(false);
+  const [storySettings, setStorySettings] = useState(DEFAULT_STORY_SETTINGS);
   const [viewerState, setViewerState] = useState(null);
   const [viewersModal, setViewersModal] = useState(null);
+
+  const loadStorySettings = useCallback(async () => {
+    try {
+      const response = await getMessengerStorySettings();
+      const result = getResult(response);
+      const settings = normalizeStorySettings(result.settings);
+
+      setHasSavedStorySettings(Boolean(result.has_saved_settings));
+      setStorySettings(settings);
+
+      return settings;
+    } catch (error) {
+      setMessage(getMessengerErrorMessage(error, "Unable to load story settings."));
+      return null;
+    }
+  }, []);
 
   const loadStories = useCallback(async ({ force = false } = {}) => {
     if (!enabled && !force) {
@@ -377,8 +397,9 @@ export function useStoriesController({
   useEffect(() => {
     if (enabled) {
       loadStories();
+      loadStorySettings();
     }
-  }, [enabled, loadStories]);
+  }, [enabled, loadStories, loadStorySettings]);
 
   useEffect(() => {
     if (!enabled) {
@@ -436,6 +457,30 @@ export function useStoriesController({
 
   const closeComposer = useCallback(() => {
     setIsComposerOpen(false);
+  }, []);
+
+  const handleStorySettingsSaved = useCallback(
+    (nextSettings, { showToast = false } = {}) => {
+      setHasSavedStorySettings(true);
+      setStorySettings(normalizeStorySettings(nextSettings));
+
+      if (showToast) {
+        onToast?.({
+          type: "success",
+          title: "Story settings updated",
+          message: "New stories will use your updated expiry and audience.",
+        });
+      }
+    },
+    [onToast],
+  );
+
+  const openStorySettingsModal = useCallback(() => {
+    setIsStorySettingsModalOpen(true);
+  }, []);
+
+  const closeStorySettingsModal = useCallback(() => {
+    setIsStorySettingsModalOpen(false);
   }, []);
 
   const handleStoryCreated = useCallback(() => {
@@ -635,13 +680,17 @@ export function useStoriesController({
 
   return {
     closeComposer,
+    closeStorySettingsModal,
     closeViewer,
     feedGroups,
+    handleStorySettingsSaved,
     handleStoryCreated,
     handleStoryDeleted,
     handleStoryViewed,
+    hasSavedStorySettings,
     isComposerOpen,
     isLoading,
+    isStorySettingsModalOpen,
     loadStories,
     message,
     myStories,
@@ -650,11 +699,13 @@ export function useStoriesController({
     openComposer,
     openGroup,
     openMyStories,
+    openStorySettingsModal,
     openStoryReference,
     openViewersModal,
     recentGroups,
     setViewerState,
     setViewersModal,
+    storySettings,
     viewedGroups,
     viewerState,
     viewersModal,
@@ -693,6 +744,20 @@ export function StoriesListPanel({ contacts, controller, user }) {
           <div>
             <h2>Stories</h2>
           </div>
+          {controller.hasSavedStorySettings ? (
+            <div className="parent-layout-page__stories-toolbar-actions">
+              <div className="parent-layout-page__story-settings-menu">
+                <button
+                  type="button"
+                  onClick={controller.openStorySettingsModal}
+                  aria-label="Story settings"
+                  title="Story settings"
+                >
+                  <MoreVertical size={20} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {controller.message ? (
@@ -704,9 +769,6 @@ export function StoriesListPanel({ contacts, controller, user }) {
 
         <div className="parent-layout-page__stories-content">
           <section className="parent-layout-page__stories-band">
-            <div className="parent-layout-page__stories-section-title">
-              <strong>My Stories</strong>
-            </div>
             <button
               className="parent-layout-page__story-row parent-layout-page__story-row--mine"
               type="button"
@@ -765,6 +827,20 @@ export function StoriesOverlayHost({ contacts, controller, user }) {
           onClose={controller.closeComposer}
           onContactsChange={controller.onContactsChange}
           onCreated={controller.handleStoryCreated}
+          onSettingsSaved={controller.handleStorySettingsSaved}
+        />
+      ) : null}
+
+      {controller.isStorySettingsModalOpen ? (
+        <StorySettingsModal
+          contacts={contacts}
+          initialSettings={controller.storySettings}
+          onClose={controller.closeStorySettingsModal}
+          onContactsChange={controller.onContactsChange}
+          onSaved={(settings) => {
+            controller.handleStorySettingsSaved(settings, { showToast: true });
+            controller.closeStorySettingsModal();
+          }}
         />
       ) : null}
 
@@ -841,6 +917,20 @@ export function StoriesRoomPanel({ contacts, controller, user }) {
           onClose={controller.closeComposer}
           onContactsChange={controller.onContactsChange}
           onCreated={controller.handleStoryCreated}
+          onSettingsSaved={controller.handleStorySettingsSaved}
+        />
+      ) : null}
+
+      {controller.isStorySettingsModalOpen ? (
+        <StorySettingsModal
+          contacts={contacts}
+          initialSettings={controller.storySettings}
+          onClose={controller.closeStorySettingsModal}
+          onContactsChange={controller.onContactsChange}
+          onSaved={(settings) => {
+            controller.handleStorySettingsSaved(settings, { showToast: true });
+            controller.closeStorySettingsModal();
+          }}
         />
       ) : null}
 
@@ -911,26 +1001,14 @@ function StoryGroupList({ contacts, emptyLabel, groups, onOpenGroup, title }) {
   );
 }
 
-function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [storyMode, setStoryMode] = useState("media");
-  const [textStoryText, setTextStoryText] = useState("");
-  const [textStoryTheme, setTextStoryTheme] = useState(TEXT_STORY_THEMES[0].key);
-  const [expiryHours, setExpiryHours] = useState(24);
-  const [visibility, setVisibility] = useState("all_contacts");
-  const [selectedAudience, setSelectedAudience] = useState([]);
-  const [savedSettings, setSavedSettings] = useState(null);
-  const [hasSavedSettings, setHasSavedSettings] = useState(false);
-  const [isSettingsEditorOpen, setIsSettingsEditorOpen] = useState(true);
-  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
-  const [message, setMessage] = useState("");
-  const [progress, setProgress] = useState(null);
-  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
-  const [isSavingSettings, setIsSavingSettings] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+function StoryAudiencePickerModal({
+  contacts,
+  onApply,
+  onClose,
+  selectedAudience,
+}) {
   const [contactSearch, setContactSearch] = useState("");
-  const fileInputRef = useRef(null);
-
+  const [draftAudience, setDraftAudience] = useState(selectedAudience);
   const availableContacts = useMemo(
     () => contacts.filter((contact) => !contact.blocked),
     [contacts],
@@ -948,6 +1026,357 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
       return name.includes(query) || account.includes(query);
     });
   }, [availableContacts, contactSearch]);
+
+  const toggleAudience = (accountNumber) => {
+    setDraftAudience((currentAudience) =>
+      currentAudience.includes(accountNumber)
+        ? currentAudience.filter((item) => item !== accountNumber)
+        : [...currentAudience, accountNumber],
+    );
+  };
+
+  const modal = (
+    <div
+      className="parent-layout-page__modal-backdrop parent-layout-page__story-modal-backdrop parent-layout-page__story-audience-backdrop"
+      role="presentation"
+    >
+      <section
+        className="parent-layout-page__modal parent-layout-page__modal--story parent-layout-page__story-audience-modal"
+        aria-modal="true"
+        aria-labelledby="parent-story-audience-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close parent-layout-page__story-modal-close"
+          type="button"
+          onClick={onClose}
+          aria-label="Close contact selection"
+          title="Close"
+        >
+          <X size={24} aria-hidden="true" />
+        </button>
+        <header className="parent-layout-page__modal-header parent-layout-page__story-modal-header">
+          <div>
+            <h2 id="parent-story-audience-title">Specific contacts</h2>
+            <p>{draftAudience.length} selected</p>
+          </div>
+          <UsersRound size={24} aria-hidden="true" />
+        </header>
+
+        <div className="parent-layout-page__story-contact-picker">
+          <input
+            type="search"
+            value={contactSearch}
+            onChange={(event) => setContactSearch(event.target.value)}
+            placeholder="Search contacts"
+            aria-label="Search contacts"
+          />
+          <div>
+            {filteredContacts.length === 0 ? (
+              <p>No contacts available.</p>
+            ) : (
+              filteredContacts.map((contact) => (
+                <label key={contact.account_number}>
+                  <input
+                    type="checkbox"
+                    checked={draftAudience.includes(contact.account_number)}
+                    onChange={() => toggleAudience(contact.account_number)}
+                  />
+                  <StoryAvatar
+                    accountNumber={contact.account_number}
+                    contacts={contacts}
+                    contact={contact}
+                  />
+                  <span>{getContactName(contact)}</span>
+                </label>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="parent-layout-page__story-actions is-upload-only">
+          <button
+            className="parent-layout-page__story-submit"
+            type="button"
+            onClick={() => onApply(draftAudience)}
+            disabled={draftAudience.length === 0}
+          >
+            <UsersRound size={18} aria-hidden="true" />
+            <span>Use selected contacts</span>
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+
+  return createPortal(modal, document.body);
+}
+
+function StorySettingsFields({
+  contacts,
+  disabled,
+  expiryHours,
+  onExpiryHoursChange,
+  onSelectedAudienceChange,
+  onVisibilityChange,
+  selectedAudience,
+  visibility,
+}) {
+  const [isAudiencePickerOpen, setIsAudiencePickerOpen] = useState(false);
+
+  return (
+    <>
+      <fieldset
+        className="parent-layout-page__story-fieldset"
+        disabled={disabled}
+      >
+        <legend>Expiry</legend>
+        <div className="parent-layout-page__story-segments">
+          {EXPIRY_OPTIONS.map((hours) => (
+            <button
+              className={expiryHours === hours ? "is-active" : ""}
+              type="button"
+              key={hours}
+              onClick={() => onExpiryHoursChange(hours)}
+            >
+              {hours}h
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      <fieldset
+        className="parent-layout-page__story-fieldset"
+        disabled={disabled}
+      >
+        <legend>Audience</legend>
+        <div className="parent-layout-page__story-segments parent-layout-page__story-segments--audience">
+          <button
+            className={visibility === "all_contacts" ? "is-active" : ""}
+            type="button"
+            onClick={() => onVisibilityChange("all_contacts")}
+          >
+            All contacts
+          </button>
+          <button
+            className={visibility === "specific_contacts" ? "is-active" : ""}
+            type="button"
+            onClick={() => setIsAudiencePickerOpen(true)}
+          >
+            Specific contacts
+          </button>
+        </div>
+      </fieldset>
+
+      {visibility === "specific_contacts" ? (
+        <button
+          className="parent-layout-page__story-specific-contacts"
+          type="button"
+          onClick={() => setIsAudiencePickerOpen(true)}
+          disabled={disabled}
+        >
+          <UsersRound size={18} aria-hidden="true" />
+          <span>
+            {selectedAudience.length
+              ? `${selectedAudience.length} selected - Change contacts`
+              : "Choose contacts"}
+          </span>
+        </button>
+      ) : null}
+
+      {isAudiencePickerOpen ? (
+        <StoryAudiencePickerModal
+          contacts={contacts}
+          selectedAudience={selectedAudience}
+          onApply={(nextAudience) => {
+            onSelectedAudienceChange(nextAudience);
+            onVisibilityChange("specific_contacts");
+            setIsAudiencePickerOpen(false);
+          }}
+          onClose={() => setIsAudiencePickerOpen(false)}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function StorySettingsModal({
+  contacts,
+  initialSettings,
+  onClose,
+  onContactsChange,
+  onSaved,
+}) {
+  const normalizedInitialSettings = normalizeStorySettings(initialSettings);
+  const [expiryHours, setExpiryHours] = useState(
+    normalizedInitialSettings.expiry_hours,
+  );
+  const [visibility, setVisibility] = useState(
+    normalizedInitialSettings.visibility,
+  );
+  const [selectedAudience, setSelectedAudience] = useState(
+    normalizedInitialSettings.audience_account_numbers,
+  );
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (contacts.length > 0) {
+      return undefined;
+    }
+
+    let isMounted = true;
+    getParentContacts()
+      .then((response) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const nextContacts = Array.isArray(response.data?.contacts)
+          ? response.data.contacts
+          : [];
+        onContactsChange(nextContacts);
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [contacts.length, onContactsChange]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    if (isSaving) {
+      return;
+    }
+
+    if (visibility === "specific_contacts" && selectedAudience.length === 0) {
+      setMessage("Select at least one contact.");
+      return;
+    }
+
+    setIsSaving(true);
+    setMessage("");
+
+    try {
+      const response = await updateMessengerStorySettings({
+        audience_account_numbers:
+          visibility === "specific_contacts" ? selectedAudience : [],
+        expiry_hours: expiryHours,
+        visibility,
+      });
+      onSaved(normalizeStorySettings(getResult(response).settings));
+    } catch (error) {
+      setMessage(getMessengerErrorMessage(error, "Unable to save story settings."));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const modal = (
+    <div
+      className="parent-layout-page__modal-backdrop parent-layout-page__story-modal-backdrop"
+      role="presentation"
+    >
+      <form
+        className="parent-layout-page__modal parent-layout-page__modal--story parent-layout-page__story-settings-modal"
+        onSubmit={handleSubmit}
+        aria-modal="true"
+        aria-labelledby="parent-story-settings-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close parent-layout-page__story-modal-close"
+          type="button"
+          onClick={onClose}
+          aria-label="Close story settings"
+          title="Close"
+        >
+          <X size={24} aria-hidden="true" />
+        </button>
+        <header className="parent-layout-page__modal-header parent-layout-page__story-modal-header">
+          <div>
+            <h2 id="parent-story-settings-title">Story settings</h2>
+            <p>Used automatically for your next stories</p>
+          </div>
+          <Settings2 size={24} aria-hidden="true" />
+        </header>
+
+        <StorySettingsFields
+          contacts={contacts}
+          disabled={isSaving}
+          expiryHours={expiryHours}
+          onExpiryHoursChange={setExpiryHours}
+          onSelectedAudienceChange={setSelectedAudience}
+          onVisibilityChange={setVisibility}
+          selectedAudience={selectedAudience}
+          visibility={visibility}
+        />
+
+        {message ? (
+          <p className="parent-layout-page__stories-message" role="alert">
+            <AlertCircle size={18} aria-hidden="true" />
+            <span>{message}</span>
+          </p>
+        ) : null}
+
+        <div className="parent-layout-page__story-actions is-upload-only">
+          <button
+            className="parent-layout-page__story-submit"
+            type="submit"
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <LoaderCircle size={18} className="is-spinning" aria-hidden="true" />
+            ) : (
+              <Save size={18} aria-hidden="true" />
+            )}
+            <span>{isSaving ? "Saving" : "Save Settings"}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  return createPortal(modal, document.body);
+}
+
+function StoryComposer({
+  contacts,
+  onClose,
+  onContactsChange,
+  onCreated,
+  onSettingsSaved,
+}) {
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [storyMode, setStoryMode] = useState("media");
+  const [mediaStoryText, setMediaStoryText] = useState("");
+  const [textStoryText, setTextStoryText] = useState("");
+  const [textStoryTheme, setTextStoryTheme] = useState(TEXT_STORY_THEMES[0].key);
+  const [expiryHours, setExpiryHours] = useState(24);
+  const [visibility, setVisibility] = useState("all_contacts");
+  const [selectedAudience, setSelectedAudience] = useState([]);
+  const [savedSettings, setSavedSettings] = useState(null);
+  const [hasSavedSettings, setHasSavedSettings] = useState(false);
+  const [isSettingsEditorOpen, setIsSettingsEditorOpen] = useState(true);
+  const [message, setMessage] = useState("");
+  const [progress, setProgress] = useState(null);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFilePreviews, setSelectedFilePreviews] = useState([]);
+  const fileInputRef = useRef(null);
+  const selectedFilePreviewUrlsRef = useRef([]);
+
+  useEffect(
+    () => () => {
+      selectedFilePreviewUrlsRef.current.forEach((previewUrl) => {
+        URL.revokeObjectURL(previewUrl);
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (contacts.length > 0) {
@@ -1015,8 +1444,19 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
     const files = Array.from(event.target.files || []);
     const unsupportedFiles = files.filter((file) => !isSupportedStoryMediaFile(file));
     const supportedFiles = files.filter(isSupportedStoryMediaFile).slice(0, 10);
+    const nextFilePreviews = supportedFiles.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+    }));
 
+    selectedFilePreviewUrlsRef.current.forEach((previewUrl) => {
+      URL.revokeObjectURL(previewUrl);
+    });
+    selectedFilePreviewUrlsRef.current = nextFilePreviews.map(
+      (preview) => preview.url,
+    );
     setSelectedFiles(supportedFiles);
+    setSelectedFilePreviews(nextFilePreviews);
     if (supportedFiles.length > 0) {
       setStoryMode("media");
     }
@@ -1029,14 +1469,6 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
 
   const handleTextStoryChange = (event) => {
     setTextStoryText(event.target.value.slice(0, TEXT_STORY_MAX_LENGTH));
-  };
-
-  const toggleAudience = (accountNumber) => {
-    setSelectedAudience((currentAudience) =>
-      currentAudience.includes(accountNumber)
-        ? currentAudience.filter((item) => item !== accountNumber)
-      : [...currentAudience, accountNumber],
-    );
   };
 
   const buildSettingsPayload = () => {
@@ -1076,7 +1508,7 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
       setSavedSettings(nextSettings);
       setHasSavedSettings(true);
       setIsSettingsEditorOpen(false);
-      setIsSettingsMenuOpen(false);
+      onSettingsSaved?.(nextSettings);
       if (!silent) {
         setMessage("Story settings saved.");
       }
@@ -1095,18 +1527,6 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
     }
 
     saveStorySettings();
-  };
-
-  const openSettingsEditor = () => {
-    if (savedSettings) {
-      setExpiryHours(savedSettings.expiry_hours);
-      setVisibility(savedSettings.visibility);
-      setSelectedAudience(savedSettings.audience_account_numbers);
-    }
-
-    setMessage("");
-    setIsSettingsMenuOpen(false);
-    setIsSettingsEditorOpen(true);
   };
 
   const handleSubmit = async (event) => {
@@ -1174,6 +1594,7 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           audienceAccountNumbers,
           clientStoryId,
           onProgress: setProgress,
+          text: mediaStoryText,
         });
 
         setProgress({ phase: "creating", percent: 100 });
@@ -1224,32 +1645,7 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
             <h2>Add Story</h2>
             <p>Photos, videos, or text board</p>
           </div>
-          <div className="parent-layout-page__story-composer-header-actions">
-            <UploadCloud size={24} aria-hidden="true" />
-            {hasSavedSettings ? (
-              <div className="parent-layout-page__story-settings-menu">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setIsSettingsMenuOpen((currentValue) => !currentValue)
-                  }
-                  aria-expanded={isSettingsMenuOpen}
-                  aria-label="Story settings"
-                  title="Story settings"
-                >
-                  <MoreVertical size={20} aria-hidden="true" />
-                </button>
-                {isSettingsMenuOpen ? (
-                  <div role="menu">
-                    <button type="button" onClick={openSettingsEditor} role="menuitem">
-                      <Settings2 size={17} aria-hidden="true" />
-                      <span>Edit settings</span>
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          <UploadCloud size={24} aria-hidden="true" />
         </header>
 
         <div
@@ -1301,15 +1697,42 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
               </span>
             </button>
 
-            {selectedFiles.length > 0 ? (
-              <div className="parent-layout-page__story-selected-media">
-                {selectedFiles.map((file) => (
-                  <span key={`${file.name}-${file.size}-${file.lastModified}`}>
-                    {file.name}
-                  </span>
+            {selectedFilePreviews.length > 0 ? (
+              <div
+                className="parent-layout-page__story-selected-media"
+                aria-label="Selected story media previews"
+              >
+                {selectedFilePreviews.map(({ file, url }, index) => (
+                  <figure
+                    key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                  >
+                    <div className="parent-layout-page__story-selected-media-preview">
+                      {file.type.startsWith("video/") ? (
+                        <video src={url} controls playsInline preload="metadata" />
+                      ) : (
+                        <img src={url} alt={`Preview of ${file.name}`} />
+                      )}
+                    </div>
+                    <figcaption>{file.name}</figcaption>
+                  </figure>
                 ))}
               </div>
             ) : null}
+
+            <label className="parent-layout-page__story-media-text">
+              <span>Story text</span>
+              <textarea
+                value={mediaStoryText}
+                onChange={(event) =>
+                  setMediaStoryText(event.target.value.slice(0, TEXT_STORY_MAX_LENGTH))
+                }
+                placeholder="Write something about this story"
+                maxLength={TEXT_STORY_MAX_LENGTH}
+              />
+              <small>
+                {mediaStoryText.length}/{TEXT_STORY_MAX_LENGTH}
+              </small>
+            </label>
           </>
         ) : (
           <section
@@ -1348,84 +1771,16 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
         )}
 
         {isSettingsEditorOpen ? (
-          <>
-            <fieldset
-              className="parent-layout-page__story-fieldset"
-              disabled={isSubmitting || isLoadingSettings}
-            >
-              <legend>Expiry</legend>
-              <div className="parent-layout-page__story-segments">
-                {EXPIRY_OPTIONS.map((hours) => (
-                  <button
-                    className={expiryHours === hours ? "is-active" : ""}
-                    type="button"
-                    key={hours}
-                    onClick={() => setExpiryHours(hours)}
-                  >
-                    {hours}h
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset
-              className="parent-layout-page__story-fieldset"
-              disabled={isSubmitting || isLoadingSettings}
-            >
-              <legend>Audience</legend>
-              <div className="parent-layout-page__story-segments">
-                <button
-                  className={visibility === "all_contacts" ? "is-active" : ""}
-                  type="button"
-                  onClick={() => setVisibility("all_contacts")}
-                >
-                  All contacts
-                </button>
-                <button
-                  className={visibility === "specific_contacts" ? "is-active" : ""}
-                  type="button"
-                  onClick={() => setVisibility("specific_contacts")}
-                >
-                  Specific
-                </button>
-              </div>
-            </fieldset>
-
-            {visibility === "specific_contacts" ? (
-              <section className="parent-layout-page__story-contact-picker">
-                <input
-                  type="search"
-                  value={contactSearch}
-                  onChange={(event) => setContactSearch(event.target.value)}
-                  placeholder="Search contacts"
-                  aria-label="Search contacts"
-                  disabled={isSubmitting || isLoadingSettings}
-                />
-                <div>
-                  {filteredContacts.length === 0 ? (
-                    <p>No contacts available.</p>
-                  ) : (
-                    filteredContacts.map((contact) => (
-                      <label key={contact.account_number}>
-                        <input
-                          type="checkbox"
-                          checked={selectedAudience.includes(contact.account_number)}
-                          onChange={() => toggleAudience(contact.account_number)}
-                          disabled={isSubmitting || isLoadingSettings}
-                        />
-                        <StoryAvatar
-                          accountNumber={contact.account_number}
-                          contacts={contacts}
-                          contact={contact}
-                        />
-                        <span>{getContactName(contact)}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </section>
-            ) : null}
-          </>
+          <StorySettingsFields
+            contacts={contacts}
+            disabled={isSubmitting || isLoadingSettings}
+            expiryHours={expiryHours}
+            onExpiryHoursChange={setExpiryHours}
+            onSelectedAudienceChange={setSelectedAudience}
+            onVisibilityChange={setVisibility}
+            selectedAudience={selectedAudience}
+            visibility={visibility}
+          />
         ) : null}
 
         {progress ? (
@@ -1510,6 +1865,10 @@ function StoryViewer({
   const { contact, contactName, isMine, stories, storyIndex } = viewerState;
   const story = stories[storyIndex] || null;
   const media = useMemo(() => (story ? getStoryFirstMedia(story) : null), [story]);
+  const mediaStoryText = useMemo(
+    () => (story ? getStoryMediaText(story.encrypted_payload) : ""),
+    [story],
+  );
   const textStory = useMemo(() => (story ? getStoryText(story) : null), [story]);
   const isTextStory = story?.story_type === "text";
   const [mediaUrl, setMediaUrl] = useState("");
@@ -1832,10 +2191,19 @@ function StoryViewer({
             <LoaderCircle size={28} className="is-spinning" aria-hidden="true" />
             <span>Opening story</span>
           </div>
-        ) : media?.media_type === "video" ? (
-          <video src={mediaUrl} autoPlay playsInline controls />
         ) : (
-          <img src={mediaUrl} alt="" />
+          <div className="parent-layout-page__story-media-stage">
+            {media?.media_type === "video" ? (
+              <video src={mediaUrl} autoPlay playsInline controls />
+            ) : (
+              <img src={mediaUrl} alt="" />
+            )}
+            {mediaStoryText ? (
+              <p className="parent-layout-page__story-media-text-overlay">
+                {mediaStoryText}
+              </p>
+            ) : null}
+          </div>
         )}
       </main>
 
