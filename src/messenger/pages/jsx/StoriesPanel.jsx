@@ -8,6 +8,7 @@ import {
   MoreVertical,
   Plus,
   Save,
+  Scissors,
   Send,
   Settings2,
   Smile,
@@ -15,6 +16,8 @@ import {
   Type,
   UploadCloud,
   UsersRound,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,6 +49,7 @@ import {
   mergeStoryMediaCrypto,
   parseStoryTextPayload,
 } from "../../e2ee/stories.js";
+import { trimStoryVideoFile } from "../../media/videoTrim.js";
 import { getParentContacts } from "../../../parent/api.js";
 import {
   getContactInitials,
@@ -56,6 +60,8 @@ import { getReactionConfig, MESSAGE_REACTIONS } from "../../reactions.js";
 
 const EXPIRY_OPTIONS = [24, 12, 6];
 const IMAGE_STORY_DURATION_MS = 6000;
+const MIN_STORY_VIDEO_TRIM_SECONDS = 0.5;
+const STORY_VIDEO_TRIM_EPSILON_SECONDS = 0.05;
 const TEXT_STORY_MAX_LENGTH = 700;
 const DEFAULT_STORY_SETTINGS = {
   audience_account_numbers: [],
@@ -255,6 +261,23 @@ function formatExpiry(value) {
   }
 
   return `${Math.ceil(minutes / 60)}h left`;
+}
+
+function formatVideoTrimTime(value) {
+  const totalSeconds = Math.max(Number(value) || 0, 0);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = (totalSeconds % 60).toFixed(1).padStart(4, "0");
+
+  return `${minutes}:${seconds}`;
+}
+
+function isStoryVideoTrimmed(videoTrim) {
+  return Boolean(
+    videoTrim &&
+      (videoTrim.startSeconds > STORY_VIDEO_TRIM_EPSILON_SECONDS ||
+        videoTrim.endSeconds <
+          videoTrim.duration - STORY_VIDEO_TRIM_EPSILON_SECONDS),
+  );
 }
 
 function getContactByAccount(contacts, accountNumber) {
@@ -1404,7 +1427,10 @@ function StoryComposer({
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFilePreviews, setSelectedFilePreviews] = useState([]);
+  const [isPreviewVideoMuted, setIsPreviewVideoMuted] = useState(true);
+  const [videoTrim, setVideoTrim] = useState(null);
   const fileInputRef = useRef(null);
+  const selectedVideoPreviewRef = useRef(null);
   const selectedFilePreviewUrlsRef = useRef([]);
 
   useEffect(
@@ -1511,12 +1537,102 @@ function StoryComposer({
     );
     setSelectedFiles([selectedFile]);
     setSelectedFilePreviews(nextFilePreviews);
+    setIsPreviewVideoMuted(true);
+    setVideoTrim(null);
     setStoryMode("media");
     setMessage(
       unsupportedFiles.length > 0
         ? "Stories support image and video files only."
         : "",
     );
+  };
+
+  useEffect(() => {
+    const video = selectedVideoPreviewRef.current;
+    if (!video || !videoTrim) {
+      return;
+    }
+
+    video.currentTime = videoTrim.startSeconds;
+    video.play().catch(() => {});
+  }, [videoTrim]);
+
+  const handleSelectedVideoMetadata = (event) => {
+    const duration = Number(event.currentTarget.duration);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      setMessage("Unable to read this video's duration.");
+      return;
+    }
+
+    setVideoTrim({
+      duration,
+      endSeconds: duration,
+      startSeconds: 0,
+    });
+  };
+
+  const restartSelectedVideoPreview = () => {
+    const video = selectedVideoPreviewRef.current;
+    if (!video || !videoTrim) {
+      return;
+    }
+
+    video.currentTime = videoTrim.startSeconds;
+    video.play().catch(() => {});
+  };
+
+  const handleSelectedVideoTimeUpdate = (event) => {
+    if (
+      videoTrim &&
+      event.currentTarget.currentTime >=
+        videoTrim.endSeconds - STORY_VIDEO_TRIM_EPSILON_SECONDS
+    ) {
+      restartSelectedVideoPreview();
+    }
+  };
+
+  const handleVideoTrimStartChange = (event) => {
+    const nextStartSeconds = Number(event.target.value);
+
+    setVideoTrim((currentTrim) => {
+      if (!currentTrim) {
+        return currentTrim;
+      }
+
+      const minimumDuration = Math.min(
+        MIN_STORY_VIDEO_TRIM_SECONDS,
+        currentTrim.duration,
+      );
+      return {
+        ...currentTrim,
+        startSeconds: Math.min(
+          Math.max(nextStartSeconds, 0),
+          currentTrim.endSeconds - minimumDuration,
+        ),
+      };
+    });
+  };
+
+  const handleVideoTrimEndChange = (event) => {
+    const nextEndSeconds = Number(event.target.value);
+
+    setVideoTrim((currentTrim) => {
+      if (!currentTrim) {
+        return currentTrim;
+      }
+
+      const minimumDuration = Math.min(
+        MIN_STORY_VIDEO_TRIM_SECONDS,
+        currentTrim.duration,
+      );
+      return {
+        ...currentTrim,
+        endSeconds: Math.max(
+          Math.min(nextEndSeconds, currentTrim.duration),
+          currentTrim.startSeconds + minimumDuration,
+        ),
+      };
+    });
   };
 
   const handleTextStoryChange = (event) => {
@@ -1595,6 +1711,10 @@ function StoryComposer({
 
     const isTextStory = storyMode === "text";
     const trimmedTextStory = textStoryText.trim();
+    const selectedStoryFile = selectedFiles[0] || null;
+    const isSelectedStoryVideo = String(
+      selectedStoryFile?.type || "",
+    ).startsWith("video/");
 
     if (!isTextStory && selectedFiles.length === 0) {
       setMessage("Choose at least one image or video.");
@@ -1603,6 +1723,11 @@ function StoryComposer({
 
     if (isTextStory && !trimmedTextStory) {
       setMessage("Write text for your story.");
+      return;
+    }
+
+    if (!isTextStory && isSelectedStoryVideo && !videoTrim) {
+      setMessage("Wait for the video preview to finish loading.");
       return;
     }
 
@@ -1648,7 +1773,21 @@ function StoryComposer({
           visibility: activeSettings.visibility,
         });
       } else {
-        const encryptedStoryMedia = await encryptSelectedFilesForStory(selectedFiles, {
+        let storyFiles = selectedFiles;
+        if (isSelectedStoryVideo && isStoryVideoTrimmed(videoTrim)) {
+          setProgress({ phase: "trimming", percent: 0 });
+          storyFiles = [
+            await trimStoryVideoFile(selectedStoryFile, {
+              endSeconds: videoTrim.endSeconds,
+              onProgress: (percent) => {
+                setProgress({ phase: "trimming", percent });
+              },
+              startSeconds: videoTrim.startSeconds,
+            }),
+          ];
+        }
+
+        const encryptedStoryMedia = await encryptSelectedFilesForStory(storyFiles, {
           audienceAccountNumbers,
           caption: mediaStoryText,
           clientStoryId,
@@ -1766,12 +1905,103 @@ function StoryComposer({
                   >
                     <div className="parent-layout-page__story-selected-media-preview">
                       {file.type.startsWith("video/") ? (
-                        <video src={url} controls playsInline preload="metadata" />
+                        <>
+                          <video
+                            ref={selectedVideoPreviewRef}
+                            src={url}
+                            autoPlay
+                            muted={isPreviewVideoMuted}
+                            onEnded={restartSelectedVideoPreview}
+                            onLoadedMetadata={handleSelectedVideoMetadata}
+                            onTimeUpdate={handleSelectedVideoTimeUpdate}
+                            playsInline
+                            preload="metadata"
+                          />
+                          <button
+                            className="parent-layout-page__story-video-mute"
+                            type="button"
+                            onClick={() =>
+                              setIsPreviewVideoMuted((isMuted) => !isMuted)
+                            }
+                            aria-label={
+                              isPreviewVideoMuted
+                                ? "Unmute video preview"
+                                : "Mute video preview"
+                            }
+                            title={
+                              isPreviewVideoMuted
+                                ? "Unmute video preview"
+                                : "Mute video preview"
+                            }
+                          >
+                            {isPreviewVideoMuted ? (
+                              <VolumeX size={17} aria-hidden="true" />
+                            ) : (
+                              <Volume2 size={17} aria-hidden="true" />
+                            )}
+                          </button>
+                        </>
                       ) : (
                         <img src={url} alt={`Preview of ${file.name}`} />
                       )}
                     </div>
                     <figcaption>{file.name}</figcaption>
+                    {file.type.startsWith("video/") && videoTrim ? (
+                      <section
+                        className="parent-layout-page__story-video-trimmer"
+                        aria-label="Trim selected video"
+                      >
+                        <header>
+                          <span>
+                            <Scissors size={15} aria-hidden="true" />
+                            Trim video
+                          </span>
+                          <strong>
+                            {formatVideoTrimTime(
+                              videoTrim.endSeconds - videoTrim.startSeconds,
+                            )}
+                          </strong>
+                        </header>
+                        <div
+                          className="parent-layout-page__story-video-trim-timeline"
+                          style={{
+                            "--story-video-trim-end": `${
+                              (videoTrim.endSeconds / videoTrim.duration) * 100
+                            }%`,
+                            "--story-video-trim-start": `${
+                              (videoTrim.startSeconds / videoTrim.duration) * 100
+                            }%`,
+                          }}
+                        >
+                          <span className="is-start">
+                            {formatVideoTrimTime(videoTrim.startSeconds)}
+                          </span>
+                          <input
+                            className="is-start"
+                            type="range"
+                            min="0"
+                            max={videoTrim.duration}
+                            step="0.1"
+                            value={videoTrim.startSeconds}
+                            onChange={handleVideoTrimStartChange}
+                            aria-label="Video trim start time"
+                          />
+                          <input
+                            className="is-end"
+                            type="range"
+                            min="0"
+                            max={videoTrim.duration}
+                            step="0.1"
+                            value={videoTrim.endSeconds}
+                            onChange={handleVideoTrimEndChange}
+                            aria-label="Video trim end time"
+                          />
+                          <span className="is-end">
+                            {formatVideoTrimTime(videoTrim.endSeconds)}
+                          </span>
+                        </div>
+                      </section>
+                    ) : null}
                   </figure>
                 ))}
               </div>
@@ -1858,6 +2088,8 @@ function StoryComposer({
             <span>
               {progress.phase === "encrypting"
                 ? "Encrypting"
+                : progress.phase === "trimming"
+                  ? "Trimming"
                 : progress.phase === "creating"
                   ? "Creating"
                   : "Uploading"}
@@ -1954,6 +2186,7 @@ function StoryViewer({
   );
   const textStory = useMemo(() => (story ? getStoryText(story) : null), [story]);
   const isTextStory = story?.story_type === "text";
+  const isVideoStory = !isTextStory && media?.media_type === "video";
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaError, setMediaError] = useState("");
   const [progress, setProgress] = useState(0);
@@ -1962,7 +2195,9 @@ function StoryViewer({
   const [isSending, setIsSending] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+  const [isStoryVideoMuted, setIsStoryVideoMuted] = useState(true);
   const reactionPickerRef = useRef(null);
+  const storyVideoRef = useRef(null);
   const timerRef = useRef(null);
 
   const goToStory = useCallback(
@@ -1993,6 +2228,7 @@ function StoryViewer({
     setMessage("");
     setIsDeleting(false);
     setIsReactionPickerOpen(false);
+    setIsStoryVideoMuted(true);
 
     if (!story) {
       return undefined;
@@ -2052,7 +2288,7 @@ function StoryViewer({
   }, [isMine, isTextStory, media, onStoryViewed, story, textStory]);
 
   useEffect(() => {
-    if (!story) {
+    if (!story || isVideoStory) {
       return undefined;
     }
 
@@ -2075,7 +2311,7 @@ function StoryViewer({
     return () => {
       window.clearInterval(timerRef.current);
     };
-  }, [goToStory, story, storyIndex]);
+  }, [goToStory, isVideoStory, story, storyIndex]);
 
   useEffect(() => {
     if (!isReactionPickerOpen) {
@@ -2176,6 +2412,22 @@ function StoryViewer({
       setMessage(getMessengerErrorMessage(error, "Unable to delete story."));
       setIsDeleting(false);
     }
+  };
+
+  const handleStoryVideoProgress = (event) => {
+    const duration = Number(event.currentTarget.duration);
+    if (!Number.isFinite(duration) || duration <= 0) {
+      return;
+    }
+
+    setProgress(
+      Math.min(Math.max((event.currentTarget.currentTime / duration) * 100, 0), 100),
+    );
+  };
+
+  const toggleStoryVideoMuted = () => {
+    setIsStoryVideoMuted((isMuted) => !isMuted);
+    storyVideoRef.current?.play().catch(() => {});
   };
 
   if (!story) {
@@ -2303,7 +2555,31 @@ function StoryViewer({
               }`}
             >
               {media?.media_type === "video" ? (
-                <video src={mediaUrl} autoPlay playsInline controls />
+                <>
+                  <video
+                    ref={storyVideoRef}
+                    src={mediaUrl}
+                    autoPlay
+                    muted={isStoryVideoMuted}
+                    onEnded={() => goToStory(storyIndex + 1)}
+                    onLoadedMetadata={handleStoryVideoProgress}
+                    onTimeUpdate={handleStoryVideoProgress}
+                    playsInline
+                  />
+                  <button
+                    className="parent-layout-page__story-video-mute"
+                    type="button"
+                    onClick={toggleStoryVideoMuted}
+                    aria-label={isStoryVideoMuted ? "Unmute story video" : "Mute story video"}
+                    title={isStoryVideoMuted ? "Unmute story video" : "Mute story video"}
+                  >
+                    {isStoryVideoMuted ? (
+                      <VolumeX size={17} aria-hidden="true" />
+                    ) : (
+                      <Volume2 size={17} aria-hidden="true" />
+                    )}
+                  </button>
+                </>
               ) : (
                 <img src={mediaUrl} alt="" />
               )}
@@ -2319,7 +2595,7 @@ function StoryViewer({
 
       {!isMine ? (
         <footer className="parent-layout-page__story-viewer-footer">
-          <form onSubmit={sendStoryReply}>
+          <form onSubmit={sendStoryReply} aria-label="Reply to story">
             <div
               className="parent-layout-page__story-reply-input"
               ref={reactionPickerRef}
@@ -2327,7 +2603,7 @@ function StoryViewer({
               <input
                 value={replyText}
                 onChange={(event) => setReplyText(event.target.value)}
-                placeholder="Reply"
+                placeholder={`Reply privately to ${contactName}`}
                 aria-label="Reply to story"
               />
               <button
@@ -2367,6 +2643,8 @@ function StoryViewer({
               className="parent-layout-page__story-reply-submit"
               type="submit"
               disabled={isSending || !replyText.trim()}
+              aria-label="Send story reply"
+              title="Send reply"
             >
               <Send size={18} aria-hidden="true" />
             </button>
