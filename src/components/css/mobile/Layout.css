@@ -6958,27 +6958,49 @@ video.parent-layout-page__attachment-modal-media {
   position: relative;
 }
 
+.parent-layout-page__story-media-frame {
+  width: fit-content;
+  height: fit-content;
+  max-width: 100%;
+  max-height: 100%;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
 .parent-layout-page__story-media-text-overlay {
-  width: min(calc(100% - 28px), 680px);
-  max-height: min(38svh, 240px);
+  width: min(calc(100% - 24px), 680px);
+  max-height: calc(100% - 24px);
   margin: 0;
-  padding: 10px 13px;
+  padding: 0;
   position: absolute;
   left: 50%;
-  bottom: 16px;
+  bottom: 12px;
   z-index: 3;
-  overflow: auto;
-  border-radius: 14px;
+  overflow-y: auto;
   color: #fff;
-  background: rgba(0, 0, 0, 0.54);
+  background: transparent;
   font-size: 15px;
   font-weight: 680;
   line-height: 1.38;
   text-align: center;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 0 12px rgba(0, 0, 0, 0.92);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  scrollbar-width: none;
   transform: translateX(-50%);
-  pointer-events: none;
+  overscroll-behavior: contain;
+}
+
+.parent-layout-page__story-media-frame.is-video .parent-layout-page__story-media-text-overlay {
+  bottom: 48px;
+  max-height: calc(100% - 60px);
+}
+
+.parent-layout-page__story-media-text-overlay::-webkit-scrollbar {
+  display: none;
 }
 
 .parent-layout-page__story-text-board {

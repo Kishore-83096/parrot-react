@@ -2275,16 +2275,22 @@ function StoryViewer({
           </div>
         ) : (
           <div className="parent-layout-page__story-media-stage">
-            {media?.media_type === "video" ? (
-              <video src={mediaUrl} autoPlay playsInline controls />
-            ) : (
-              <img src={mediaUrl} alt="" />
-            )}
-            {mediaStoryCaption ? (
-              <p className="parent-layout-page__story-media-text-overlay">
-                {mediaStoryCaption}
-              </p>
-            ) : null}
+            <div
+              className={`parent-layout-page__story-media-frame${
+                media?.media_type === "video" ? " is-video" : ""
+              }`}
+            >
+              {media?.media_type === "video" ? (
+                <video src={mediaUrl} autoPlay playsInline controls />
+              ) : (
+                <img src={mediaUrl} alt="" />
+              )}
+              {mediaStoryCaption ? (
+                <p className="parent-layout-page__story-media-text-overlay">
+                  {mediaStoryCaption}
+                </p>
+              ) : null}
+            </div>
           </div>
         )}
       </main>
