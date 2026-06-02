@@ -2428,6 +2428,15 @@ function StoryViewer({
     }
   };
 
+  const handleStoryReplyKeyDown = (event) => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent?.isComposing) {
+      return;
+    }
+
+    event.preventDefault();
+    void sendStoryReply(event);
+  };
+
   const handleDeleteStory = async () => {
     if (!story || !isMine || isDeleting) {
       return;
@@ -2697,6 +2706,7 @@ function StoryViewer({
                   onChange={(event) => setReplyText(event.target.value)}
                   onBlur={() => setIsReplyFocused(false)}
                   onFocus={() => setIsReplyFocused(true)}
+                  onKeyDown={handleStoryReplyKeyDown}
                   placeholder={`Reply to ${contactName}'s story`}
                   aria-label="Reply to story"
                   rows={1}
