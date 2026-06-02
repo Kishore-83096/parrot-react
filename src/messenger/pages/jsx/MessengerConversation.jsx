@@ -299,7 +299,9 @@ function StoryContextPreview({ context, onOpen }) {
       ? "Video story"
       : context.media_type === "image"
         ? "Photo story"
-        : "Story";
+        : context.media_type === "text"
+          ? "Text story"
+          : "Story";
 
   return (
     <button
