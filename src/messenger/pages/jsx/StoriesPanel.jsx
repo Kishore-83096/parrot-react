@@ -2646,6 +2646,7 @@ function StoryViewer({
               {media?.media_type === "video" ? (
                 <>
                   <video
+                    key={mediaUrl}
                     ref={storyVideoRef}
                     src={mediaUrl}
                     autoPlay
@@ -2687,21 +2688,34 @@ function StoryViewer({
 
       {!isMine ? (
         <footer className="parent-layout-page__story-viewer-footer">
-          <form onSubmit={sendStoryReply} aria-label="Reply to story">
+          <div className="parent-layout-page__story-response-row">
+            <form onSubmit={sendStoryReply} aria-label="Reply to story">
+              <div className="parent-layout-page__story-reply-input">
+                <textarea
+                  ref={replyTextRef}
+                  value={replyText}
+                  onChange={(event) => setReplyText(event.target.value)}
+                  onBlur={() => setIsReplyFocused(false)}
+                  onFocus={() => setIsReplyFocused(true)}
+                  placeholder={`Reply to ${contactName}'s story`}
+                  aria-label="Reply to story"
+                  rows={1}
+                />
+              </div>
+              <button
+                className="parent-layout-page__story-reply-submit"
+                type="submit"
+                disabled={isSending || !replyText.trim()}
+                aria-label="Send story reply"
+                title="Send reply"
+              >
+                <Send size={18} aria-hidden="true" />
+              </button>
+            </form>
             <div
-              className="parent-layout-page__story-reply-input"
+              className="parent-layout-page__story-reaction-action"
               ref={reactionPickerRef}
             >
-              <textarea
-                ref={replyTextRef}
-                value={replyText}
-                onChange={(event) => setReplyText(event.target.value)}
-                onBlur={() => setIsReplyFocused(false)}
-                onFocus={() => setIsReplyFocused(true)}
-                placeholder={`Reply to ${contactName}'s story`}
-                aria-label="Reply to story"
-                rows={1}
-              />
               <button
                 className="parent-layout-page__story-emoji-trigger"
                 type="button"
@@ -2709,9 +2723,9 @@ function StoryViewer({
                 disabled={isSending}
                 aria-expanded={isReactionPickerOpen}
                 aria-label="Choose story reaction"
-                title="Emoji"
+                title="React to story"
               >
-                <Smile size={18} aria-hidden="true" />
+                <Smile size={20} aria-hidden="true" />
               </button>
               {isReactionPickerOpen ? (
                 <div
@@ -2735,16 +2749,7 @@ function StoryViewer({
                 </div>
               ) : null}
             </div>
-            <button
-              className="parent-layout-page__story-reply-submit"
-              type="submit"
-              disabled={isSending || !replyText.trim()}
-              aria-label="Send story reply"
-              title="Send reply"
-            >
-              <Send size={18} aria-hidden="true" />
-            </button>
-          </form>
+          </div>
           {message ? <p>{message}</p> : null}
         </footer>
       ) : null}

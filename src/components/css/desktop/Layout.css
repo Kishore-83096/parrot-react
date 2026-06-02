@@ -6460,10 +6460,22 @@ video.parent-layout-page__attachment-modal-media {
   box-sizing: border-box;
 }
 
-.parent-layout-page__story-viewer-footer form {
-  width: min(560px, 100%);
+.parent-layout-page__story-response-row {
+  width: min(620px, 100%);
   max-width: 100%;
   margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 46px;
+  align-items: end;
+  gap: 8px;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.parent-layout-page__story-viewer-footer form {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   padding: 5px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 42px;
@@ -6487,7 +6499,7 @@ video.parent-layout-page__attachment-modal-media {
   min-width: 0;
   min-height: 42px;
   max-height: 124px;
-  padding: 11px 46px 10px 15px;
+  padding: 11px 15px 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 21px;
   color: #fff;
@@ -6515,21 +6527,24 @@ video.parent-layout-page__attachment-modal-media {
   display: none;
 }
 
-.parent-layout-page__story-viewer-footer form .parent-layout-page__story-emoji-trigger {
-  width: 36px;
-  height: 36px;
+.parent-layout-page__story-reaction-action {
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.parent-layout-page__story-viewer-footer .parent-layout-page__story-emoji-trigger {
+  width: 42px;
+  height: 42px;
   padding: 0;
   display: grid;
   place-items: center;
-  position: absolute;
-  top: 50%;
-  right: 3px;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 999px;
-  color: rgba(255, 255, 255, 0.82);
-  background: transparent;
-  box-shadow: none;
-  transform: translateY(-50%);
+  color: #fff;
+  background: rgba(20, 13, 38, 0.58);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(18px);
 }
 
 .parent-layout-page__story-viewer-footer form .parent-layout-page__story-reply-submit {
@@ -6548,30 +6563,31 @@ video.parent-layout-page__attachment-modal-media {
   cursor: default;
 }
 
-.parent-layout-page__story-viewer-footer form .parent-layout-page__story-emoji-trigger:hover,
-.parent-layout-page__story-viewer-footer form .parent-layout-page__story-emoji-trigger:focus-visible,
-.parent-layout-page__story-viewer-footer form .parent-layout-page__story-emoji-trigger[aria-expanded="true"] {
+.parent-layout-page__story-viewer-footer .parent-layout-page__story-emoji-trigger:hover,
+.parent-layout-page__story-viewer-footer .parent-layout-page__story-emoji-trigger:focus-visible,
+.parent-layout-page__story-viewer-footer .parent-layout-page__story-emoji-trigger[aria-expanded="true"] {
   color: #fff;
   background: linear-gradient(135deg, #7a35f5, #3f8cff);
 }
 
 .parent-layout-page__story-reaction-picker {
-  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 140px);
   padding: 5px;
   display: flex;
+  flex-direction: column;
   gap: 4px;
   position: absolute;
   right: 0;
   bottom: calc(100% + 8px);
   z-index: 5;
-  overflow-x: auto;
+  overflow-y: auto;
   border: 1px solid rgba(124, 60, 255, 0.18);
   border-radius: 999px;
   background: rgba(250, 247, 255, 0.96);
   box-shadow: 0 16px 36px rgba(12, 7, 24, 0.28);
 }
 
-.parent-layout-page__story-viewer-footer form .parent-layout-page__story-reaction-picker button {
+.parent-layout-page__story-viewer-footer .parent-layout-page__story-reaction-picker button {
   width: 34px;
   height: 34px;
   padding: 0;
@@ -6584,8 +6600,8 @@ video.parent-layout-page__attachment-modal-media {
   box-shadow: none;
 }
 
-.parent-layout-page__story-viewer-footer form .parent-layout-page__story-reaction-picker button:hover,
-.parent-layout-page__story-viewer-footer form .parent-layout-page__story-reaction-picker button:focus-visible {
+.parent-layout-page__story-viewer-footer .parent-layout-page__story-reaction-picker button:hover,
+.parent-layout-page__story-viewer-footer .parent-layout-page__story-reaction-picker button:focus-visible {
   border-color: rgba(63, 140, 255, 0.5);
   transform: translateY(-2px) scale(1.04);
 }

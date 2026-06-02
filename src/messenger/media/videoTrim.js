@@ -2,10 +2,10 @@ const STORY_VIDEO_TRIM_EPSILON_SECONDS = 0.05;
 const STORY_VIDEO_TRIM_FRAME_RATE = 30;
 const STORY_VIDEO_TRIM_MAX_WIDTH = 1280;
 const STORY_VIDEO_OUTPUT_TYPES = [
-  "video/webm;codecs=vp9,opus",
+  "video/mp4",
   "video/webm;codecs=vp8,opus",
   "video/webm",
-  "video/mp4",
+  "video/webm;codecs=vp9,opus",
 ];
 
 function waitForVideoEvent(video, eventName, errorMessage) {
@@ -36,6 +36,14 @@ async function loadVideoMetadata(video) {
   await waitForVideoEvent(video, "loadedmetadata", "Unable to read this video.");
 }
 
+async function loadVideoData(video) {
+  if (video.readyState >= 2) {
+    return;
+  }
+
+  await waitForVideoEvent(video, "loadeddata", "Unable to play this video.");
+}
+
 async function seekVideo(video, time) {
   if (Math.abs(video.currentTime - time) <= STORY_VIDEO_TRIM_EPSILON_SECONDS) {
     return;
@@ -54,11 +62,39 @@ function getVideoOutputType() {
     return "";
   }
 
-  return (
-    STORY_VIDEO_OUTPUT_TYPES.find((mimeType) =>
-      globalThis.MediaRecorder.isTypeSupported(mimeType),
-    ) || ""
+  const supportedOutputTypes = STORY_VIDEO_OUTPUT_TYPES.filter((mimeType) =>
+    globalThis.MediaRecorder.isTypeSupported(mimeType),
   );
+  const video = document.createElement("video");
+
+  return (
+    supportedOutputTypes.find((mimeType) => video.canPlayType(mimeType)) ||
+    supportedOutputTypes[0] ||
+    ""
+  );
+}
+
+async function validateTrimmedVideoBlob(blob) {
+  const sourceUrl = URL.createObjectURL(blob);
+  const video = document.createElement("video");
+
+  try {
+    video.preload = "auto";
+    video.playsInline = true;
+    video.muted = true;
+    video.src = sourceUrl;
+    video.load();
+    await loadVideoMetadata(video);
+    await loadVideoData(video);
+
+    if (!Number.isFinite(Number(video.duration)) || Number(video.duration) <= 0) {
+      throw new Error("Unable to prepare the trimmed video for playback.");
+    }
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(sourceUrl);
+  }
 }
 
 function createTrimmedVideoName(fileName, mimeType) {
@@ -265,6 +301,7 @@ export async function trimStoryVideoFile(
     recorder.stop();
 
     const blob = await recordedBlob;
+    await validateTrimmedVideoBlob(blob);
     onProgress?.(100);
     return new File([blob], createTrimmedVideoName(file.name, blob.type), {
       lastModified: Date.now(),
