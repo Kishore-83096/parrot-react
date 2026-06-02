@@ -30,6 +30,14 @@
     rgba(255, 238, 241, 0.96);
 }
 
+.parrot-toast--info {
+  border-color: rgba(42, 124, 224, 0.24);
+  color: #185fae;
+  background:
+    radial-gradient(circle at 95% 20%, rgba(42, 124, 224, 0.14), transparent 34%),
+    rgba(237, 246, 255, 0.96);
+}
+
 .parrot-toast__icon {
   width: 40px;
   height: 40px;
@@ -45,6 +53,10 @@
 
 .parrot-toast--error .parrot-toast__icon {
   background: linear-gradient(135deg, #ff6b7d, #ef3d55);
+}
+
+.parrot-toast--info .parrot-toast__icon {
+  background: linear-gradient(135deg, #58a6ff, #2a7ce0);
 }
 
 .parrot-toast__content {
@@ -129,6 +141,11 @@
 .parrot-toast--error .parrot-toast__close:hover,
 .parrot-toast--error .parrot-toast__close:focus-visible {
   background: #ef3d55;
+}
+
+.parrot-toast--info .parrot-toast__close:hover,
+.parrot-toast--info .parrot-toast__close:focus-visible {
+  background: #2a7ce0;
 }
 
 @media (max-width: 620px) {

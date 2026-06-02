@@ -406,6 +406,7 @@ function Header({
     setIsConfirmNewDefaultDevicePasswordVisible,
   ] = useState(false);
   const hydratedProfileUserKeyRef = useRef("");
+  const handledDefaultDevicePromptVersionRef = useRef(0);
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
   const username = accountDisplay?.username || user?.username || "parrot_user";
@@ -581,10 +582,15 @@ function Header({
   };
 
   useEffect(() => {
-    if (!defaultDevicePromptVersion) {
+    if (
+      !defaultDevicePromptVersion ||
+      handledDefaultDevicePromptVersionRef.current ===
+        defaultDevicePromptVersion
+    ) {
       return;
     }
 
+    handledDefaultDevicePromptVersionRef.current = defaultDevicePromptVersion;
     setIsMenuOpen(false);
     setIsDefaultDeviceSelectionRequired(true);
     setActiveLinkedDevicesTab("devices");

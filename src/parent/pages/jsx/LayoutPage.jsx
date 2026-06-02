@@ -189,7 +189,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
       if (showToast) {
         setToast({
-          type: "error",
+          type: "info",
           title: "Select default device",
           message: "Choose which linked device can manage your devices.",
         });
@@ -222,7 +222,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
       if (showToast) {
         setToast({
-          type: "error",
+          type: "info",
           title: "Recovery key updated",
           message: "Enter the current recovery key on this device.",
         });
@@ -258,7 +258,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
       if (showToast) {
         setToast({
-          type: "error",
+          type: "info",
           title: "Recovery key updated",
           message: "Enter the current recovery key on this device.",
         });
@@ -316,7 +316,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
           if (linkedDevices.length > 0 && !hasDefaultDevice) {
             setDefaultDevicePromptVersion((currentVersion) => currentVersion + 1);
             setToast({
-              type: "error",
+              type: "info",
               title: "Select default device",
               message: "Make this device the default before setting a recovery key.",
             });
@@ -363,7 +363,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         if (linkedDevices.length > 0 && !hasDefaultDevice) {
           setDefaultDevicePromptVersion((currentVersion) => currentVersion + 1);
           setToast({
-            type: "error",
+            type: "info",
             title: "Select default device",
             message: "Make this device the default before setting a recovery key.",
           });

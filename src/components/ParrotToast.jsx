@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info } from "lucide-react";
 import { useEffect } from "react";
 
 import "./ParrotToast.css";
@@ -23,11 +23,13 @@ function ParrotToast({ toast, onClose, duration = 10000 }) {
   }
 
   const isSuccess = toast.type === "success";
-  const Icon = isSuccess ? CheckCircle2 : AlertCircle;
+  const isInfo = toast.type === "info";
+  const toastType = isSuccess ? "success" : isInfo ? "info" : "error";
+  const Icon = isSuccess ? CheckCircle2 : isInfo ? Info : AlertCircle;
 
   return (
     <aside
-      className={`parrot-toast parrot-toast--${isSuccess ? "success" : "error"}`}
+      className={`parrot-toast parrot-toast--${toastType}`}
       role="status"
       aria-live="polite"
     >
