@@ -1482,11 +1482,25 @@ function StoryComposer({
   const handleFilesChange = (event) => {
     const files = Array.from(event.target.files || []);
     const unsupportedFiles = files.filter((file) => !isSupportedStoryMediaFile(file));
-    const supportedFiles = files.filter(isSupportedStoryMediaFile).slice(0, 10);
-    const nextFilePreviews = supportedFiles.map((file) => ({
-      file,
-      url: URL.createObjectURL(file),
-    }));
+    const supportedFiles = files.filter(isSupportedStoryMediaFile);
+    const selectedFile = supportedFiles[supportedFiles.length - 1];
+
+    event.target.value = "";
+    if (!selectedFile) {
+      setMessage(
+        unsupportedFiles.length > 0
+          ? "Stories support image and video files only."
+          : "",
+      );
+      return;
+    }
+
+    const nextFilePreviews = [
+      {
+        file: selectedFile,
+        url: URL.createObjectURL(selectedFile),
+      },
+    ];
 
     selectedFilePreviewUrlsRef.current.forEach((previewUrl) => {
       URL.revokeObjectURL(previewUrl);
@@ -1494,11 +1508,9 @@ function StoryComposer({
     selectedFilePreviewUrlsRef.current = nextFilePreviews.map(
       (preview) => preview.url,
     );
-    setSelectedFiles(supportedFiles);
+    setSelectedFiles([selectedFile]);
     setSelectedFilePreviews(nextFilePreviews);
-    if (supportedFiles.length > 0) {
-      setStoryMode("media");
-    }
+    setStoryMode("media");
     setMessage(
       unsupportedFiles.length > 0
         ? "Stories support image and video files only."
@@ -1732,13 +1744,12 @@ function StoryComposer({
                 ref={fileInputRef}
                 type="file"
                 accept="image/*,video/*"
-                multiple
                 onChange={handleFilesChange}
               />
               <ImageIcon size={28} aria-hidden="true" />
               <span>
                 {selectedFiles.length
-                  ? `${selectedFiles.length} media selected`
+                  ? "Replace image or video"
                   : "Choose image or video"}
               </span>
             </button>

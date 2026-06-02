@@ -66,6 +66,10 @@ export async function encryptSelectedFilesForStory(
     };
   }
 
+  if (files.length > 1) {
+    throw new Error("Stories support one image or video only.");
+  }
+
   if (!clientStoryId) {
     throw new Error("Story upload is missing a client story id.");
   }
