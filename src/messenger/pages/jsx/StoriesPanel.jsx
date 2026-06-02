@@ -10,6 +10,7 @@ import {
   Save,
   Send,
   Settings2,
+  Smile,
   Trash2,
   Type,
   UploadCloud,
@@ -83,9 +84,9 @@ const TEXT_STORY_THEMES = [
   },
   {
     key: "white",
-    label: "White",
-    background: "linear-gradient(135deg, #ffffff 0%, #f2edff 56%, #eaf4ff 100%)",
-    color: "#372553",
+    label: "Sunset",
+    background: "linear-gradient(135deg, #ff6b6b 0%, #f06595 48%, #845ef7 100%)",
+    color: "#ffffff",
   },
 ];
 
@@ -1960,6 +1961,8 @@ function StoryViewer({
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+  const reactionPickerRef = useRef(null);
   const timerRef = useRef(null);
 
   const goToStory = useCallback(
@@ -1989,6 +1992,7 @@ function StoryViewer({
     setReplyText("");
     setMessage("");
     setIsDeleting(false);
+    setIsReactionPickerOpen(false);
 
     if (!story) {
       return undefined;
@@ -2073,6 +2077,23 @@ function StoryViewer({
     };
   }, [goToStory, story, storyIndex]);
 
+  useEffect(() => {
+    if (!isReactionPickerOpen) {
+      return undefined;
+    }
+
+    const closeReactionPicker = (event) => {
+      if (!reactionPickerRef.current?.contains(event.target)) {
+        setIsReactionPickerOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", closeReactionPicker);
+    return () => {
+      document.removeEventListener("pointerdown", closeReactionPicker);
+    };
+  }, [isReactionPickerOpen]);
+
   const sendStoryReaction = async (reaction) => {
     if (!story || isMine || isSending) {
       return;
@@ -2080,6 +2101,7 @@ function StoryViewer({
 
     setIsSending(true);
     setMessage("");
+    setIsReactionPickerOpen(false);
 
     try {
       const reactionText = getReactionConfig(reaction)?.emoji || reaction;
@@ -2163,7 +2185,7 @@ function StoryViewer({
   const activeTextTheme = getTextStoryTheme(textStory?.theme);
   const modal = (
     <div
-      className={`parent-layout-page__story-viewer${inline ? " parent-layout-page__story-viewer--room" : ""}`}
+      className={`parent-layout-page__story-viewer${inline ? " parent-layout-page__story-viewer--room" : ""}${!isMine ? " has-response-controls" : ""}${isTextStory ? " is-text-story" : ""}`}
       role="dialog"
       aria-modal={inline ? undefined : "true"}
     >
@@ -2297,28 +2319,55 @@ function StoryViewer({
 
       {!isMine ? (
         <footer className="parent-layout-page__story-viewer-footer">
-          <div className="parent-layout-page__story-reactions">
-            {MESSAGE_REACTIONS.map((reaction) => (
-              <button
-                type="button"
-                key={reaction.key}
-                onClick={() => sendStoryReaction(reaction.key)}
-                disabled={isSending}
-                aria-label={reaction.label}
-                title={reaction.label}
-              >
-                {reaction.emoji}
-              </button>
-            ))}
-          </div>
           <form onSubmit={sendStoryReply}>
-            <input
-              value={replyText}
-              onChange={(event) => setReplyText(event.target.value)}
-              placeholder="Reply"
-              aria-label="Reply to story"
-            />
-            <button type="submit" disabled={isSending || !replyText.trim()}>
+            <div
+              className="parent-layout-page__story-reply-input"
+              ref={reactionPickerRef}
+            >
+              <input
+                value={replyText}
+                onChange={(event) => setReplyText(event.target.value)}
+                placeholder="Reply"
+                aria-label="Reply to story"
+              />
+              <button
+                className="parent-layout-page__story-emoji-trigger"
+                type="button"
+                onClick={() => setIsReactionPickerOpen((isOpen) => !isOpen)}
+                disabled={isSending}
+                aria-expanded={isReactionPickerOpen}
+                aria-label="Choose story reaction"
+                title="Emoji"
+              >
+                <Smile size={18} aria-hidden="true" />
+              </button>
+              {isReactionPickerOpen ? (
+                <div
+                  className="parent-layout-page__story-reaction-picker"
+                  role="menu"
+                  aria-label="Choose story reaction"
+                >
+                  {MESSAGE_REACTIONS.map((reaction) => (
+                    <button
+                      type="button"
+                      key={reaction.key}
+                      onClick={() => sendStoryReaction(reaction.key)}
+                      disabled={isSending}
+                      role="menuitem"
+                      aria-label={reaction.label}
+                      title={reaction.label}
+                    >
+                      <span>{reaction.emoji}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <button
+              className="parent-layout-page__story-reply-submit"
+              type="submit"
+              disabled={isSending || !replyText.trim()}
+            >
               <Send size={18} aria-hidden="true" />
             </button>
           </form>
