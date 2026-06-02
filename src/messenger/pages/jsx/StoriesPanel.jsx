@@ -283,8 +283,25 @@ function getStoryFirstMedia(story) {
   return media[0] || null;
 }
 
+function sortStoriesNewestFirst(stories) {
+  return [...stories].sort((leftStory, rightStory) => {
+    const leftCreatedAt = new Date(leftStory?.created_at || "").getTime();
+    const rightCreatedAt = new Date(rightStory?.created_at || "").getTime();
+    const createdAtDifference =
+      (Number.isNaN(rightCreatedAt) ? 0 : rightCreatedAt) -
+      (Number.isNaN(leftCreatedAt) ? 0 : leftCreatedAt);
+
+    return (
+      createdAtDifference ||
+      String(rightStory?.id || "").localeCompare(String(leftStory?.id || ""))
+    );
+  });
+}
+
 function normalizeStoryGroup(group) {
-  const stories = Array.isArray(group?.stories) ? group.stories : [];
+  const stories = Array.isArray(group?.stories)
+    ? sortStoriesNewestFirst(group.stories)
+    : [];
 
   return {
     ...group,
@@ -376,7 +393,7 @@ export function useStoriesController({
         ? applyViewedStoryCache(feedResult.contacts.map(normalizeStoryGroup), user)
         : [];
       const nextMyStories = Array.isArray(myStoriesResult.stories)
-        ? myStoriesResult.stories
+        ? sortStoriesNewestFirst(myStoriesResult.stories)
         : [];
 
       setFeedGroups(nextFeedGroups);
