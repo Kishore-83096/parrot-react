@@ -5544,7 +5544,8 @@ video.parent-layout-page__attachment-modal-media {
   gap: 11px;
 }
 
-.parent-layout-page__story-modal-header > svg {
+.parent-layout-page__story-modal-header > svg,
+.parent-layout-page__story-composer-header-actions > svg {
   width: 44px;
   height: 44px;
   flex: 0 0 auto;
@@ -5553,6 +5554,73 @@ video.parent-layout-page__attachment-modal-media {
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-purple), var(--layout-blue));
   box-shadow: 0 14px 28px rgba(105, 70, 210, 0.18);
+}
+
+.parent-layout-page__story-composer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.parent-layout-page__story-settings-menu {
+  position: relative;
+}
+
+.parent-layout-page__story-settings-menu > button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(122, 53, 245, 0.16);
+  border-radius: 14px;
+  color: #4b2f72;
+  background: rgba(255, 255, 255, 0.74);
+  cursor: pointer;
+}
+
+.parent-layout-page__story-settings-menu > button:hover,
+.parent-layout-page__story-settings-menu > button:focus-visible,
+.parent-layout-page__story-settings-menu > button[aria-expanded="true"] {
+  color: #fff;
+  background: linear-gradient(135deg, #7a35f5, #3f8cff);
+  outline: none;
+}
+
+.parent-layout-page__story-settings-menu [role="menu"] {
+  min-width: 156px;
+  padding: 6px;
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 4;
+  border: 1px solid rgba(122, 53, 245, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 16px 34px rgba(67, 39, 110, 0.18);
+}
+
+.parent-layout-page__story-settings-menu [role="menuitem"] {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 10px;
+  color: #4b2f72;
+  background: transparent;
+  font-weight: 760;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.parent-layout-page__story-settings-menu [role="menuitem"]:hover,
+.parent-layout-page__story-settings-menu [role="menuitem"]:focus-visible {
+  color: #fff;
+  background: linear-gradient(135deg, #7a35f5, #3f8cff);
+  outline: none;
 }
 
 .parent-layout-page__story-modal-header h2 {
@@ -5844,6 +5912,10 @@ video.parent-layout-page__attachment-modal-media {
   display: grid;
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1fr);
   gap: 8px;
+}
+
+.parent-layout-page__story-actions.is-upload-only {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .parent-layout-page__story-settings-submit {

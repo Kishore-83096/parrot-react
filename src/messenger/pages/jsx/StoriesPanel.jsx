@@ -5,9 +5,11 @@ import {
   Image as ImageIcon,
   Images,
   LoaderCircle,
+  MoreVertical,
   Plus,
   Save,
   Send,
+  Settings2,
   Trash2,
   Type,
   UploadCloud,
@@ -917,6 +919,10 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
   const [expiryHours, setExpiryHours] = useState(24);
   const [visibility, setVisibility] = useState("all_contacts");
   const [selectedAudience, setSelectedAudience] = useState([]);
+  const [savedSettings, setSavedSettings] = useState(null);
+  const [hasSavedSettings, setHasSavedSettings] = useState(false);
+  const [isSettingsEditorOpen, setIsSettingsEditorOpen] = useState(true);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
@@ -977,10 +983,15 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           return;
         }
 
-        const settings = normalizeStorySettings(getResult(response).settings);
+        const result = getResult(response);
+        const settings = normalizeStorySettings(result.settings);
+        const nextHasSavedSettings = Boolean(result.has_saved_settings);
         setExpiryHours(settings.expiry_hours);
         setVisibility(settings.visibility);
         setSelectedAudience(settings.audience_account_numbers);
+        setSavedSettings(settings);
+        setHasSavedSettings(nextHasSavedSettings);
+        setIsSettingsEditorOpen(!nextHasSavedSettings);
       })
       .catch((error) => {
         if (!isMounted) {
@@ -1062,6 +1073,10 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
       setExpiryHours(nextSettings.expiry_hours);
       setVisibility(nextSettings.visibility);
       setSelectedAudience(nextSettings.audience_account_numbers);
+      setSavedSettings(nextSettings);
+      setHasSavedSettings(true);
+      setIsSettingsEditorOpen(false);
+      setIsSettingsMenuOpen(false);
       if (!silent) {
         setMessage("Story settings saved.");
       }
@@ -1080,6 +1095,18 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
     }
 
     saveStorySettings();
+  };
+
+  const openSettingsEditor = () => {
+    if (savedSettings) {
+      setExpiryHours(savedSettings.expiry_hours);
+      setVisibility(savedSettings.visibility);
+      setSelectedAudience(savedSettings.audience_account_numbers);
+    }
+
+    setMessage("");
+    setIsSettingsMenuOpen(false);
+    setIsSettingsEditorOpen(true);
   };
 
   const handleSubmit = async (event) => {
@@ -1101,20 +1128,27 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
       return;
     }
 
-    if (visibility === "specific_contacts" && selectedAudience.length === 0) {
+    if (
+      isSettingsEditorOpen &&
+      visibility === "specific_contacts" &&
+      selectedAudience.length === 0
+    ) {
       setMessage("Select at least one contact.");
       return;
     }
 
-    const savedSettings = await saveStorySettings({ silent: true });
-    if (!savedSettings) {
+    const activeSettings =
+      hasSavedSettings && !isSettingsEditorOpen
+        ? savedSettings
+        : await saveStorySettings({ silent: true });
+    if (!activeSettings) {
       return;
     }
 
     const clientStoryId = createStoryClientId();
     const audienceAccountNumbers =
-      savedSettings.visibility === "specific_contacts"
-        ? savedSettings.audience_account_numbers
+      activeSettings.visibility === "specific_contacts"
+        ? activeSettings.audience_account_numbers
         : [];
 
     setIsSubmitting(true);
@@ -1131,9 +1165,9 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
             theme: textStoryTheme,
           }),
           encrypted_upload_intent_ids: [],
-          expiry_hours: savedSettings.expiry_hours,
+          expiry_hours: activeSettings.expiry_hours,
           story_type: "text",
-          visibility: savedSettings.visibility,
+          visibility: activeSettings.visibility,
         });
       } else {
         const encryptedStoryMedia = await encryptSelectedFilesForStory(selectedFiles, {
@@ -1148,9 +1182,9 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           client_story_id: clientStoryId,
           encrypted_payload: encryptedStoryMedia.encryptedPayload,
           encrypted_upload_intent_ids: encryptedStoryMedia.uploadIntentIds,
-          expiry_hours: savedSettings.expiry_hours,
+          expiry_hours: activeSettings.expiry_hours,
           story_type: "media",
-          visibility: savedSettings.visibility,
+          visibility: activeSettings.visibility,
         });
       }
       onCreated();
@@ -1190,7 +1224,32 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
             <h2>Add Story</h2>
             <p>Photos, videos, or text board</p>
           </div>
-          <UploadCloud size={24} aria-hidden="true" />
+          <div className="parent-layout-page__story-composer-header-actions">
+            <UploadCloud size={24} aria-hidden="true" />
+            {hasSavedSettings ? (
+              <div className="parent-layout-page__story-settings-menu">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setIsSettingsMenuOpen((currentValue) => !currentValue)
+                  }
+                  aria-expanded={isSettingsMenuOpen}
+                  aria-label="Story settings"
+                  title="Story settings"
+                >
+                  <MoreVertical size={20} aria-hidden="true" />
+                </button>
+                {isSettingsMenuOpen ? (
+                  <div role="menu">
+                    <button type="button" onClick={openSettingsEditor} role="menuitem">
+                      <Settings2 size={17} aria-hidden="true" />
+                      <span>Edit settings</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </header>
 
         <div
@@ -1288,81 +1347,85 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           </section>
         )}
 
-        <fieldset
-          className="parent-layout-page__story-fieldset"
-          disabled={isSubmitting || isLoadingSettings}
-        >
-          <legend>Expiry</legend>
-          <div className="parent-layout-page__story-segments">
-            {EXPIRY_OPTIONS.map((hours) => (
-              <button
-                className={expiryHours === hours ? "is-active" : ""}
-                type="button"
-                key={hours}
-                onClick={() => setExpiryHours(hours)}
-              >
-                {hours}h
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset
-          className="parent-layout-page__story-fieldset"
-          disabled={isSubmitting || isLoadingSettings}
-        >
-          <legend>Audience</legend>
-          <div className="parent-layout-page__story-segments">
-            <button
-              className={visibility === "all_contacts" ? "is-active" : ""}
-              type="button"
-              onClick={() => setVisibility("all_contacts")}
-            >
-              All contacts
-            </button>
-            <button
-              className={visibility === "specific_contacts" ? "is-active" : ""}
-              type="button"
-              onClick={() => setVisibility("specific_contacts")}
-            >
-              Specific
-            </button>
-          </div>
-        </fieldset>
-
-        {visibility === "specific_contacts" ? (
-          <section className="parent-layout-page__story-contact-picker">
-            <input
-              type="search"
-              value={contactSearch}
-              onChange={(event) => setContactSearch(event.target.value)}
-              placeholder="Search contacts"
-              aria-label="Search contacts"
+        {isSettingsEditorOpen ? (
+          <>
+            <fieldset
+              className="parent-layout-page__story-fieldset"
               disabled={isSubmitting || isLoadingSettings}
-            />
-            <div>
-              {filteredContacts.length === 0 ? (
-                <p>No contacts available.</p>
-              ) : (
-                filteredContacts.map((contact) => (
-                  <label key={contact.account_number}>
-                    <input
-                      type="checkbox"
-                      checked={selectedAudience.includes(contact.account_number)}
-                      onChange={() => toggleAudience(contact.account_number)}
-                      disabled={isSubmitting || isLoadingSettings}
-                    />
-                    <StoryAvatar
-                      accountNumber={contact.account_number}
-                      contacts={contacts}
-                      contact={contact}
-                    />
-                    <span>{getContactName(contact)}</span>
-                  </label>
-                ))
-              )}
-            </div>
-          </section>
+            >
+              <legend>Expiry</legend>
+              <div className="parent-layout-page__story-segments">
+                {EXPIRY_OPTIONS.map((hours) => (
+                  <button
+                    className={expiryHours === hours ? "is-active" : ""}
+                    type="button"
+                    key={hours}
+                    onClick={() => setExpiryHours(hours)}
+                  >
+                    {hours}h
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset
+              className="parent-layout-page__story-fieldset"
+              disabled={isSubmitting || isLoadingSettings}
+            >
+              <legend>Audience</legend>
+              <div className="parent-layout-page__story-segments">
+                <button
+                  className={visibility === "all_contacts" ? "is-active" : ""}
+                  type="button"
+                  onClick={() => setVisibility("all_contacts")}
+                >
+                  All contacts
+                </button>
+                <button
+                  className={visibility === "specific_contacts" ? "is-active" : ""}
+                  type="button"
+                  onClick={() => setVisibility("specific_contacts")}
+                >
+                  Specific
+                </button>
+              </div>
+            </fieldset>
+
+            {visibility === "specific_contacts" ? (
+              <section className="parent-layout-page__story-contact-picker">
+                <input
+                  type="search"
+                  value={contactSearch}
+                  onChange={(event) => setContactSearch(event.target.value)}
+                  placeholder="Search contacts"
+                  aria-label="Search contacts"
+                  disabled={isSubmitting || isLoadingSettings}
+                />
+                <div>
+                  {filteredContacts.length === 0 ? (
+                    <p>No contacts available.</p>
+                  ) : (
+                    filteredContacts.map((contact) => (
+                      <label key={contact.account_number}>
+                        <input
+                          type="checkbox"
+                          checked={selectedAudience.includes(contact.account_number)}
+                          onChange={() => toggleAudience(contact.account_number)}
+                          disabled={isSubmitting || isLoadingSettings}
+                        />
+                        <StoryAvatar
+                          accountNumber={contact.account_number}
+                          contacts={contacts}
+                          contact={contact}
+                        />
+                        <span>{getContactName(contact)}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </section>
+            ) : null}
+          </>
         ) : null}
 
         {progress ? (
@@ -1386,20 +1449,26 @@ function StoryComposer({ contacts, onClose, onContactsChange, onCreated }) {
           </p>
         ) : null}
 
-        <div className="parent-layout-page__story-actions">
-          <button
-            className="parent-layout-page__story-settings-submit"
-            type="button"
-            onClick={handleSaveSettings}
-            disabled={isSubmitting || isSavingSettings || isLoadingSettings}
-          >
-            {isSavingSettings ? (
-              <LoaderCircle size={18} className="is-spinning" aria-hidden="true" />
-            ) : (
-              <Save size={18} aria-hidden="true" />
-            )}
-            <span>{isSavingSettings ? "Saving" : "Save Settings"}</span>
-          </button>
+        <div
+          className={`parent-layout-page__story-actions${
+            isSettingsEditorOpen ? "" : " is-upload-only"
+          }`}
+        >
+          {isSettingsEditorOpen ? (
+            <button
+              className="parent-layout-page__story-settings-submit"
+              type="button"
+              onClick={handleSaveSettings}
+              disabled={isSubmitting || isSavingSettings || isLoadingSettings}
+            >
+              {isSavingSettings ? (
+                <LoaderCircle size={18} className="is-spinning" aria-hidden="true" />
+              ) : (
+                <Save size={18} aria-hidden="true" />
+              )}
+              <span>{isSavingSettings ? "Saving" : "Save Settings"}</span>
+            </button>
+          ) : null}
 
           <button
             className="parent-layout-page__story-submit"
