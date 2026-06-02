@@ -40,7 +40,7 @@ import {
   createStoryTextPayload,
   decryptStoryMediaBlob,
   encryptSelectedFilesForStory,
-  getStoryMediaText,
+  getStoryMediaCaption,
   isSupportedStoryMediaFile,
   mergeStoryMediaCrypto,
   parseStoryTextPayload,
@@ -824,6 +824,8 @@ export function StoriesOverlayHost({ contacts, controller, user }) {
       {controller.isComposerOpen ? (
         <StoryComposer
           contacts={contacts}
+          initialHasSavedSettings={controller.hasSavedStorySettings}
+          initialSettings={controller.storySettings}
           onClose={controller.closeComposer}
           onContactsChange={controller.onContactsChange}
           onCreated={controller.handleStoryCreated}
@@ -914,6 +916,8 @@ export function StoriesRoomPanel({ contacts, controller, user }) {
       {controller.isComposerOpen ? (
         <StoryComposer
           contacts={contacts}
+          initialHasSavedSettings={controller.hasSavedStorySettings}
+          initialSettings={controller.storySettings}
           onClose={controller.closeComposer}
           onContactsChange={controller.onContactsChange}
           onCreated={controller.handleStoryCreated}
@@ -1344,22 +1348,38 @@ function StorySettingsModal({
 
 function StoryComposer({
   contacts,
+  initialHasSavedSettings = false,
+  initialSettings = DEFAULT_STORY_SETTINGS,
   onClose,
   onContactsChange,
   onCreated,
   onSettingsSaved,
 }) {
+  const normalizedInitialSettings = normalizeStorySettings(initialSettings);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [storyMode, setStoryMode] = useState("media");
   const [mediaStoryText, setMediaStoryText] = useState("");
   const [textStoryText, setTextStoryText] = useState("");
   const [textStoryTheme, setTextStoryTheme] = useState(TEXT_STORY_THEMES[0].key);
-  const [expiryHours, setExpiryHours] = useState(24);
-  const [visibility, setVisibility] = useState("all_contacts");
-  const [selectedAudience, setSelectedAudience] = useState([]);
-  const [savedSettings, setSavedSettings] = useState(null);
-  const [hasSavedSettings, setHasSavedSettings] = useState(false);
-  const [isSettingsEditorOpen, setIsSettingsEditorOpen] = useState(true);
+  const [expiryHours, setExpiryHours] = useState(
+    normalizedInitialSettings.expiry_hours,
+  );
+  const [visibility, setVisibility] = useState(
+    normalizedInitialSettings.visibility,
+  );
+  const [selectedAudience, setSelectedAudience] = useState(
+    normalizedInitialSettings.audience_account_numbers,
+  );
+  const [savedSettings, setSavedSettings] = useState(
+    initialHasSavedSettings ? normalizedInitialSettings : null,
+  );
+  const [hasSavedSettings, setHasSavedSettings] = useState(
+    Boolean(initialHasSavedSettings),
+  );
+  const [isSettingsEditorOpen, setIsSettingsEditorOpen] = useState(
+    !initialHasSavedSettings,
+  );
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState(null);
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
@@ -1413,12 +1433,14 @@ function StoryComposer({
         }
 
         const result = getResult(response);
-        const settings = normalizeStorySettings(result.settings);
-        const nextHasSavedSettings = Boolean(result.has_saved_settings);
+        const settings = normalizeStorySettings(result.settings || initialSettings);
+        const nextHasSavedSettings = Boolean(
+          result.has_saved_settings || initialHasSavedSettings,
+        );
         setExpiryHours(settings.expiry_hours);
         setVisibility(settings.visibility);
         setSelectedAudience(settings.audience_account_numbers);
-        setSavedSettings(settings);
+        setSavedSettings(nextHasSavedSettings ? settings : null);
         setHasSavedSettings(nextHasSavedSettings);
         setIsSettingsEditorOpen(!nextHasSavedSettings);
       })
@@ -1482,6 +1504,20 @@ function StoryComposer({
     };
   };
 
+  const applySavedSettings = (settings, options) => {
+    const nextSettings = normalizeStorySettings(settings);
+
+    setExpiryHours(nextSettings.expiry_hours);
+    setVisibility(nextSettings.visibility);
+    setSelectedAudience(nextSettings.audience_account_numbers);
+    setSavedSettings(nextSettings);
+    setHasSavedSettings(true);
+    setIsSettingsEditorOpen(false);
+    onSettingsSaved?.(nextSettings, options);
+
+    return nextSettings;
+  };
+
   const saveStorySettings = async ({ silent = false } = {}) => {
     if (isLoadingSettings) {
       setMessage("Story settings are still loading.");
@@ -1500,15 +1536,7 @@ function StoryComposer({
 
     try {
       const response = await updateMessengerStorySettings(buildSettingsPayload());
-      const nextSettings = normalizeStorySettings(getResult(response).settings);
-
-      setExpiryHours(nextSettings.expiry_hours);
-      setVisibility(nextSettings.visibility);
-      setSelectedAudience(nextSettings.audience_account_numbers);
-      setSavedSettings(nextSettings);
-      setHasSavedSettings(true);
-      setIsSettingsEditorOpen(false);
-      onSettingsSaved?.(nextSettings);
+      const nextSettings = applySavedSettings(getResult(response).settings);
       if (!silent) {
         setMessage("Story settings saved.");
       }
@@ -1592,9 +1620,9 @@ function StoryComposer({
       } else {
         const encryptedStoryMedia = await encryptSelectedFilesForStory(selectedFiles, {
           audienceAccountNumbers,
+          caption: mediaStoryText,
           clientStoryId,
           onProgress: setProgress,
-          text: mediaStoryText,
         });
 
         setProgress({ phase: "creating", percent: 100 });
@@ -1618,6 +1646,7 @@ function StoryComposer({
   };
 
   const activeTextTheme = getTextStoryTheme(textStoryTheme);
+  const shouldShowInlineSettings = !isLoadingSettings && isSettingsEditorOpen;
 
   const modal = (
     <div
@@ -1770,7 +1799,7 @@ function StoryComposer({
           </section>
         )}
 
-        {isSettingsEditorOpen ? (
+        {shouldShowInlineSettings ? (
           <StorySettingsFields
             contacts={contacts}
             disabled={isSubmitting || isLoadingSettings}
@@ -1781,6 +1810,18 @@ function StoryComposer({
             selectedAudience={selectedAudience}
             visibility={visibility}
           />
+        ) : null}
+
+        {hasSavedSettings && !isSettingsEditorOpen ? (
+          <button
+            className="parent-layout-page__story-settings-submit"
+            type="button"
+            onClick={() => setIsSettingsModalOpen(true)}
+            disabled={isSubmitting || isSavingSettings || isLoadingSettings}
+          >
+            <Settings2 size={18} aria-hidden="true" />
+            <span>Edit Story Settings</span>
+          </button>
         ) : null}
 
         {progress ? (
@@ -1806,10 +1847,10 @@ function StoryComposer({
 
         <div
           className={`parent-layout-page__story-actions${
-            isSettingsEditorOpen ? "" : " is-upload-only"
+            shouldShowInlineSettings ? "" : " is-upload-only"
           }`}
         >
-          {isSettingsEditorOpen ? (
+          {shouldShowInlineSettings ? (
             <button
               className="parent-layout-page__story-settings-submit"
               type="button"
@@ -1843,6 +1884,19 @@ function StoryComposer({
           </button>
         </div>
       </form>
+
+      {isSettingsModalOpen ? (
+        <StorySettingsModal
+          contacts={contacts}
+          initialSettings={savedSettings}
+          onClose={() => setIsSettingsModalOpen(false)}
+          onContactsChange={onContactsChange}
+          onSaved={(settings) => {
+            applySavedSettings(settings, { showToast: true });
+            setIsSettingsModalOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 
@@ -1865,8 +1919,8 @@ function StoryViewer({
   const { contact, contactName, isMine, stories, storyIndex } = viewerState;
   const story = stories[storyIndex] || null;
   const media = useMemo(() => (story ? getStoryFirstMedia(story) : null), [story]);
-  const mediaStoryText = useMemo(
-    () => (story ? getStoryMediaText(story.encrypted_payload) : ""),
+  const mediaStoryCaption = useMemo(
+    () => (story ? getStoryMediaCaption(story.encrypted_payload) : ""),
     [story],
   );
   const textStory = useMemo(() => (story ? getStoryText(story) : null), [story]);
@@ -2198,9 +2252,9 @@ function StoryViewer({
             ) : (
               <img src={mediaUrl} alt="" />
             )}
-            {mediaStoryText ? (
+            {mediaStoryCaption ? (
               <p className="parent-layout-page__story-media-text-overlay">
-                {mediaStoryText}
+                {mediaStoryCaption}
               </p>
             ) : null}
           </div>

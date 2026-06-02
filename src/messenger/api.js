@@ -269,7 +269,9 @@ export const getMessengerStoryFeed = () => messengerAxios.get("/stories/feed/");
 export const getMessengerMyStories = () => messengerAxios.get("/stories/mine/");
 
 export const getMessengerStorySettings = () =>
-  messengerAxios.get("/stories/settings/");
+  messengerAxios.get("/stories/settings/", {
+    params: { cache_bust: Date.now() },
+  });
 
 export const updateMessengerStorySettings = (data) =>
   messengerAxios.put("/stories/settings/", data);

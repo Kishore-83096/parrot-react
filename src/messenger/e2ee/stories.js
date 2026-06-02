@@ -55,7 +55,7 @@ export function isSupportedStoryMediaFile(file) {
 
 export async function encryptSelectedFilesForStory(
   selectedFiles,
-  { audienceAccountNumbers, clientStoryId, onProgress, text } = {},
+  { audienceAccountNumbers, caption, clientStoryId, onProgress, text } = {},
 ) {
   const files = Array.isArray(selectedFiles) ? selectedFiles : [];
   if (files.length === 0) {
@@ -165,7 +165,7 @@ export async function encryptSelectedFilesForStory(
     encryptedPayload: JSON.stringify({
       v: STORY_MEDIA_PAYLOAD_VERSION,
       type: STORY_MEDIA_PAYLOAD_TYPE,
-      text: String(text || "").trim(),
+      caption: String(caption ?? text ?? "").trim(),
       media: completedMedia.map((media) => ({
         file_key: media.file_key,
         file_name: media.file_name,
@@ -339,8 +339,8 @@ export function parseStoryMediaPayload(value) {
   return parseStoryMediaEnvelope(value)?.media || [];
 }
 
-export function getStoryMediaText(value) {
-  return parseStoryMediaEnvelope(value)?.text || "";
+export function getStoryMediaCaption(value) {
+  return parseStoryMediaEnvelope(value)?.caption || "";
 }
 
 function parseStoryMediaEnvelope(value) {
@@ -360,7 +360,12 @@ function parseStoryMediaEnvelope(value) {
 
     return {
       media: payload.media,
-      text: typeof payload.text === "string" ? payload.text : "",
+      caption:
+        typeof payload.caption === "string"
+          ? payload.caption
+          : typeof payload.text === "string"
+            ? payload.text
+            : "",
     };
   } catch {
     return null;
