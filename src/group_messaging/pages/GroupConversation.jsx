@@ -172,7 +172,7 @@ const OFFICE_DOCUMENT_MIME_TYPES = new Set([
 ]);
 
 function normalizeReactionGroups(reactions, myReaction = null) {
-  const countByReaction = new Map();
+  const groupsByReaction = new Map();
 
   (Array.isArray(reactions) ? reactions : []).forEach((reactionItem) => {
     const reactionKey = String(reactionItem?.reaction || "");
@@ -182,20 +182,44 @@ function normalizeReactionGroups(reactions, myReaction = null) {
       return;
     }
 
-    countByReaction.set(
-      reactionKey,
-      (countByReaction.get(reactionKey) || 0) + count,
+    const group =
+      groupsByReaction.get(reactionKey) || {
+        count: 0,
+        users: [],
+        userIds: new Set(),
+      };
+
+    group.count += count;
+    (Array.isArray(reactionItem?.users) ? reactionItem.users : []).forEach(
+      (reactionUser) => {
+        const userId = Number(reactionUser?.user_id);
+        const userKey = userId || String(reactionUser?.display_name || "");
+
+        if (!userKey || group.userIds.has(userKey)) {
+          return;
+        }
+
+        group.userIds.add(userKey);
+        group.users.push({
+          user_id: userId || null,
+          account_number: reactionUser?.account_number || "",
+          display_name: reactionUser?.display_name || "",
+        });
+      },
     );
+    groupsByReaction.set(reactionKey, group);
   });
 
   return MESSAGE_REACTIONS.map((reaction) => {
-    const count = countByReaction.get(reaction.key) || 0;
+    const group = groupsByReaction.get(reaction.key);
+    const count = Math.max(group?.count || 0, group?.users?.length || 0);
 
     return count > 0
       ? {
           reaction: reaction.key,
           count,
           reacted_by_me: reaction.key === myReaction,
+          users: group?.users || [],
         }
       : null;
   }).filter(Boolean);
@@ -220,33 +244,52 @@ function getMessageMyReaction(message) {
 function applyOptimisticReaction(message, reactionKey, currentUserId) {
   const currentReaction = getMessageMyReaction(message);
   const nextReaction = currentReaction === reactionKey ? null : reactionKey;
-  const counts = new Map();
+  const groups = new Map();
+  const numericCurrentUserId = Number(currentUserId);
 
   normalizeReactionGroups(message?.reactions, currentReaction).forEach(
     (reactionItem) => {
-      counts.set(reactionItem.reaction, reactionItem.count);
+      groups.set(reactionItem.reaction, {
+        count: reactionItem.count,
+        users: Array.isArray(reactionItem.users)
+          ? reactionItem.users.filter(
+              (reactionUser) =>
+                Number(reactionUser?.user_id) !== numericCurrentUserId,
+            )
+          : [],
+      });
     },
   );
 
   if (currentReaction) {
-    counts.set(
-      currentReaction,
-      Math.max((counts.get(currentReaction) || 0) - 1, 0),
-    );
+    const currentGroup = groups.get(currentReaction) || { count: 0, users: [] };
+    groups.set(currentReaction, {
+      ...currentGroup,
+      count: Math.max((currentGroup.count || 0) - 1, 0),
+    });
   }
 
   if (nextReaction) {
-    counts.set(nextReaction, (counts.get(nextReaction) || 0) + 1);
+    const nextGroup = groups.get(nextReaction) || { count: 0, users: [] };
+    groups.set(nextReaction, {
+      ...nextGroup,
+      count: (nextGroup.count || 0) + 1,
+      users: numericCurrentUserId
+        ? [{ user_id: numericCurrentUserId, display_name: "" }, ...nextGroup.users]
+        : nextGroup.users,
+    });
   }
 
   const reactions = MESSAGE_REACTIONS.map((reaction) => {
-    const count = counts.get(reaction.key) || 0;
+    const group = groups.get(reaction.key);
+    const count = group?.count || 0;
 
     return count > 0
       ? {
           reaction: reaction.key,
           count,
           reacted_by_me: reaction.key === nextReaction,
+          users: group?.users || [],
         }
       : null;
   }).filter(Boolean);
@@ -270,6 +313,54 @@ function applyReactionSnapshot(message, snapshot, currentUserId) {
     reactions: normalizeReactionGroups(snapshot?.reactions, nextMyReaction),
     my_reaction: nextMyReaction,
   };
+}
+
+function getMessageSenderLabel(message, currentUserId, participantNamesByUserId) {
+  const senderUserId = Number(message?.sender_user_id);
+
+  if (senderUserId === Number(currentUserId)) {
+    return "You";
+  }
+
+  return (
+    message?.sender_display_name ||
+    participantNamesByUserId.get(senderUserId) ||
+    message?.sender_account_number ||
+    "Member"
+  );
+}
+
+function getReactionActorName(reactionUser, currentUserId, participantNamesByUserId) {
+  const userId = Number(reactionUser?.user_id);
+
+  if (userId && userId === Number(currentUserId)) {
+    return "You";
+  }
+
+  return (
+    reactionUser?.display_name ||
+    participantNamesByUserId.get(userId) ||
+    reactionUser?.account_number ||
+    (userId ? `User ${userId}` : "Member")
+  );
+}
+
+function getReactionActorSummary(reactionItem, currentUserId, participantNamesByUserId) {
+  const actorNames = (Array.isArray(reactionItem?.users) ? reactionItem.users : [])
+    .map((reactionUser) =>
+      getReactionActorName(reactionUser, currentUserId, participantNamesByUserId),
+    )
+    .filter(Boolean);
+
+  if (actorNames.length === 0) {
+    return "";
+  }
+
+  if (actorNames.length <= 3) {
+    return actorNames.join(", ");
+  }
+
+  return `${actorNames.slice(0, 3).join(", ")} +${actorNames.length - 3} more`;
 }
 
 function isTextEntryElement(element) {
@@ -2308,7 +2399,10 @@ function getReplyAuthorLabel(message, currentUserId, participantNamesByUserId) {
 
   return senderUserId === Number(currentUserId)
     ? "You"
-    : participantNamesByUserId.get(senderUserId) || "Contact";
+    : message?.sender_display_name ||
+        participantNamesByUserId.get(senderUserId) ||
+        message?.sender_account_number ||
+        "Member";
 }
 
 function mergeMessagePage(currentMessages, pageMessages) {
@@ -2332,7 +2426,12 @@ function mergeMessagePage(currentMessages, pageMessages) {
   });
 }
 
-function MessageReactionSummary({ message, onSelect }) {
+function MessageReactionSummary({
+  currentUserId,
+  message,
+  onSelect,
+  participantNamesByUserId,
+}) {
   const reactions = normalizeReactionGroups(
     message?.reactions,
     getMessageMyReaction(message) || null,
@@ -2354,6 +2453,15 @@ function MessageReactionSummary({ message, onSelect }) {
           return null;
         }
 
+        const actorSummary = getReactionActorSummary(
+          reactionItem,
+          currentUserId,
+          participantNamesByUserId,
+        );
+        const reactionLabel = actorSummary
+          ? `${reactionConfig.label} by ${actorSummary}`
+          : reactionConfig.label;
+
         return (
           <button
             key={reactionItem.reaction}
@@ -2362,10 +2470,11 @@ function MessageReactionSummary({ message, onSelect }) {
               reactionItem.reacted_by_me ? " is-selected" : ""
             }`}
             onClick={() => onSelect(message, reactionItem.reaction)}
-            aria-label={`${reactionConfig.label} reaction${
-              reactionItem.count > 1 ? `, ${reactionItem.count}` : ""
+            aria-label={`${reactionLabel} reaction${
+              reactionItem.count > 1 ? `, ${reactionItem.count} total` : ""
             }`}
-            title={reactionConfig.label}
+            data-reaction-actors={actorSummary || undefined}
+            title={reactionLabel}
           >
             <span>{reactionConfig.emoji}</span>
             {reactionItem.count > 1 ? <strong>{reactionItem.count}</strong> : null}
@@ -3030,6 +3139,9 @@ function GroupConversation({
         const nextMessages = Array.isArray(messagesResult?.messages)
           ? messagesResult.messages
           : [];
+        const nextLogs = Array.isArray(messagesResult?.logs)
+          ? messagesResult.logs
+          : [];
         const decryptedMessages = await decryptGroupMessagesForUser(nextMessages, user);
         const pagination = messagesResult?.pagination || {};
         const nextPagination = {
@@ -3048,6 +3160,11 @@ function GroupConversation({
         }
 
         setRoomMessagesCacheRoomId(roomId);
+        setLogs((currentLogs) =>
+          mode === "replace"
+            ? mergeLogs([], nextLogs)
+            : mergeLogs(currentLogs, nextLogs),
+        );
         setRoomMessages((currentMessages) =>
           mode === "prepend" || mode === "merge"
             ? mergeMessagePage(currentMessages, decryptedMessages)
@@ -3563,25 +3680,52 @@ function GroupConversation({
     selectedRoom?.id,
   ]);
 
-  const groupedMessages = useMemo(() => {
-    let previousDateKey = "";
+  const latestLogs = useMemo(() => mergeLogs([], logs), [logs]);
 
-    return roomMessages.map((message) => {
-      const dateKey = getMessageDateKey(message.created_at);
-      const dateLabel = getMessageDateDividerLabel(message.created_at);
+  const groupedTimelineItems = useMemo(() => {
+    let previousDateKey = "";
+    const timelineItems = [
+      ...latestLogs.map((log) => ({
+        createdAt: log.created_at,
+        id: `log-${log.id}`,
+        log,
+        type: "log",
+      })),
+      ...roomMessages.map((message) => ({
+        createdAt: message.created_at,
+        id: `message-${message.id}`,
+        message,
+        type: "message",
+      })),
+    ].sort((first, second) => {
+      const firstTime = new Date(first.createdAt || 0).getTime();
+      const secondTime = new Date(second.createdAt || 0).getTime();
+
+      if (firstTime === secondTime) {
+        if (first.type !== second.type) {
+          return first.type === "log" ? -1 : 1;
+        }
+
+        return String(first.id).localeCompare(String(second.id));
+      }
+
+      return firstTime - secondTime;
+    });
+
+    return timelineItems.map((item) => {
+      const dateKey = getMessageDateKey(item.createdAt);
+      const dateLabel = getMessageDateDividerLabel(item.createdAt);
       const shouldShowDateDivider = dateKey && dateKey !== previousDateKey;
 
       previousDateKey = dateKey || previousDateKey;
 
       return {
+        ...item,
         dateLabel,
-        message,
         shouldShowDateDivider,
       };
     });
-  }, [roomMessages]);
-
-  const latestLogs = useMemo(() => mergeLogs([], logs), [logs]);
+  }, [latestLogs, roomMessages]);
 
   const messagesById = useMemo(() => {
     const nextMessagesById = new Map();
@@ -4576,32 +4720,13 @@ function GroupConversation({
             <span />
             <span />
           </div>
-        ) : roomMessages.length === 0 && latestLogs.length === 0 ? (
+        ) : groupedTimelineItems.length === 0 ? (
           <div className="parent-layout-page__messages-empty">
             <MessageCircle size={30} aria-hidden="true" />
             <p>No messages yet.</p>
           </div>
         ) : (
           <>
-            {latestLogs.length > 0 ? (
-              <div className="parent-layout-page__group-log-list" aria-live="polite">
-                {latestLogs.map((log) => {
-                  const display = getGroupLogDisplay(log, user);
-                  const LogIcon = GROUP_LOG_ICONS[display.kind] || MessageCircle;
-
-                  return (
-                    <div
-                      className={`parent-layout-page__group-log is-${display.kind}`}
-                      key={`log-${log.id}`}
-                    >
-                      <LogIcon size={15} aria-hidden="true" />
-                      <span>{display.text}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-
             {isOlderMessagesLoading ? (
               <div
                 className="parent-layout-page__messages-pagination"
@@ -4633,9 +4758,35 @@ function GroupConversation({
               </div>
             ) : null}
 
-            {groupedMessages.map(
-              ({ dateLabel, message, shouldShowDateDivider }) => {
+            {groupedTimelineItems.map(
+              ({ dateLabel, id, log, message, shouldShowDateDivider, type }) => {
+            if (type === "log") {
+              const display = getGroupLogDisplay(log, user);
+              const LogIcon = GROUP_LOG_ICONS[display.kind] || MessageCircle;
+
+              return (
+                <Fragment key={id}>
+                  {shouldShowDateDivider ? (
+                    <div className="parent-layout-page__message-date-divider">
+                      <span>{dateLabel}</span>
+                    </div>
+                  ) : null}
+                  <div className="parent-layout-page__group-log-list" aria-live="polite">
+                    <div className={`parent-layout-page__group-log is-${display.kind}`}>
+                      <LogIcon size={15} aria-hidden="true" />
+                      <span>{display.text}</span>
+                    </div>
+                  </div>
+                </Fragment>
+              );
+            }
+
             const isMine = Number(message.sender_user_id) === currentUserId;
+            const senderLabel = getMessageSenderLabel(
+              message,
+              currentUserId,
+              participantNamesByUserId,
+            );
             const messageStatus = getMessageStatusLabel(message.status);
             const sentWhileBlocked = false;
             const replyPreview = getReplyPreview(message);
@@ -4713,6 +4864,15 @@ function GroupConversation({
                     onMouseEnter={() => handleMessageBubbleMouseEnter(message)}
                     onClick={(event) => handleMessageBubbleClick(event, message)}
                   >
+                    {!isMine ? (
+                      <span
+                        className="parent-layout-page__message-sender"
+                        title={senderLabel}
+                      >
+                        {senderLabel}
+                      </span>
+                    ) : null}
+
                     {replyPreview ? (
                       <button
                         type="button"
@@ -4790,8 +4950,10 @@ function GroupConversation({
                       ) : null}
                     </footer>
                     <MessageReactionSummary
+                      currentUserId={currentUserId}
                       message={message}
                       onSelect={handleSelectMessageReaction}
+                      participantNamesByUserId={participantNamesByUserId}
                     />
                   </div>
                   <div

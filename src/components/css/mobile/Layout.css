@@ -1370,20 +1370,13 @@
 }
 
 .parent-layout-page__group-log-list {
-  grid-area: messages;
+  box-sizing: border-box;
+  width: 100%;
   min-width: 0;
-  min-height: 0;
-  padding: 18px 20px 16px;
+  padding: 2px 0;
   display: grid;
-  align-content: start;
-  gap: 10px;
-  overflow: auto;
-  scrollbar-width: none;
-}
-
-.parent-layout-page__group-log-list::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  place-items: center;
+  overflow: visible;
 }
 
 .parent-layout-page__group-log {
@@ -1724,6 +1717,23 @@
   background: linear-gradient(135deg, var(--layout-purple), var(--layout-purple-deep));
 }
 
+.parent-layout-page__message-sender {
+  max-width: 100%;
+  margin: 0 0 6px;
+  display: block;
+  overflow: hidden;
+  color: var(--layout-purple-deep);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.12;
+  font-weight: 860;
+}
+
+.parent-layout-page__message-bubble.has-attachments .parent-layout-page__message-sender {
+  max-width: min(var(--message-caption-width), 100%);
+}
+
 .parent-layout-page__message-actions {
   flex: 0 0 auto;
   display: flex;
@@ -1908,6 +1918,7 @@
 }
 
 .parent-layout-page__message-reaction-pill {
+  position: relative;
   min-width: 16px;
   height: 16px;
   display: inline-flex;
@@ -1933,6 +1944,28 @@
     drop-shadow(0 2px 3px rgba(95, 52, 167, 0.2))
     drop-shadow(0 0 6px rgba(255, 130, 201, 0.28));
   transform: none;
+}
+
+.parent-layout-page__message-reaction-pill[data-reaction-actors]:hover::after,
+.parent-layout-page__message-reaction-pill[data-reaction-actors]:focus-visible::after {
+  content: attr(data-reaction-actors);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 8;
+  max-width: min(220px, 70vw);
+  padding: 6px 8px;
+  border: 1px solid rgba(124, 60, 255, 0.16);
+  border-radius: 10px;
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 24px rgba(95, 52, 167, 0.16);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 760;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
 }
 
 .parent-layout-page__message-reaction-pill span {
