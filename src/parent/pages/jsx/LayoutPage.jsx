@@ -1346,6 +1346,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
           selectedRoom?.is_group ? (
             <GroupConversation
               selectedRoom={selectedRoom}
+              user={user}
               onGroupEvent={handleGroupEvent}
             />
           ) : (

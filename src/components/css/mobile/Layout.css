@@ -1403,6 +1403,62 @@
   font-weight: 780;
 }
 
+.parent-layout-page__group-log svg {
+  flex: 0 0 auto;
+}
+
+.parent-layout-page__group-log.is-created {
+  color: #4b2f72;
+  border-color: rgba(124, 60, 255, 0.18);
+  background: rgba(244, 239, 255, 0.88);
+}
+
+.parent-layout-page__group-log.is-added-you,
+.parent-layout-page__group-log.is-member-added {
+  color: #0f7450;
+  border-color: rgba(24, 185, 99, 0.2);
+  background: rgba(236, 253, 245, 0.9);
+}
+
+.parent-layout-page__group-log.is-removed-you,
+.parent-layout-page__group-log.is-member-removed {
+  color: #b4233a;
+  border-color: rgba(239, 61, 85, 0.2);
+  background: rgba(255, 235, 239, 0.92);
+}
+
+.parent-layout-page__group-log.is-member-left {
+  color: #6b6079;
+  border-color: rgba(108, 97, 120, 0.18);
+  background: rgba(246, 244, 249, 0.92);
+}
+
+.parent-layout-page__group-log.is-name {
+  color: #1d5f99;
+  border-color: rgba(63, 140, 255, 0.2);
+  background: rgba(235, 245, 255, 0.92);
+}
+
+.parent-layout-page__group-log.is-picture {
+  color: #8a3f09;
+  border-color: rgba(245, 139, 58, 0.2);
+  background: rgba(255, 246, 237, 0.92);
+}
+
+.parent-layout-page__group-log.is-role,
+.parent-layout-page__group-log.is-admin,
+.parent-layout-page__group-log.is-admin-you {
+  color: #6a4300;
+  border-color: rgba(255, 193, 87, 0.24);
+  background: rgba(255, 248, 225, 0.94);
+}
+
+.parent-layout-page__group-log.is-deleted {
+  color: #ffffff;
+  border-color: rgba(239, 61, 85, 0.28);
+  background: linear-gradient(135deg, #ff6b7d, #ef3d55);
+}
+
 .parent-layout-page__group-log span {
   min-width: 0;
   overflow: hidden;

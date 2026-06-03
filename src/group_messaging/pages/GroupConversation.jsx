@@ -1,4 +1,15 @@
-import { MessageCircle, UsersRound } from "lucide-react";
+import {
+  Camera,
+  Crown,
+  LogOut,
+  MessageCircle,
+  Pencil,
+  Shield,
+  Trash2,
+  UserMinus,
+  UserPlus,
+  UsersRound,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -6,6 +17,7 @@ import {
   getMessengerRoomWebSocketUrl,
   getMessengerToken,
 } from "../../messenger/api.js";
+import { getGroupLogDisplay } from "../logDisplay.js";
 
 const SOCKET_RECONNECT_DELAY_MS = 1500;
 const SOCKET_PING_INTERVAL_MS = 25000;
@@ -29,7 +41,23 @@ function mergeLogs(currentLogs, nextLogs) {
   );
 }
 
-function GroupConversation({ selectedRoom, onGroupEvent }) {
+const GROUP_LOG_ICONS = {
+  "added-you": UserPlus,
+  "admin-you": Crown,
+  admin: Crown,
+  created: UsersRound,
+  deleted: Trash2,
+  "member-added": UserPlus,
+  "member-left": LogOut,
+  "member-removed": UserMinus,
+  name: Pencil,
+  picture: Camera,
+  "removed-you": UserMinus,
+  role: Shield,
+  updated: MessageCircle,
+};
+
+function GroupConversation({ selectedRoom, user, onGroupEvent }) {
   const [logs, setLogs] = useState(() =>
     Array.isArray(selectedRoom?.latest_logs) ? selectedRoom.latest_logs : [],
   );
@@ -178,12 +206,20 @@ function GroupConversation({ selectedRoom, onGroupEvent }) {
             <p>Group activity will appear here.</p>
           </div>
         ) : (
-          latestLogs.map((log) => (
-            <div className="parent-layout-page__group-log" key={log.id}>
-              <MessageCircle size={15} aria-hidden="true" />
-              <span>{log.text || "Group updated"}</span>
-            </div>
-          ))
+          latestLogs.map((log) => {
+            const display = getGroupLogDisplay(log, user);
+            const LogIcon = GROUP_LOG_ICONS[display.kind] || MessageCircle;
+
+            return (
+              <div
+                className={`parent-layout-page__group-log is-${display.kind}`}
+                key={log.id}
+              >
+                <LogIcon size={15} aria-hidden="true" />
+                <span>{display.text}</span>
+              </div>
+            );
+          })
         )}
       </div>
     </section>

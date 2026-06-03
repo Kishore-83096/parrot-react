@@ -8,6 +8,7 @@ import {
   getMessagePreviewLabel,
   isEncryptedMessageText,
 } from "../../e2ee/messages.js";
+import { getGroupLogDisplay } from "../../../group_messaging/logDisplay.js";
 
 const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
 const ATTACHMENT_KIND_LABELS = {
@@ -117,7 +118,9 @@ export function getLastMessagePreviewDetails(room, currentUser) {
 
     return {
       icon: "",
-      text: latestLog?.text || (message ? "Group message" : "No messages yet."),
+      text: latestLog
+        ? getGroupLogDisplay(latestLog, currentUser).text
+        : (message ? "Group message" : "No messages yet."),
     };
   }
 
