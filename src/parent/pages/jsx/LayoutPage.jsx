@@ -618,15 +618,58 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     }
   }, []);
 
+  const removeGroupRoom = useCallback((roomId) => {
+    const numericRoomId = Number(roomId || 0);
+
+    if (!numericRoomId) {
+      return;
+    }
+
+    setRooms((currentRooms) =>
+      currentRooms.filter((room) => Number(room.id) !== numericRoomId),
+    );
+    setSelectedRoom((currentRoom) =>
+      Number(currentRoom?.id || 0) === numericRoomId ? null : currentRoom,
+    );
+    setSelectedContact(null);
+    setConversationCache((currentCache) => {
+      const cacheRoomId = String(numericRoomId);
+      if (!currentCache[cacheRoomId]) {
+        return currentCache;
+      }
+
+      const nextCache = { ...currentCache };
+      delete nextCache[cacheRoomId];
+      return nextCache;
+    });
+  }, []);
+
   const handleGroupEvent = useCallback(
     (eventPayload) => {
+      const eventType = eventPayload?.type || "";
+      const log = eventPayload?.log || {};
+      const removedRoomId =
+        eventPayload?.removed_room_id ||
+        (eventType === "group.deleted" ? eventPayload?.room_id : null) ||
+        (
+          ["group.member_removed", "group.member_left"].includes(eventType) &&
+          Number(log.target_user_id || eventPayload?.target_user_id || 0) === currentUserId
+            ? eventPayload?.room_id
+            : null
+        );
+
+      if (removedRoomId) {
+        removeGroupRoom(removedRoomId);
+        return;
+      }
+
       const room = eventPayload?.room;
 
       if (room?.id) {
         upsertGroupRoom(room);
       }
     },
-    [upsertGroupRoom],
+    [currentUserId, removeGroupRoom, upsertGroupRoom],
   );
 
   const handleGroupCreated = useCallback(
@@ -641,6 +684,13 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       upsertGroupRoom(room);
     },
     [upsertGroupRoom],
+  );
+
+  const handleGroupRemoved = useCallback(
+    (roomId) => {
+      removeGroupRoom(roomId);
+    },
+    [removeGroupRoom],
   );
 
   const handleConversationCacheChange = useCallback((roomId, conversation) => {
@@ -1267,9 +1317,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         roomHeader={
           selectedRoom?.is_group ? (
             <GroupRoomHeader
+              contacts={contacts}
               selectedRoom={selectedRoom}
               user={user}
               onCloseConversation={handleCloseConversation}
+              onGroupRemoved={handleGroupRemoved}
               onGroupUpdated={handleGroupUpdated}
               onToast={setToast}
             />
