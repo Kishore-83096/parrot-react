@@ -48,3 +48,75 @@ export const transferGroupAdmin = (roomId, userId) =>
 
 export const leaveGroupRoom = (roomId) =>
   messengerAxios.post(`/groups/${encodeURIComponent(roomId)}/leave/`);
+
+export const getGroupCryptoDevices = (roomId) =>
+  messengerAxios.get(`/groups/${encodeURIComponent(roomId)}/crypto/devices/`);
+
+export const createGroupEncryptedFileUploadIntents = (roomId, data) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/crypto/files/upload-intents/`,
+    data,
+  );
+
+export const completeGroupEncryptedFileUploadIntent = (
+  roomId,
+  uploadIntentId,
+  data,
+) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/crypto/files/upload-intents/${encodeURIComponent(uploadIntentId)}/complete/`,
+    data,
+  );
+
+export const getGroupRoomMessages = (
+  roomId,
+  { limit, before_message_id, around_message_id } = {},
+) => {
+  const params = {};
+
+  if (limit !== undefined && limit !== "") {
+    params.limit = limit;
+  }
+
+  if (
+    before_message_id !== undefined &&
+    before_message_id !== null &&
+    before_message_id !== ""
+  ) {
+    params.before_message_id = before_message_id;
+  }
+
+  if (
+    around_message_id !== undefined &&
+    around_message_id !== null &&
+    around_message_id !== ""
+  ) {
+    params.around_message_id = around_message_id;
+  }
+
+  return messengerAxios.get(
+    `/groups/${encodeURIComponent(roomId)}/messages/`,
+    { params },
+  );
+};
+
+export const sendGroupMessage = (roomId, data) =>
+  messengerAxios.post(`/groups/${encodeURIComponent(roomId)}/messages/send/`, data);
+
+export const reactToGroupMessage = (roomId, messageId, reaction) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}/reaction/`,
+    { reaction },
+  );
+
+export const markGroupRoomDelivered = (roomId, data = {}) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/messages/delivered/`,
+    data,
+  );
+
+export const markGroupRoomRead = (roomId, data = {}) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/messages/read/`,
+    data,
+  );

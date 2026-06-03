@@ -8,6 +8,10 @@ import {
   getMessagePreviewLabel,
   isEncryptedMessageText,
 } from "../../e2ee/messages.js";
+import {
+  getMessagePreviewLabel as getGroupMessagePreviewLabel,
+  isEncryptedMessageText as isGroupEncryptedMessageText,
+} from "../../../group_messaging/e2ee/messages.js";
 import { getGroupLogDisplay } from "../../../group_messaging/logDisplay.js";
 
 const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
@@ -113,6 +117,54 @@ export function getLastMessagePreviewDetails(room, currentUser) {
   const message = room?.last_message;
 
   if (isGroupRoom(room)) {
+    if (message) {
+      const messageText = getGroupMessagePreviewLabel(message);
+      const attachments = Array.isArray(message.decrypted_attachments)
+        ? message.decrypted_attachments
+        : Array.isArray(message.attachments)
+          ? message.attachments
+          : [];
+      const attachmentPreview = getAttachmentPreviewDetails(attachments);
+      const hasEncryptedPlaceholder =
+        isGroupEncryptedMessageText(message.text) ||
+        messageText.toLowerCase() === "encrypted group message";
+      let preview = messageText;
+      let icon = "";
+
+      if (attachmentPreview && (!preview || hasEncryptedPlaceholder)) {
+        preview = attachmentPreview.text;
+        icon = attachmentPreview.icon;
+      }
+
+      if (!preview && isGroupEncryptedMessageText(message.text)) {
+        preview = "Encrypted group message";
+      }
+
+      if (!preview) {
+        preview = attachmentPreview?.text || "Message";
+        icon = attachmentPreview?.icon || "";
+      }
+
+      const currentUserId = getCurrentUserId(currentUser);
+      if (currentUserId && Number(message.sender_user_id) === currentUserId) {
+        return {
+          icon,
+          text: `You: ${preview}`,
+        };
+      }
+
+      const sender = (room?.participants || []).find(
+        (participant) =>
+          Number(participant?.user_id) === Number(message.sender_user_id),
+      );
+      const senderName = sender?.display_name || sender?.account_number || "";
+
+      return {
+        icon,
+        text: senderName ? `${senderName}: ${preview}` : preview,
+      };
+    }
+
     const latestLogs = Array.isArray(room?.latest_logs) ? room.latest_logs : [];
     const latestLog = latestLogs[latestLogs.length - 1];
 
@@ -120,7 +172,7 @@ export function getLastMessagePreviewDetails(room, currentUser) {
       icon: "",
       text: latestLog
         ? getGroupLogDisplay(latestLog, currentUser).text
-        : (message ? "Group message" : "No messages yet."),
+        : "No messages yet.",
     };
   }
 

@@ -10,6 +10,8 @@ import { clearMessengerSession } from './messenger/api.js'
 import { clearMessengerUiCache } from './messenger/cache.js'
 import { clearE2EEFileRuntimeCaches } from './messenger/e2ee/files.js'
 import { clearE2EEMessageRuntimeCaches } from './messenger/e2ee/messages.js'
+import { clearGroupE2EEFileRuntimeCaches } from './group_messaging/e2ee/files.js'
+import { clearGroupE2EEMessageRuntimeCaches } from './group_messaging/e2ee/messages.js'
 import LayoutPage from './parent/pages/jsx/LayoutPage.jsx'
 import WelcomePage from './parent/pages/jsx/WelcomePage.jsx'
 
@@ -47,6 +49,8 @@ function getParentUserScope(user: ParentUser) {
 function clearMessengerRuntimeState() {
   clearE2EEMessageRuntimeCaches()
   clearE2EEFileRuntimeCaches()
+  clearGroupE2EEMessageRuntimeCaches()
+  clearGroupE2EEFileRuntimeCaches()
 }
 
 function clearLoggedInHistoryState() {

@@ -11,6 +11,7 @@ import {
 } from "../../../messenger/api.js";
 import GroupConversation from "../../../group_messaging/pages/GroupConversation.jsx";
 import GroupRoomHeader from "../../../group_messaging/pages/GroupRoomHeader.jsx";
+import { decryptGroupMessageForUser } from "../../../group_messaging/e2ee/messages.js";
 import {
   clearStoredMessengerDeviceIdentity,
   ensureMessengerDeviceKey,
@@ -900,6 +901,19 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     [handleRoomMessage, user],
   );
 
+  const handleMaybeEncryptedGroupRoomMessage = useCallback(
+    (room, message, options) => {
+      decryptGroupMessageForUser(message, user)
+        .then((nextMessage) => {
+          handleRoomMessage(room, nextMessage, options);
+        })
+        .catch(() => {
+          handleRoomMessage(room, message, options);
+        });
+    },
+    [handleRoomMessage, user],
+  );
+
   const handleRoomRead = useCallback((roomId) => {
     const markRoomRead = (room) =>
       Number(room.id) === Number(roomId)
@@ -919,11 +933,75 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const handleRoomMessageStatus = useCallback(
     (eventPayload) => {
       const status =
-        eventPayload?.type === "message.read" ? "read" : "delivered";
+        eventPayload?.type === "message.read" ||
+        eventPayload?.type === "group.message.read"
+          ? "read"
+          : "delivered";
       const roomId = Number(eventPayload?.room_id || 0);
+      const messageStatuses = Array.isArray(eventPayload?.message_statuses)
+        ? eventPayload.message_statuses
+        : [];
       const lastMessageId =
         eventPayload?.last_read_message_id ||
         eventPayload?.last_delivered_message_id;
+
+      if (roomId && messageStatuses.length > 0) {
+        const statusByMessageId = new Map(
+          messageStatuses.map((item) => [
+            Number(item.message_id),
+            item.status,
+          ]),
+        );
+        const updateRoomStatus = (room) => {
+          const lastMessage = room?.last_message;
+          const nextStatus = statusByMessageId.get(Number(lastMessage?.id));
+
+          if (Number(room?.id) !== roomId || !nextStatus) {
+            return room;
+          }
+
+          return {
+            ...room,
+            last_message: {
+              ...lastMessage,
+              status: nextStatus,
+            },
+          };
+        };
+
+        setRooms((currentRooms) => currentRooms.map(updateRoomStatus));
+        setSelectedRoom((currentRoom) =>
+          currentRoom ? updateRoomStatus(currentRoom) : currentRoom,
+        );
+        setConversationCache((currentCache) => {
+          const cacheRoomId = String(roomId);
+          const cachedConversation = currentCache[cacheRoomId];
+
+          if (!cachedConversation?.messages?.length) {
+            return currentCache;
+          }
+
+          const nextMessages = cachedConversation.messages.map((message) => {
+            const nextStatus = statusByMessageId.get(Number(message.id));
+
+            return nextStatus ? { ...message, status: nextStatus } : message;
+          });
+
+          return {
+            ...currentCache,
+            [cacheRoomId]: sanitizeConversationForCache({
+              ...cachedConversation,
+              messages: nextMessages,
+              updatedAt: new Date().toISOString(),
+            }),
+          };
+        });
+        return;
+      }
+
+      if (eventPayload?.type?.startsWith("group.message.")) {
+        return;
+      }
 
       if (
         !roomId ||
@@ -1090,7 +1168,17 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         handleMaybeEncryptedRoomMessage(eventPayload.room, eventPayload.message);
       }
 
-      if (eventPayload?.type?.startsWith("group.")) {
+      if (eventPayload?.type === "group.message.sent") {
+        handleMaybeEncryptedGroupRoomMessage(
+          eventPayload.room,
+          eventPayload.message,
+        );
+      }
+
+      if (
+        eventPayload?.type?.startsWith("group.") &&
+        !eventPayload?.type?.startsWith("group.message.")
+      ) {
         handleGroupEvent(eventPayload);
       }
 
@@ -1169,7 +1257,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       }
 
       if (
-        eventPayload?.type === "message.read" &&
+        (eventPayload?.type === "message.read" ||
+          eventPayload?.type === "group.message.read") &&
         Number(eventPayload.user_id) === currentUserId
       ) {
         handleRoomRead(eventPayload.room_id);
@@ -1177,7 +1266,9 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
       if (
         eventPayload?.type === "message.read" ||
-        eventPayload?.type === "message.delivered"
+        eventPayload?.type === "message.delivered" ||
+        eventPayload?.type === "group.message.read" ||
+        eventPayload?.type === "group.message.delivered"
       ) {
         handleRoomMessageStatus(eventPayload);
       }
@@ -1199,6 +1290,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     clearLocalEncryptedDeviceState,
     finishLogout,
     handleGroupEvent,
+    handleMaybeEncryptedGroupRoomMessage,
     handleMaybeEncryptedRoomMessage,
     handleRoomMessageStatus,
     handleRoomRead,
@@ -1347,7 +1439,15 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             <GroupConversation
               selectedRoom={selectedRoom}
               user={user}
+              cachedConversation={
+                selectedRoom?.id
+                  ? conversationCache[String(selectedRoom.id)] || null
+                  : null
+              }
               onGroupEvent={handleGroupEvent}
+              onRoomMessage={handleRoomMessage}
+              onRoomRead={handleRoomRead}
+              onConversationCacheChange={handleConversationCacheChange}
             />
           ) : (
             <MessengerConversation

@@ -17,6 +17,7 @@ import {
   getMessengerRooms,
 } from "../../api.js";
 import CreateGroupModal from "../../../group_messaging/pages/CreateGroupModal.jsx";
+import { decryptGroupRoomsForUser } from "../../../group_messaging/e2ee/messages.js";
 import { decryptRoomsForUser } from "../../e2ee/messages.js";
 import { getParentContacts } from "../../../parent/api.js";
 import {
@@ -41,19 +42,24 @@ const ROOM_PREVIEW_ICONS = {
 
 async function decryptDirectRoomSummaries(rawRooms, user) {
   const directRooms = rawRooms.filter((room) => !isGroupRoom(room));
+  const groupRooms = rawRooms.filter((room) => isGroupRoom(room));
 
-  if (directRooms.length === 0) {
+  if (directRooms.length === 0 && groupRooms.length === 0) {
     return rawRooms;
   }
 
   const decryptedDirectRooms = await decryptRoomsForUser(directRooms, user);
+  const decryptedGroupRooms = await decryptGroupRoomsForUser(groupRooms, user);
   const decryptedDirectRoomsById = new Map(
     decryptedDirectRooms.map((room) => [Number(room.id), room]),
+  );
+  const decryptedGroupRoomsById = new Map(
+    decryptedGroupRooms.map((room) => [Number(room.id), room]),
   );
 
   return rawRooms.map((room) =>
     isGroupRoom(room)
-      ? room
+      ? decryptedGroupRoomsById.get(Number(room.id)) || room
       : decryptedDirectRoomsById.get(Number(room.id)) || room,
   );
 }

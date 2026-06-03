@@ -7,6 +7,7 @@ import {
   markMessengerRoomDelivered,
   MESSENGER_INBOX_EVENT_NAME,
 } from "./api.js";
+import { markGroupRoomDelivered } from "../group_messaging/api.js";
 
 const SOCKET_RECONNECT_DELAY_MS = 1500;
 const SOCKET_PING_INTERVAL_MS = 25000;
@@ -75,6 +76,33 @@ function MessengerInboxListener() {
       });
     };
 
+    const markIncomingGroupMessageDelivered = (roomMessage) => {
+      const currentUserId = Number(currentUserIdRef.current);
+      const messageId = String(roomMessage?.id || "");
+      const deliveredKey = `group:${messageId}`;
+
+      if (
+        !currentUserId ||
+        !roomMessage?.room_id ||
+        !messageId ||
+        Number(roomMessage.sender_user_id) === currentUserId ||
+        deliveredMessageIdsRef.current.has(deliveredKey)
+      ) {
+        return;
+      }
+
+      if (deliveredMessageIdsRef.current.size > 500) {
+        deliveredMessageIdsRef.current.clear();
+      }
+      deliveredMessageIdsRef.current.add(deliveredKey);
+
+      markGroupRoomDelivered(roomMessage.room_id, {
+        last_delivered_message_id: roomMessage.id,
+      }).catch(() => {
+        deliveredMessageIdsRef.current.delete(deliveredKey);
+      });
+    };
+
     const connectInboxSocket = async ({ forceRefresh = false } = {}) => {
       try {
         const token = await getMessengerToken({ forceRefresh });
@@ -114,6 +142,8 @@ function MessengerInboxListener() {
 
           if (eventPayload.type === "message.sent") {
             markIncomingMessageDelivered(eventPayload.message);
+          } else if (eventPayload.type === "group.message.sent") {
+            markIncomingGroupMessageDelivered(eventPayload.message);
           }
         };
 
