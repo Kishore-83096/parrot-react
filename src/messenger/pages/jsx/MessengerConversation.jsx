@@ -4517,15 +4517,20 @@ function MessengerConversation({
                   className="parent-layout-page__messages-history-loader"
                   aria-hidden="true"
                 >
-                  <span className="parent-layout-page__messages-history-bubble is-left">
-                    <i />
-                    <i />
-                    <i />
+                  <span className="parent-layout-page__messages-history-rail" />
+                  <span className="parent-layout-page__messages-history-row is-theirs">
+                    <span className="parent-layout-page__messages-history-bubble">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
                   </span>
-                  <span className="parent-layout-page__messages-history-bubble is-right">
-                    <i />
-                    <i />
-                    <i />
+                  <span className="parent-layout-page__messages-history-row is-mine">
+                    <span className="parent-layout-page__messages-history-bubble">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
                   </span>
                 </div>
               </div>

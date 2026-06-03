@@ -1308,11 +1308,11 @@
   position: sticky;
   top: 0;
   z-index: 5;
-  min-height: 56px;
+  min-height: 82px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 4px 12px 12px;
+  justify-content: stretch;
+  padding: 4px 0 12px;
   background: linear-gradient(
     180deg,
     rgba(250, 245, 255, 0.94),
@@ -1323,13 +1323,12 @@
 }
 
 .parent-layout-page__messages-history-loader {
-  width: min(232px, 78%);
+  width: 100%;
   display: grid;
-  gap: 7px;
+  gap: 6px;
 }
 
-.parent-layout-page__messages-history-loader::before {
-  content: "";
+.parent-layout-page__messages-history-rail {
   justify-self: center;
   width: 44px;
   height: 4px;
@@ -1343,8 +1342,25 @@
   animation: parentMessageHistoryRail 1.45s ease-in-out infinite;
 }
 
+.parent-layout-page__messages-history-row {
+  box-sizing: border-box;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.parent-layout-page__messages-history-row.is-theirs {
+  justify-content: flex-start;
+}
+
+.parent-layout-page__messages-history-row.is-mine {
+  justify-content: flex-end;
+}
+
 .parent-layout-page__messages-history-bubble {
-  width: 92px;
+  box-sizing: border-box;
+  width: clamp(118px, 28%, 210px);
+  max-width: min(50%, 560px);
   height: 28px;
   display: inline-flex;
   align-items: center;
@@ -1358,14 +1374,12 @@
   animation: parentMessageHistoryBubble 1.45s ease-in-out infinite;
 }
 
-.parent-layout-page__messages-history-bubble.is-left {
-  justify-self: start;
+.parent-layout-page__messages-history-row.is-theirs .parent-layout-page__messages-history-bubble {
   border-radius: 16px 16px 16px 7px;
 }
 
-.parent-layout-page__messages-history-bubble.is-right {
-  justify-self: end;
-  width: 104px;
+.parent-layout-page__messages-history-row.is-mine .parent-layout-page__messages-history-bubble {
+  width: clamp(136px, 34%, 250px);
   border-radius: 16px 16px 7px 16px;
   background:
     linear-gradient(135deg, rgba(124, 60, 255, 0.2), rgba(255, 255, 255, 0.86)),
