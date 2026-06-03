@@ -7,6 +7,7 @@ import {
   Music,
   Paperclip,
   Search,
+  UsersRound,
   Video,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import {
   getMessengerErrorMessage,
   getMessengerRooms,
 } from "../../api.js";
+import CreateGroupModal from "../../../group_messaging/pages/CreateGroupModal.jsx";
 import { decryptRoomsForUser } from "../../e2ee/messages.js";
 import { getParentContacts } from "../../../parent/api.js";
 import {
@@ -24,6 +26,7 @@ import {
   getLastMessagePreviewDetails,
   getRoomInitials,
   getRoomPeer,
+  isGroupRoom,
 } from "./roomHelpers.js";
 
 const ROOM_PREVIEW_ICONS = {
@@ -36,6 +39,25 @@ const ROOM_PREVIEW_ICONS = {
   voice_note: Mic,
 };
 
+async function decryptDirectRoomSummaries(rawRooms, user) {
+  const directRooms = rawRooms.filter((room) => !isGroupRoom(room));
+
+  if (directRooms.length === 0) {
+    return rawRooms;
+  }
+
+  const decryptedDirectRooms = await decryptRoomsForUser(directRooms, user);
+  const decryptedDirectRoomsById = new Map(
+    decryptedDirectRooms.map((room) => [Number(room.id), room]),
+  );
+
+  return rawRooms.map((room) =>
+    isGroupRoom(room)
+      ? room
+      : decryptedDirectRoomsById.get(Number(room.id)) || room,
+  );
+}
+
 function MessengerRoomList({
   contacts,
   rooms,
@@ -44,6 +66,7 @@ function MessengerRoomList({
   onlineUserIds,
   e2eeRecoveryVersion,
   onContactsChange,
+  onGroupCreated,
   onRoomsChange,
   onSelectRoom,
 }) {
@@ -51,6 +74,7 @@ function MessengerRoomList({
   const [isRoomsLoading, setIsRoomsLoading] = useState(false);
   const [roomSearch, setRoomSearch] = useState("");
   const [hasLoadedContactMap, setHasLoadedContactMap] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const roomsRef = useRef(rooms);
 
   useEffect(() => {
@@ -77,7 +101,7 @@ function MessengerRoomList({
       const rawRooms = Array.isArray(roomsResult?.rooms)
         ? roomsResult.rooms
         : [];
-      const nextRooms = await decryptRoomsForUser(rawRooms, user);
+      const nextRooms = await decryptDirectRoomSummaries(rawRooms, user);
 
       onRoomsChange(nextRooms);
     } catch (error) {
@@ -127,19 +151,22 @@ function MessengerRoomList({
     }
 
     return rooms.filter((room) => {
+      const isGroup = isGroupRoom(room);
       const peer = getRoomPeer(room, user);
       const peerAccountNumber = String(peer?.account_number || "");
       const contact = contactsByAccountNumber.get(peerAccountNumber) || null;
       const roomName =
-        (contact ? getContactName(contact) : "") ||
-        peer?.display_name ||
-        peerAccountNumber ||
-        `Room ${room.id}`;
+        isGroup
+          ? room.title || `Group ${room.id}`
+          : (contact ? getContactName(contact) : "") ||
+            peer?.display_name ||
+            peerAccountNumber ||
+            `Room ${room.id}`;
       const lastMessagePreview = getLastMessagePreview(room, user);
       const searchText = [
         roomName,
-        peerAccountNumber,
-        peer?.username,
+        isGroup ? "" : peerAccountNumber,
+        isGroup ? "" : peer?.username,
         lastMessagePreview,
       ]
         .filter(Boolean)
@@ -161,6 +188,15 @@ function MessengerRoomList({
           placeholder="Search chats"
           aria-label="Search chats"
         />
+        <button
+          className="parent-layout-page__create-group-button"
+          type="button"
+          onClick={() => setIsCreateGroupOpen(true)}
+          aria-label="Create group"
+          title="Create group"
+        >
+          <UsersRound size={18} aria-hidden="true" />
+        </button>
       </div>
 
       {roomsMessage ? (
@@ -188,17 +224,21 @@ function MessengerRoomList({
       ) : (
         <div className="parent-layout-page__contacts-list">
           {filteredRooms.map((room) => {
+            const isGroup = isGroupRoom(room);
             const peer = getRoomPeer(room, user);
             const peerAccountNumber = String(peer?.account_number || "");
             const contact = contactsByAccountNumber.get(peerAccountNumber) || null;
             const isSelected = selectedRoom?.id === room.id;
-            const isPeerOnline = onlineUserIds?.has(Number(peer?.user_id));
+            const isPeerOnline =
+              !isGroup && onlineUserIds?.has(Number(peer?.user_id));
             const unreadCount = Number(room.unread_count || 0);
             const roomName =
-              (contact ? getContactName(contact) : "") ||
-              peer?.display_name ||
-              peerAccountNumber ||
-              `Room ${room.id}`;
+              isGroup
+                ? room.title || `Group ${room.id}`
+                : (contact ? getContactName(contact) : "") ||
+                  peer?.display_name ||
+                  peerAccountNumber ||
+                  `Room ${room.id}`;
             const lastMessageTime = formatRoomTime(
               room.last_message?.created_at || room.updated_at,
             );
@@ -221,7 +261,9 @@ function MessengerRoomList({
                   }`}
                   aria-hidden="true"
                 >
-                  {contact?.profile_picture ? (
+                  {isGroup && room.avatar_url ? (
+                    <img src={room.avatar_url} alt="" />
+                  ) : contact?.profile_picture ? (
                     <img src={contact.profile_picture} alt="" />
                   ) : (
                     getRoomInitials(room, contact, peer)
@@ -233,7 +275,12 @@ function MessengerRoomList({
 
                 <span className="parent-layout-page__contact-text">
                   <strong>{roomName}</strong>
-                  {!contact ? (
+                  {isGroup ? (
+                    <small>
+                      {Number(room.member_count || 0)} member
+                      {Number(room.member_count || 0) === 1 ? "" : "s"}
+                    </small>
+                  ) : !contact ? (
                     <small>
                       {peerAccountNumber || "Account number unavailable"}
                     </small>
@@ -267,6 +314,16 @@ function MessengerRoomList({
           })}
         </div>
       )}
+
+      {isCreateGroupOpen ? (
+        <CreateGroupModal
+          contacts={contacts}
+          onClose={() => setIsCreateGroupOpen(false)}
+          onGroupCreated={(room) => {
+            onGroupCreated?.(room);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

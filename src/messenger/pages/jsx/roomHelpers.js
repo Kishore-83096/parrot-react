@@ -31,7 +31,15 @@ export function getCurrentUserId(user) {
   return Number(user?.id || user?.user_id || 0);
 }
 
+export function isGroupRoom(room) {
+  return room?.is_group || room?.room_type === "group";
+}
+
 export function getRoomPeer(room, currentUser) {
+  if (isGroupRoom(room)) {
+    return null;
+  }
+
   const otherParticipants = Array.isArray(room?.other_participants)
     ? room.other_participants
     : [];
@@ -56,6 +64,10 @@ export function getRoomPeer(room, currentUser) {
 }
 
 export function getRoomContact(room, contacts, currentUser) {
+  if (isGroupRoom(room)) {
+    return null;
+  }
+
   const peer = getRoomPeer(room, currentUser);
   const peerAccountNumber = String(peer?.account_number || "");
 
@@ -71,6 +83,10 @@ export function getRoomContact(room, contacts, currentUser) {
 }
 
 export function getRoomName(room, contact, peer) {
+  if (isGroupRoom(room)) {
+    return room?.title || `Group ${room?.id || ""}`.trim() || "Group";
+  }
+
   return (
     (contact ? getContactName(contact) : "") ||
     peer?.display_name ||
@@ -95,10 +111,23 @@ export function getLastMessagePreview(room, currentUser) {
 export function getLastMessagePreviewDetails(room, currentUser) {
   const message = room?.last_message;
 
-  if (!message) {
+  if (isGroupRoom(room)) {
+    const latestLogs = Array.isArray(room?.latest_logs) ? room.latest_logs : [];
+    const latestLog = latestLogs[latestLogs.length - 1];
+
     return {
       icon: "",
-      text: "No messages yet.",
+      text: latestLog?.text || (message ? "Group message" : "No messages yet."),
+    };
+  }
+
+  if (!message) {
+    const latestLogs = Array.isArray(room?.latest_logs) ? room.latest_logs : [];
+    const latestLog = latestLogs[latestLogs.length - 1];
+
+    return {
+      icon: "",
+      text: latestLog?.text || "No messages yet.",
     };
   }
 

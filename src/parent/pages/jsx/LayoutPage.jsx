@@ -9,6 +9,8 @@ import {
   getMessengerUserCryptoDevices,
   MESSENGER_INBOX_EVENT_NAME,
 } from "../../../messenger/api.js";
+import GroupConversation from "../../../group_messaging/pages/GroupConversation.jsx";
+import GroupRoomHeader from "../../../group_messaging/pages/GroupRoomHeader.jsx";
 import {
   clearStoredMessengerDeviceIdentity,
   ensureMessengerDeviceKey,
@@ -575,6 +577,72 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     });
   }, []);
 
+  const upsertGroupRoom = useCallback((room, { selectRoom = false } = {}) => {
+    if (!room?.id) {
+      return;
+    }
+
+    setRooms((currentRooms) => {
+      const nextRooms = [
+        room,
+        ...currentRooms.filter(
+          (currentRoom) => Number(currentRoom.id) !== Number(room.id),
+        ),
+      ];
+
+      return nextRooms.sort(
+        (first, second) =>
+          new Date(second.updated_at || 0).getTime() -
+          new Date(first.updated_at || 0).getTime(),
+      );
+    });
+
+    setSelectedRoom((currentRoom) => {
+      if (selectRoom) {
+        return room;
+      }
+
+      if (!currentRoom || Number(currentRoom.id) !== Number(room.id)) {
+        return currentRoom;
+      }
+
+      return {
+        ...currentRoom,
+        ...room,
+      };
+    });
+
+    if (selectRoom) {
+      setSelectedContact(null);
+      setActivePanelTab("chats");
+    }
+  }, []);
+
+  const handleGroupEvent = useCallback(
+    (eventPayload) => {
+      const room = eventPayload?.room;
+
+      if (room?.id) {
+        upsertGroupRoom(room);
+      }
+    },
+    [upsertGroupRoom],
+  );
+
+  const handleGroupCreated = useCallback(
+    (room) => {
+      upsertGroupRoom(room, { selectRoom: true });
+    },
+    [upsertGroupRoom],
+  );
+
+  const handleGroupUpdated = useCallback(
+    (room) => {
+      upsertGroupRoom(room);
+    },
+    [upsertGroupRoom],
+  );
+
   const handleConversationCacheChange = useCallback((roomId, conversation) => {
     const cacheRoomId = String(roomId || "");
 
@@ -972,6 +1040,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         handleMaybeEncryptedRoomMessage(eventPayload.room, eventPayload.message);
       }
 
+      if (eventPayload?.type?.startsWith("group.")) {
+        handleGroupEvent(eventPayload);
+      }
+
       if (eventPayload?.type === "story.created") {
         if (activePanelTabRef.current !== "stories") {
           setStoryUnreadCount((currentCount) =>
@@ -1076,6 +1148,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     currentUserId,
     clearLocalEncryptedDeviceState,
     finishLogout,
+    handleGroupEvent,
     handleMaybeEncryptedRoomMessage,
     handleRoomMessageStatus,
     handleRoomRead,
@@ -1125,6 +1198,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         onlineUserIds={onlineUserIds}
         e2eeRecoveryVersion={e2eeRecoveryVersion}
         onContactsChange={handleContactsChange}
+        onGroupCreated={handleGroupCreated}
         onRoomsChange={handleRoomsChange}
         onSelectRoom={handleSelectRoom}
       />
@@ -1191,38 +1265,55 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         contacts={contactPanelContent}
         contactFooter={contactTabs}
         roomHeader={
-          <MessengerRoomHeader
-            contacts={contacts}
-            selectedContact={selectedContact}
-            selectedRoom={selectedRoom}
-            user={user}
-            onlineUserIds={onlineUserIds}
-            onContactDeleted={handleContactDeleted}
-            onContactUpdated={handleContactUpdated}
-            onBlockedMessagesReleased={handleBlockedMessagesReleased}
-            onCloseConversation={handleCloseConversation}
-            peerProfileCache={peerProfileCache}
-            onPeerProfileCacheChange={handlePeerProfileCacheChange}
-            onToast={setToast}
-          />
+          selectedRoom?.is_group ? (
+            <GroupRoomHeader
+              selectedRoom={selectedRoom}
+              user={user}
+              onCloseConversation={handleCloseConversation}
+              onGroupUpdated={handleGroupUpdated}
+              onToast={setToast}
+            />
+          ) : (
+            <MessengerRoomHeader
+              contacts={contacts}
+              selectedContact={selectedContact}
+              selectedRoom={selectedRoom}
+              user={user}
+              onlineUserIds={onlineUserIds}
+              onContactDeleted={handleContactDeleted}
+              onContactUpdated={handleContactUpdated}
+              onBlockedMessagesReleased={handleBlockedMessagesReleased}
+              onCloseConversation={handleCloseConversation}
+              peerProfileCache={peerProfileCache}
+              onPeerProfileCacheChange={handlePeerProfileCacheChange}
+              onToast={setToast}
+            />
+          )
         }
         room={
-          <MessengerConversation
-            contacts={contacts}
-            selectedContact={selectedContact}
-            selectedRoom={selectedRoom}
-            user={user}
-            releasedMessagesVersion={releasedMessagesVersion}
-            cachedConversation={
-              selectedRoom?.id
-                ? conversationCache[String(selectedRoom.id)] || null
-                : null
-            }
-            onRoomMessage={handleRoomMessage}
-            onRoomRead={handleRoomRead}
-            onConversationCacheChange={handleConversationCacheChange}
-            onOpenStoryReference={storiesController.openStoryReference}
-          />
+          selectedRoom?.is_group ? (
+            <GroupConversation
+              selectedRoom={selectedRoom}
+              onGroupEvent={handleGroupEvent}
+            />
+          ) : (
+            <MessengerConversation
+              contacts={contacts}
+              selectedContact={selectedContact}
+              selectedRoom={selectedRoom}
+              user={user}
+              releasedMessagesVersion={releasedMessagesVersion}
+              cachedConversation={
+                selectedRoom?.id
+                  ? conversationCache[String(selectedRoom.id)] || null
+                  : null
+              }
+              onRoomMessage={handleRoomMessage}
+              onRoomRead={handleRoomRead}
+              onConversationCacheChange={handleConversationCacheChange}
+              onOpenStoryReference={storiesController.openStoryReference}
+            />
+          )
         }
         contactsLabel="Contacts and chats"
         roomLabel="Message Room"
