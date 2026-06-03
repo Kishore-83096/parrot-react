@@ -4510,9 +4510,24 @@ function MessengerConversation({
                 className="parent-layout-page__messages-pagination"
                 role="status"
                 aria-live="polite"
+                aria-label="Loading earlier messages"
+                aria-busy="true"
               >
-                <LoaderCircle size={16} aria-hidden="true" />
-                <span>Loading more messages...</span>
+                <div
+                  className="parent-layout-page__messages-history-loader"
+                  aria-hidden="true"
+                >
+                  <span className="parent-layout-page__messages-history-bubble is-left">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <span className="parent-layout-page__messages-history-bubble is-right">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                </div>
               </div>
             ) : null}
 
