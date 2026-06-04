@@ -23,6 +23,7 @@ import parrotIcon from "../../../assets/favicon.svg";
 import {
   getMessengerErrorMessage,
   getMessengerUserCryptoDevices,
+  refreshMessengerPresenceVisibility,
 } from "../../../messenger/api.js";
 import {
   getStoredMessengerDeviceIdentity,
@@ -1143,6 +1144,11 @@ function Header({
         ),
       );
       onContactUpdated?.(updatedContact, contact);
+      if (updatedContact?.user_id || contact?.user_id) {
+        refreshMessengerPresenceVisibility({
+          viewer_user_id: updatedContact?.user_id || contact.user_id,
+        }).catch(() => {});
+      }
       onToast?.({
         type: nextBlocked ? "error" : "success",
         title: nextBlocked ? "Contact blocked" : "Contact unblocked",
@@ -1217,6 +1223,11 @@ function Header({
         ),
       );
       onContactUpdated?.(updatedContact, contact);
+      if (updatedContact?.user_id || contact?.user_id) {
+        refreshMessengerPresenceVisibility({
+          viewer_user_id: updatedContact?.user_id || contact.user_id,
+        }).catch(() => {});
+      }
       onToast?.({
         type: "success",
         title: nextGhosted ? "Contact ghosted" : "Ghosting removed",

@@ -326,6 +326,9 @@ export const markMessengerRoomDelivered = (roomId, data = {}) =>
 export const markMessengerRoomRead = (roomId, data = {}) =>
   messengerAxios.post(`/rooms/${encodeURIComponent(roomId)}/read/`, data);
 
+export const refreshMessengerPresenceVisibility = (data = {}) =>
+  messengerAxios.post("/presence/visibility/refresh/", data);
+
 export const releaseMessengerRoomBlockedMessages = (roomId) =>
   messengerAxios.post(
     `/rooms/${encodeURIComponent(roomId)}/blocked-messages/release/`,

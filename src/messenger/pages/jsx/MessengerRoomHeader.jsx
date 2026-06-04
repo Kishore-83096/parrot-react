@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import parrotIcon from "../../../assets/favicon.svg";
 import {
   markMessengerRoomRead,
+  refreshMessengerPresenceVisibility,
   releaseMessengerRoomBlockedMessages,
 } from "../../api.js";
 import {
@@ -340,6 +341,16 @@ function MessengerRoomHeader({
         onContactUpdated(updatedContact);
       }
 
+      const peerUserId =
+        updatedContact?.user_id ||
+        selectedConversationContact?.user_id ||
+        selectedRoomPeer?.user_id;
+      if (peerUserId) {
+        refreshMessengerPresenceVisibility({
+          viewer_user_id: peerUserId,
+        }).catch(() => {});
+      }
+
       if (!willBlockContact && selectedRoom?.id) {
         releaseMessengerRoomBlockedMessages(selectedRoom.id)
           .then((releaseResponse) => {
@@ -408,6 +419,16 @@ function MessengerRoomHeader({
 
       if (updatedContact) {
         onContactUpdated(updatedContact);
+      }
+
+      const peerUserId =
+        updatedContact?.user_id ||
+        selectedConversationContact?.user_id ||
+        selectedRoomPeer?.user_id;
+      if (peerUserId) {
+        refreshMessengerPresenceVisibility({
+          viewer_user_id: peerUserId,
+        }).catch(() => {});
       }
 
       if (!willGhostContact && selectedRoom?.id) {
