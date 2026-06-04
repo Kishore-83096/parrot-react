@@ -2926,6 +2926,14 @@
   opacity: 0.78;
 }
 
+.parent-layout-page__voice-note-play.is-loading {
+  cursor: progress;
+  opacity: 1;
+  background:
+    conic-gradient(from 0deg, rgba(255, 255, 255, 0.18), #ffffff, rgba(255, 255, 255, 0.18)),
+    linear-gradient(135deg, #0f9f7a, #2563eb);
+}
+
 .parent-layout-page__voice-note-play .lucide-loader-circle,
 .parent-layout-page__message-submit .lucide-loader-circle {
   animation: parent-layout-page-spin 900ms linear infinite;

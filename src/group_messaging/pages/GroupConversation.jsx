@@ -904,6 +904,25 @@ function formatMediaTime(seconds) {
   return `${minutes}:${remainingSeconds}`;
 }
 
+function getVoiceNoteDisplayTime(currentTime, duration) {
+  const safeCurrentTime = Number(currentTime);
+  const safeDuration = Number(duration);
+
+  if (!Number.isFinite(safeCurrentTime) || safeCurrentTime <= 0) {
+    return 0;
+  }
+
+  if (
+    Number.isFinite(safeDuration) &&
+    safeDuration > 0 &&
+    safeDuration - safeCurrentTime <= 0.3
+  ) {
+    return safeDuration;
+  }
+
+  return safeCurrentTime;
+}
+
 function normalizeVoiceNoteDuration(value) {
   const duration = Number(value);
 
@@ -1001,12 +1020,19 @@ function getVoiceNoteFileExtension(mimeType) {
   return "webm";
 }
 
-async function createVoiceNoteWaveform(blob) {
+function getDefaultVoiceNoteMetadata(fallbackDuration = 0) {
+  return {
+    durationSeconds: normalizeVoiceNoteDuration(fallbackDuration),
+    waveform: DEFAULT_VOICE_NOTE_WAVEFORM,
+  };
+}
+
+async function createVoiceNoteMetadata(blob, fallbackDuration = 0) {
   const AudioContextConstructor =
     globalThis.AudioContext || globalThis.webkitAudioContext;
 
   if (!AudioContextConstructor || !blob?.size) {
-    return DEFAULT_VOICE_NOTE_WAVEFORM;
+    return getDefaultVoiceNoteMetadata(fallbackDuration);
   }
 
   const audioContext = new AudioContextConstructor();
@@ -1033,11 +1059,16 @@ async function createVoiceNoteWaveform(blob) {
     });
     const peak = Math.max(...bars, 0.01);
 
-    return bars.map((level) =>
-      Number(Math.max(0.08, Math.min(level / peak, 1)).toFixed(2)),
-    );
+    return {
+      durationSeconds: normalizeVoiceNoteDuration(
+        audioBuffer.duration || fallbackDuration,
+      ),
+      waveform: bars.map((level) =>
+        Number(Math.max(0.08, Math.min(level / peak, 1)).toFixed(2)),
+      ),
+    };
   } catch {
-    return DEFAULT_VOICE_NOTE_WAVEFORM;
+    return getDefaultVoiceNoteMetadata(fallbackDuration);
   } finally {
     audioContext.close?.();
   }
@@ -1997,11 +2028,12 @@ function VoiceNotePlayer({ attachment }) {
   const [playbackState, setPlaybackState] = useState({
     currentTime: 0,
     duration: declaredDuration,
+    isLoading: false,
     isPlaying: false,
   });
   const duration = playbackState.duration || declaredDuration;
   const displayCurrentTime = duration
-    ? Math.min(playbackState.currentTime, duration)
+    ? getVoiceNoteDisplayTime(Math.min(playbackState.currentTime, duration), duration)
     : playbackState.currentTime;
   const progressRatio = duration
     ? Math.min(displayCurrentTime / duration, 1)
@@ -2012,6 +2044,7 @@ function VoiceNotePlayer({ attachment }) {
     setPlaybackState({
       currentTime: 0,
       duration: declaredDuration,
+      isLoading: false,
       isPlaying: false,
     });
   }, [attachment, declaredDuration, sourceUrl]);
@@ -2032,12 +2065,16 @@ function VoiceNotePlayer({ attachment }) {
       const nextCurrentTime = Number.isFinite(audio.currentTime)
         ? audio.currentTime
         : 0;
+      const nextIsEnded = audio.ended;
 
       return {
         currentTime: nextDuration
-          ? Math.min(nextCurrentTime, nextDuration)
+          ? nextIsEnded
+            ? nextDuration
+            : Math.min(nextCurrentTime, nextDuration)
           : nextCurrentTime,
         duration: nextDuration,
+        isLoading: false,
         isPlaying: !audio.paused && !audio.ended,
       };
     });
@@ -2055,15 +2092,28 @@ function VoiceNotePlayer({ attachment }) {
       audio.load();
     }
 
+    setPlaybackState((currentState) => ({
+      ...currentState,
+      isLoading: true,
+    }));
     audio.muted = false;
 
-    if (audio.volume === 0) {
-      audio.volume = 1;
-    }
+    try {
+      if (audio.volume === 0) {
+        audio.volume = 1;
+      }
 
-    await waitForMediaReady(audio);
-    await audio.play();
-    syncAudioState();
+      await waitForMediaReady(audio);
+      await audio.play();
+      syncAudioState();
+    } catch (error) {
+      setPlaybackState((currentState) => ({
+        ...currentState,
+        isLoading: false,
+        isPlaying: false,
+      }));
+      throw error;
+    }
   }, [sourceUrl, syncAudioState]);
 
   const handleTogglePlay = useCallback((event) => {
@@ -2071,7 +2121,7 @@ function VoiceNotePlayer({ attachment }) {
 
     const audio = audioRef.current;
 
-    if (!audio) {
+    if (!audio || playbackState.isLoading) {
       return;
     }
 
@@ -2083,10 +2133,11 @@ function VoiceNotePlayer({ attachment }) {
     playAudio().catch(() => {
       setPlaybackState((currentState) => ({
         ...currentState,
+        isLoading: false,
         isPlaying: false,
       }));
     });
-  }, [playAudio]);
+  }, [playAudio, playbackState.isLoading]);
 
   const handleWaveformSeek = useCallback(
     (event) => {
@@ -2117,18 +2168,29 @@ function VoiceNotePlayer({ attachment }) {
     },
     [declaredDuration, duration, playAudio, syncAudioState],
   );
+  const isPlayButtonLoading = isLoadingAudio || !sourceUrl || playbackState.isLoading;
 
   return (
     <div className="parent-layout-page__voice-note">
       <button
         type="button"
-        className="parent-layout-page__voice-note-play"
+        className={`parent-layout-page__voice-note-play${
+          isPlayButtonLoading ? " is-loading" : ""
+        }`}
         onClick={handleTogglePlay}
-        aria-label={playbackState.isPlaying ? "Pause voice note" : "Play voice note"}
-        title={playbackState.isPlaying ? "Pause" : "Play"}
-        disabled={isLoadingAudio || !sourceUrl}
+        aria-label={
+          isPlayButtonLoading
+            ? "Loading voice note"
+            : playbackState.isPlaying
+              ? "Pause voice note"
+              : "Play voice note"
+        }
+        title={
+          isPlayButtonLoading ? "Loading" : playbackState.isPlaying ? "Pause" : "Play"
+        }
+        disabled={isPlayButtonLoading}
       >
-        {isLoadingAudio || !sourceUrl ? (
+        {isPlayButtonLoading ? (
           <LoaderCircle size={18} aria-hidden="true" />
         ) : playbackState.isPlaying ? (
           <Pause size={18} aria-hidden="true" />
@@ -5056,7 +5118,10 @@ function GroupConversation({
         return;
       }
 
-      const waveform = await createVoiceNoteWaveform(recording.blob);
+      const voiceNoteMetadata = await createVoiceNoteMetadata(
+        recording.blob,
+        recording.durationSeconds,
+      );
       const extension = getVoiceNoteFileExtension(recording.mimeType);
       const file = new File(
         [recording.blob],
@@ -5068,10 +5133,11 @@ function GroupConversation({
       const voiceNoteFile = {
         id: createSelectedFileId(file),
         attachmentKind: VOICE_NOTE_ATTACHMENT_KIND,
-        durationSeconds: recording.durationSeconds,
+        durationSeconds:
+          voiceNoteMetadata.durationSeconds || recording.durationSeconds,
         file,
         fileType: "audio",
-        waveform,
+        waveform: voiceNoteMetadata.waveform,
       };
 
       queueOutgoingMessage({
