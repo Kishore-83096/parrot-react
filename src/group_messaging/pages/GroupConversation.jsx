@@ -63,6 +63,11 @@ import {
   getRenderableMessageText,
 } from "../e2ee/messages.js";
 import {
+  extractMessageLinks,
+  MessageLinkPreview,
+  MessageTextWithLinks,
+} from "../../messenger/messageLinks.jsx";
+import {
   decryptEncryptedAttachmentBlob,
   encryptSelectedFilesForGroupMessage,
   isEncryptedAttachment,
@@ -5348,6 +5353,7 @@ function GroupConversation({
               isReactionPickerOpen ||
               Number(activeMessageActionsId) === Number(message.id);
             const messageText = getRenderableMessageText(message);
+            const messageLinks = extractMessageLinks(messageText);
             const storyContext = getStoryContext(message);
             const messageAttachments = getMessageAttachments(message);
             const attachmentCountClass =
@@ -5365,7 +5371,7 @@ function GroupConversation({
               );
             const bubbleClassName = `parent-layout-page__message-bubble${attachmentCountClass}${
               hasInlineMediaAttachment ? " has-inline-media" : ""
-            }`;
+            }${messageLinks.length > 0 ? " has-links" : ""}`;
             const messageStyle = isReplyDragging
               ? { "--message-reply-drag-x": `${replyDrag.offsetX}px` }
               : undefined;
@@ -5455,10 +5461,15 @@ function GroupConversation({
                       />
                     ) : null}
 
+                    {messageLinks.length > 0 ? (
+                      <MessageLinkPreview links={messageLinks} />
+                    ) : null}
+
                     {messageText ? (
-                      <p className="parent-layout-page__message-text">
-                        {messageText}
-                      </p>
+                      <MessageTextWithLinks
+                        links={messageLinks}
+                        text={messageText}
+                      />
                     ) : null}
 
                     <footer>

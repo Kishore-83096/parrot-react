@@ -288,13 +288,17 @@ function MessengerRoomList({
                 </span>
 
                 <span className="parent-layout-page__contact-text">
-                  <strong>{roomName}</strong>
-                  {isGroup ? (
-                    <small>
-                      {Number(room.member_count || 0)} member
-                      {Number(room.member_count || 0) === 1 ? "" : "s"}
-                    </small>
-                  ) : !contact ? (
+                  <strong
+                    className={
+                      isGroup
+                        ? "parent-layout-page__group-room-name"
+                        : undefined
+                    }
+                  >
+                    {isGroup ? <UsersRound size={13} aria-hidden="true" /> : null}
+                    <span>{roomName}</span>
+                  </strong>
+                  {!isGroup && !contact ? (
                     <small>
                       {peerAccountNumber || "Account number unavailable"}
                     </small>

@@ -767,6 +767,27 @@
   font-weight: 820;
 }
 
+.parent-layout-page__contact-text .parent-layout-page__group-room-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.parent-layout-page__contact-text .parent-layout-page__group-room-name svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  color: var(--layout-blue);
+  stroke-width: 2.6;
+}
+
+.parent-layout-page__contact-text .parent-layout-page__group-room-name span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .parent-layout-page__chat-meta {
   min-width: 42px;
   display: grid;
@@ -1722,6 +1743,19 @@
   border-bottom-left-radius: 7px;
 }
 
+.parent-layout-page__message-bubble.has-links {
+  border-color: rgba(63, 140, 255, 0.28);
+  box-shadow:
+    0 14px 28px rgba(63, 140, 255, 0.1),
+    0 12px 24px rgba(95, 52, 167, 0.07);
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-bubble.has-links {
+  box-shadow:
+    0 14px 28px rgba(63, 140, 255, 0.18),
+    0 12px 24px rgba(95, 52, 167, 0.1);
+}
+
 .parent-layout-page__message-sender {
   max-width: 100%;
   margin: 0 0 6px;
@@ -2349,6 +2383,135 @@
   font-weight: 650;
 }
 
+.parent-layout-page__message-text a {
+  color: #1f6feb;
+  font-weight: 820;
+  text-decoration: underline;
+  text-decoration-color: rgba(31, 111, 235, 0.62);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.parent-layout-page__message-text a:hover,
+.parent-layout-page__message-text a:focus-visible {
+  color: var(--layout-purple-deep);
+  text-decoration-color: currentColor;
+  outline: none;
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-text a {
+  color: #ffffff;
+  text-decoration-color: rgba(255, 255, 255, 0.76);
+}
+
+.parent-layout-page__message-link-card {
+  box-sizing: border-box;
+  width: min(320px, 100%);
+  max-width: 100%;
+  min-width: 0;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(63, 140, 255, 0.24);
+  border-radius: 8px;
+  color: var(--layout-text);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(239, 247, 255, 0.86)),
+    rgba(255, 255, 255, 0.86);
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+.parent-layout-page__message-link-card:hover,
+.parent-layout-page__message-link-card:focus-visible {
+  border-color: rgba(63, 140, 255, 0.46);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.58),
+    0 10px 20px rgba(63, 140, 255, 0.12);
+  outline: none;
+}
+
+.parent-layout-page__message-link-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--layout-blue);
+  background: rgba(63, 140, 255, 0.12);
+}
+
+.parent-layout-page__message-link-card > svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  color: var(--layout-blue);
+  stroke-width: 2.5;
+}
+
+.parent-layout-page__message-link-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+}
+
+.parent-layout-page__message-link-tag {
+  width: max-content;
+  max-width: 100%;
+  padding: 2px 6px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 7px;
+  color: var(--layout-purple-deep);
+  background: rgba(122, 53, 245, 0.1);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.parent-layout-page__message-link-copy strong,
+.parent-layout-page__message-link-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parent-layout-page__message-link-copy strong {
+  font-size: 12px;
+  line-height: 1.14;
+  font-weight: 880;
+}
+
+.parent-layout-page__message-link-copy small {
+  color: var(--layout-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 720;
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-link-card {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-link-icon,
+.parent-layout-page__message.is-mine .parent-layout-page__message-link-tag {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.17);
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-link-card > svg,
+.parent-layout-page__message.is-mine .parent-layout-page__message-link-copy small {
+  color: rgba(255, 255, 255, 0.78);
+}
+
 .parent-layout-page__message-bubble.has-attachments {
   --message-caption-width: 224px;
   --message-attachment-width: 284px;
@@ -2378,7 +2541,16 @@
   max-width: min(var(--message-caption-width), 100%);
 }
 
+.parent-layout-page__message-bubble.has-attachments .parent-layout-page__message-link-card {
+  max-width: min(var(--message-caption-width), 100%);
+}
+
 .parent-layout-page__message-attachments + .parent-layout-page__message-text {
+  margin-top: 8px;
+}
+
+.parent-layout-page__message-attachments + .parent-layout-page__message-link-card,
+.parent-layout-page__message-link-card + .parent-layout-page__message-text {
   margin-top: 8px;
 }
 
@@ -4646,7 +4818,8 @@ video.parent-layout-page__attachment-modal-media {
 }
 
 .parent-layout-page__group-settings-title-form button,
-.parent-layout-page__group-settings-picture {
+.parent-layout-page__group-settings-picture,
+.parent-layout-page__group-settings-add-toggle {
   min-height: 42px;
   display: inline-flex;
   align-items: center;
@@ -4668,9 +4841,24 @@ video.parent-layout-page__attachment-modal-media {
 }
 
 .parent-layout-page__group-settings-title-form button:disabled,
-.parent-layout-page__group-settings-picture:disabled {
+.parent-layout-page__group-settings-picture:disabled,
+.parent-layout-page__group-settings-add-toggle:disabled {
   cursor: not-allowed;
   opacity: 0.62;
+}
+
+.parent-layout-page__group-settings-add-toggle {
+  width: 100%;
+  padding: 0 14px;
+  border: 1px solid rgba(124, 60, 255, 0.14);
+  color: var(--layout-purple-deep);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.parent-layout-page__group-settings-add-toggle[aria-expanded="true"] {
+  color: #ffffff;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--layout-purple), var(--layout-purple-deep));
 }
 
 .parent-layout-page__group-settings-add-list {

@@ -107,6 +107,7 @@ function GroupSettingsModal({
   const [titleDraft, setTitleDraft] = useState(selectedRoom?.title || "");
   const [memberSearch, setMemberSearch] = useState("");
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
+  const [isAddMembersOpen, setIsAddMembersOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const avatarInputRef = useRef(null);
@@ -177,6 +178,7 @@ function GroupSettingsModal({
     setTitleDraft(selectedRoom?.title || "");
     setMemberSearch("");
     setSelectedAccounts(new Set());
+    setIsAddMembersOpen(false);
     setMessage("");
     setLoadingAction("");
   }, [selectedRoom]);
@@ -321,6 +323,8 @@ function GroupSettingsModal({
     ).then((didUpdate) => {
       if (didUpdate) {
         setSelectedAccounts(new Set());
+        setMemberSearch("");
+        setIsAddMembersOpen(false);
       }
     });
   };
@@ -481,69 +485,84 @@ function GroupSettingsModal({
 
         {canManageGroup ? (
           <section className="parent-layout-page__group-settings-section">
-            <div className="parent-layout-page__group-member-search">
-              <Search size={16} aria-hidden="true" />
-              <input
-                type="search"
-                value={memberSearch}
-                onChange={(event) => setMemberSearch(event.target.value)}
-                placeholder="Search saved contacts"
-                aria-label="Search saved contacts"
-                disabled={isBusy}
-              />
-            </div>
-
-            <div className="parent-layout-page__group-member-list parent-layout-page__group-settings-add-list">
-              {filteredContacts.length === 0 ? (
-                <p className="parent-layout-page__group-member-empty">
-                  No saved contacts available.
-                </p>
-              ) : (
-                filteredContacts.map((contact) => {
-                  const accountNumber = String(contact.account_number || "");
-                  const isSelected = selectedAccounts.has(accountNumber);
-
-                  return (
-                    <button
-                      className={`parent-layout-page__group-member-option${
-                        isSelected ? " is-selected" : ""
-                      }`}
-                      type="button"
-                      key={accountNumber}
-                      onClick={() => toggleContact(accountNumber)}
-                      disabled={isBusy}
-                    >
-                      <span className="parent-layout-page__contact-avatar" aria-hidden="true">
-                        {contact.profile_picture ? (
-                          <img src={contact.profile_picture} alt="" />
-                        ) : (
-                          getContactInitials(contact)
-                        )}
-                      </span>
-                      <span>
-                        <strong>{getContactName(contact)}</strong>
-                        <small>{accountNumber}</small>
-                      </span>
-                      <i aria-hidden="true">{isSelected ? <Check size={15} /> : null}</i>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-
             <button
-              className="parent-layout-page__modal-submit parent-layout-page__group-settings-full-button"
+              className="parent-layout-page__group-settings-add-toggle"
               type="button"
-              onClick={handleAddMembers}
-              disabled={isBusy || selectedCount === 0}
+              onClick={() => setIsAddMembersOpen((isOpen) => !isOpen)}
+              disabled={isBusy}
+              aria-expanded={isAddMembersOpen}
             >
-              {loadingAction === "add-members" ? (
-                <LoaderCircle size={18} aria-hidden="true" />
-              ) : (
-                <UserPlus size={18} aria-hidden="true" />
-              )}
-              <span>Add Members{selectedCount ? ` (${selectedCount})` : ""}</span>
+              <UserPlus size={17} aria-hidden="true" />
+              <span>Add Member</span>
             </button>
+
+            {isAddMembersOpen ? (
+              <>
+                <div className="parent-layout-page__group-member-search">
+                  <Search size={16} aria-hidden="true" />
+                  <input
+                    type="search"
+                    value={memberSearch}
+                    onChange={(event) => setMemberSearch(event.target.value)}
+                    placeholder="Search saved contacts"
+                    aria-label="Search saved contacts"
+                    disabled={isBusy}
+                  />
+                </div>
+
+                <div className="parent-layout-page__group-member-list parent-layout-page__group-settings-add-list">
+                  {filteredContacts.length === 0 ? (
+                    <p className="parent-layout-page__group-member-empty">
+                      No saved contacts available.
+                    </p>
+                  ) : (
+                    filteredContacts.map((contact) => {
+                      const accountNumber = String(contact.account_number || "");
+                      const isSelected = selectedAccounts.has(accountNumber);
+
+                      return (
+                        <button
+                          className={`parent-layout-page__group-member-option${
+                            isSelected ? " is-selected" : ""
+                          }`}
+                          type="button"
+                          key={accountNumber}
+                          onClick={() => toggleContact(accountNumber)}
+                          disabled={isBusy}
+                        >
+                          <span className="parent-layout-page__contact-avatar" aria-hidden="true">
+                            {contact.profile_picture ? (
+                              <img src={contact.profile_picture} alt="" />
+                            ) : (
+                              getContactInitials(contact)
+                            )}
+                          </span>
+                          <span>
+                            <strong>{getContactName(contact)}</strong>
+                            <small>{accountNumber}</small>
+                          </span>
+                          <i aria-hidden="true">{isSelected ? <Check size={15} /> : null}</i>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+
+                <button
+                  className="parent-layout-page__modal-submit parent-layout-page__group-settings-full-button"
+                  type="button"
+                  onClick={handleAddMembers}
+                  disabled={isBusy || selectedCount === 0}
+                >
+                  {loadingAction === "add-members" ? (
+                    <LoaderCircle size={18} aria-hidden="true" />
+                  ) : (
+                    <UserPlus size={18} aria-hidden="true" />
+                  )}
+                  <span>Add Members{selectedCount ? ` (${selectedCount})` : ""}</span>
+                </button>
+              </>
+            ) : null}
           </section>
         ) : null}
 
