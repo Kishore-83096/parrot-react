@@ -39,9 +39,11 @@ import {
   blockParentContact,
   changeParentPassword,
   deleteParentAccount,
+  ghostParentContact,
   getParentContacts,
   getParentProfile,
   storeParentSession,
+  unghostParentContact,
   unblockParentContact,
   updateParentProfile,
 } from "../../api.js";
@@ -345,6 +347,8 @@ function Header({
   const [isLinkedDevicesModalOpen, setIsLinkedDevicesModalOpen] = useState(false);
   const [isBlockManagementModalOpen, setIsBlockManagementModalOpen] =
     useState(false);
+  const [isGhostManagementModalOpen, setIsGhostManagementModalOpen] =
+    useState(false);
   const [isDefaultDeviceSelectionRequired, setIsDefaultDeviceSelectionRequired] =
     useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("view");
@@ -357,6 +361,10 @@ function Header({
     () => contacts,
   );
   const [blockManagementSearch, setBlockManagementSearch] = useState("");
+  const [ghostManagementContacts, setGhostManagementContacts] = useState(
+    () => contacts,
+  );
+  const [ghostManagementSearch, setGhostManagementSearch] = useState("");
   const [recoveryKeyForm, setRecoveryKeyForm] = useState({
     recovery_key: "",
     confirm_recovery_key: "",
@@ -372,6 +380,7 @@ function Header({
   const [accountMessage, setAccountMessage] = useState(null);
   const [linkedDevicesMessage, setLinkedDevicesMessage] = useState(null);
   const [blockManagementMessage, setBlockManagementMessage] = useState(null);
+  const [ghostManagementMessage, setGhostManagementMessage] = useState(null);
   const [recoveryKeyMessage, setRecoveryKeyMessage] = useState(null);
   const [defaultDevicePasswordMessage, setDefaultDevicePasswordMessage] =
     useState(null);
@@ -382,6 +391,7 @@ function Header({
   const [storedRecoveryKey, setStoredRecoveryKey] = useState("");
   const [cryptoDevices, setCryptoDevices] = useState([]);
   const [blockActionAccountNumber, setBlockActionAccountNumber] = useState("");
+  const [ghostActionAccountNumber, setGhostActionAccountNumber] = useState("");
   const [hasDefaultCryptoDevice, setHasDefaultCryptoDevice] = useState(false);
   const [isDefaultPasswordConfigured, setIsDefaultPasswordConfigured] =
     useState(false);
@@ -398,6 +408,8 @@ function Header({
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
   const [isDevicesLoading, setIsDevicesLoading] = useState(false);
   const [isBlockManagementLoading, setIsBlockManagementLoading] =
+    useState(false);
+  const [isGhostManagementLoading, setIsGhostManagementLoading] =
     useState(false);
   const [isRecoveryKeySaving, setIsRecoveryKeySaving] = useState(false);
   const [isDefaultDevicePasswordSaving, setIsDefaultDevicePasswordSaving] =
@@ -475,9 +487,34 @@ function Header({
   ).length;
   const unblockedContactsCount =
     blockManagementContacts.length - blockedContactsCount;
+  const ghostManagementQuery = ghostManagementSearch.trim().toLowerCase();
+  const filteredGhostManagementContacts = useMemo(() => {
+    const sourceContacts = Array.isArray(ghostManagementContacts)
+      ? ghostManagementContacts
+      : [];
+
+    if (!ghostManagementQuery) {
+      return sourceContacts;
+    }
+
+    return sourceContacts.filter((contact) => {
+      const name = getContactName(contact).toLowerCase();
+      const account = String(contact.account_number || "").toLowerCase();
+
+      return name.includes(ghostManagementQuery) || account.includes(ghostManagementQuery);
+    });
+  }, [ghostManagementContacts, ghostManagementQuery]);
+  const ghostedContactsCount = ghostManagementContacts.filter(
+    (contact) => contact.ghosted,
+  ).length;
+  const normalGhostContactsCount =
+    ghostManagementContacts.length - ghostedContactsCount;
 
   useEffect(() => {
-    setBlockManagementContacts(Array.isArray(contacts) ? contacts : []);
+    const nextContacts = Array.isArray(contacts) ? contacts : [];
+
+    setBlockManagementContacts(nextContacts);
+    setGhostManagementContacts(nextContacts);
   }, [contacts]);
 
   const syncProfile = useCallback(
@@ -621,6 +658,28 @@ function Header({
     }
   }, [onContactsChange]);
 
+  const loadGhostManagementContacts = useCallback(async () => {
+    setIsGhostManagementLoading(true);
+    setGhostManagementMessage(null);
+
+    try {
+      const response = await getParentContacts();
+      const nextContacts = Array.isArray(response.data?.contacts)
+        ? response.data.contacts
+        : [];
+
+      setGhostManagementContacts(nextContacts);
+      onContactsChange?.(nextContacts);
+    } catch (error) {
+      setGhostManagementMessage({
+        type: "error",
+        text: getParentApiErrorMessage(error, "Unable to load contacts."),
+      });
+    } finally {
+      setIsGhostManagementLoading(false);
+    }
+  }, [onContactsChange]);
+
   const refreshStoredRecoveryKey = useCallback(() => {
     setStoredRecoveryKey(getStoredRecoveryKey(user));
   }, [user]);
@@ -629,6 +688,7 @@ function Header({
     pushLoggedInHistoryView({ modal: "profile", profileTab: "view" });
     setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
+    setIsGhostManagementModalOpen(false);
     setActiveProfileTab("view");
     setIsProfileModalOpen(true);
     loadProfile();
@@ -638,6 +698,7 @@ function Header({
     pushLoggedInHistoryView({ modal: "account", accountTab: "password" });
     setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
+    setIsGhostManagementModalOpen(false);
     setActiveAccountTab("password");
     setAccountForm(getEmptyAccountForm());
     setAccountMessage(null);
@@ -648,6 +709,7 @@ function Header({
     pushLoggedInHistoryView({ modal: "linkedDevices" });
     setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
+    setIsGhostManagementModalOpen(false);
     setIsDefaultDeviceSelectionRequired(false);
     setActiveLinkedDevicesTab("devices");
     setLinkedDevicesMessage(null);
@@ -662,10 +724,24 @@ function Header({
     setIsProfileModalOpen(false);
     setIsAccountModalOpen(false);
     setIsLinkedDevicesModalOpen(false);
+    setIsGhostManagementModalOpen(false);
     setBlockManagementSearch("");
     setBlockManagementMessage(null);
     setIsBlockManagementModalOpen(true);
     loadBlockManagementContacts();
+  };
+
+  const openGhostManagementModal = () => {
+    pushLoggedInHistoryView({ modal: "ghostManagement" });
+    setIsMenuOpen(false);
+    setIsProfileModalOpen(false);
+    setIsAccountModalOpen(false);
+    setIsLinkedDevicesModalOpen(false);
+    setIsBlockManagementModalOpen(false);
+    setGhostManagementSearch("");
+    setGhostManagementMessage(null);
+    setIsGhostManagementModalOpen(true);
+    loadGhostManagementContacts();
   };
 
   useEffect(() => {
@@ -680,6 +756,7 @@ function Header({
     handledDefaultDevicePromptVersionRef.current = defaultDevicePromptVersion;
     setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
+    setIsGhostManagementModalOpen(false);
     setIsDefaultDeviceSelectionRequired(true);
     setActiveLinkedDevicesTab("devices");
     setIsLinkedDevicesModalOpen(true);
@@ -749,6 +826,13 @@ function Header({
     setIsBlockManagementLoading(false);
   }, []);
 
+  const resetGhostManagementModal = useCallback(() => {
+    setIsGhostManagementModalOpen(false);
+    setGhostManagementMessage(null);
+    setGhostActionAccountNumber("");
+    setIsGhostManagementLoading(false);
+  }, []);
+
   const closeBlockManagementModal = useCallback(() => {
     if (isCurrentHistoryModal("blockManagement")) {
       clearLoggedInHistoryModal();
@@ -756,6 +840,14 @@ function Header({
 
     resetBlockManagementModal();
   }, [resetBlockManagementModal]);
+
+  const closeGhostManagementModal = useCallback(() => {
+    if (isCurrentHistoryModal("ghostManagement")) {
+      clearLoggedInHistoryModal();
+    }
+
+    resetGhostManagementModal();
+  }, [resetGhostManagementModal]);
 
   const closeProfileModal = useCallback(() => {
     if (isCurrentHistoryModal("profile")) {
@@ -875,6 +967,28 @@ function Header({
   ]);
 
   useEffect(() => {
+    if (!isGhostManagementModalOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !ghostActionAccountNumber) {
+        closeGhostManagementModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    closeGhostManagementModal,
+    ghostActionAccountNumber,
+    isGhostManagementModalOpen,
+  ]);
+
+  useEffect(() => {
     const handlePopState = (event) => {
       const historyView =
         event.state?.[LOGGED_IN_HISTORY_KEY] || getLoggedInHistoryView();
@@ -883,6 +997,7 @@ function Header({
         resetAccountModal();
         resetLinkedDevicesModal();
         resetBlockManagementModal();
+        resetGhostManagementModal();
         setIsProfileModalOpen(true);
         setActiveProfileTab(historyView.profileTab === "edit" ? "edit" : "view");
         setProfileMessage(null);
@@ -898,6 +1013,7 @@ function Header({
         resetProfileModal();
         resetLinkedDevicesModal();
         resetBlockManagementModal();
+        resetGhostManagementModal();
         setIsAccountModalOpen(true);
         setActiveAccountTab(
           historyView.accountTab === "delete"
@@ -913,6 +1029,7 @@ function Header({
         resetProfileModal();
         resetAccountModal();
         resetBlockManagementModal();
+        resetGhostManagementModal();
         setIsLinkedDevicesModalOpen(true);
         setActiveLinkedDevicesTab("devices");
         setLinkedDevicesMessage(null);
@@ -925,9 +1042,21 @@ function Header({
         resetProfileModal();
         resetAccountModal();
         resetLinkedDevicesModal();
+        resetGhostManagementModal();
         setIsBlockManagementModalOpen(true);
         setBlockManagementMessage(null);
         loadBlockManagementContacts();
+        return;
+      }
+
+      if (historyView?.modal === "ghostManagement") {
+        resetProfileModal();
+        resetAccountModal();
+        resetLinkedDevicesModal();
+        resetBlockManagementModal();
+        setIsGhostManagementModalOpen(true);
+        setGhostManagementMessage(null);
+        loadGhostManagementContacts();
         return;
       }
 
@@ -935,6 +1064,7 @@ function Header({
       resetAccountModal();
       resetLinkedDevicesModal();
       resetBlockManagementModal();
+      resetGhostManagementModal();
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -947,8 +1077,10 @@ function Header({
     loadProfile,
     loadCryptoDevices,
     loadBlockManagementContacts,
+    loadGhostManagementContacts,
     resetAccountModal,
     resetBlockManagementModal,
+    resetGhostManagementModal,
     resetLinkedDevicesModal,
     resetProfileModal,
     user,
@@ -971,6 +1103,15 @@ function Header({
 
     const wasBlocked = Boolean(contact.blocked);
     const nextBlocked = !wasBlocked;
+    if (nextBlocked && contact.ghosted) {
+      const shouldBlock = window.confirm(
+        `Blocking ${getContactName(contact)} will remove ghosting for this contact. Continue?`,
+      );
+
+      if (!shouldBlock) {
+        return;
+      }
+    }
 
     setBlockActionAccountNumber(contact.account_number);
     setBlockManagementMessage(null);
@@ -988,6 +1129,13 @@ function Header({
       };
 
       setBlockManagementContacts((currentContacts) =>
+        currentContacts.map((currentContact) =>
+          currentContact.account_number === updatedContact.account_number
+            ? { ...currentContact, ...updatedContact }
+            : currentContact,
+        ),
+      );
+      setGhostManagementContacts((currentContacts) =>
         currentContacts.map((currentContact) =>
           currentContact.account_number === updatedContact.account_number
             ? { ...currentContact, ...updatedContact }
@@ -1019,6 +1167,80 @@ function Header({
       });
     } finally {
       setBlockActionAccountNumber("");
+    }
+  };
+
+  const handleToggleManagedContactGhost = async (contact) => {
+    if (!contact?.account_number || ghostActionAccountNumber) {
+      return;
+    }
+
+    const wasGhosted = Boolean(contact.ghosted);
+    const nextGhosted = !wasGhosted;
+    if (nextGhosted && contact.blocked) {
+      const shouldGhost = window.confirm(
+        `Ghosting ${getContactName(contact)} will remove blocking for this contact. Continue?`,
+      );
+
+      if (!shouldGhost) {
+        return;
+      }
+    }
+
+    setGhostActionAccountNumber(contact.account_number);
+    setGhostManagementMessage(null);
+
+    try {
+      const payload = {
+        account_number: contact.account_number,
+      };
+      const response = wasGhosted
+        ? await unghostParentContact(payload)
+        : await ghostParentContact(payload);
+      const updatedContact = response.data?.contact || {
+        ...contact,
+        ghosted: nextGhosted,
+      };
+
+      setGhostManagementContacts((currentContacts) =>
+        currentContacts.map((currentContact) =>
+          currentContact.account_number === updatedContact.account_number
+            ? { ...currentContact, ...updatedContact }
+            : currentContact,
+        ),
+      );
+      setBlockManagementContacts((currentContacts) =>
+        currentContacts.map((currentContact) =>
+          currentContact.account_number === updatedContact.account_number
+            ? { ...currentContact, ...updatedContact }
+            : currentContact,
+        ),
+      );
+      onContactUpdated?.(updatedContact, contact);
+      onToast?.({
+        type: "success",
+        title: nextGhosted ? "Contact ghosted" : "Ghosting removed",
+        message: `${getContactName(updatedContact)} is now ${
+          nextGhosted ? "ghosted" : "not ghosted"
+        }.`,
+      });
+    } catch (error) {
+      const errorMessage = getParentApiErrorMessage(
+        error,
+        "Unable to update ghosting.",
+      );
+
+      setGhostManagementMessage({
+        type: "error",
+        text: errorMessage,
+      });
+      onToast?.({
+        type: "error",
+        title: "Ghosting not updated",
+        message: errorMessage,
+      });
+    } finally {
+      setGhostActionAccountNumber("");
     }
   };
 
@@ -2530,7 +2752,7 @@ function Header({
             </span>
             <span>
               <strong>{unblockedContactsCount}</strong>
-              <small>Unblocked</small>
+              <small>Block</small>
             </span>
           </div>
 
@@ -2608,7 +2830,7 @@ function Header({
                         isBlocked ? " is-blocked" : ""
                       }`}
                     >
-                      {isBlocked ? "Blocked" : "Unblocked"}
+                      {isBlocked ? "Blocked" : "Block"}
                     </span>
 
                     <button
@@ -2630,6 +2852,158 @@ function Header({
                           : isBlocked
                           ? "Unblock"
                           : "Block"}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  ) : null;
+
+  const ghostManagementModal = isGhostManagementModalOpen ? (
+    <div className="parent-layout-page__modal-backdrop" role="presentation">
+      <section
+        className="parent-layout-page__modal parent-layout-page__modal--account parent-layout-page__block-management-modal parent-layout-page__ghost-management-modal"
+        aria-modal="true"
+        aria-labelledby="parent-ghost-management-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close"
+          type="button"
+          onClick={closeGhostManagementModal}
+          aria-label="Close ghost management"
+          title="Close"
+          disabled={Boolean(ghostActionAccountNumber)}
+        >
+          <X size={28} strokeWidth={3} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__modal-header">
+          <span
+            className="parent-layout-page__block-management-icon parent-layout-page__ghost-management-icon"
+            aria-hidden="true"
+          >
+            <EyeOff size={24} />
+          </span>
+          <div>
+            <h2 id="parent-ghost-management-title">Ghost Management</h2>
+          </div>
+        </div>
+
+        <div className="parent-layout-page__block-management">
+          <div className="parent-layout-page__block-management-summary">
+            <span>
+              <strong>{ghostedContactsCount}</strong>
+              <small>Ghosted</small>
+            </span>
+            <span>
+              <strong>{normalGhostContactsCount}</strong>
+              <small>Ghost</small>
+            </span>
+          </div>
+
+          <label className="parent-layout-page__block-management-search">
+            <Search size={17} aria-hidden="true" />
+            <input
+              type="search"
+              value={ghostManagementSearch}
+              onChange={(event) => setGhostManagementSearch(event.target.value)}
+              placeholder="Search contacts"
+              aria-label="Search contacts"
+            />
+          </label>
+
+          {ghostManagementMessage ? (
+            <p
+              className={
+                ghostManagementMessage.type === "error"
+                  ? "parent-layout-page__modal-error"
+                  : "parent-layout-page__form-note"
+              }
+              role={ghostManagementMessage.type === "error" ? "alert" : "status"}
+            >
+              {ghostManagementMessage.text}
+            </p>
+          ) : null}
+
+          {isGhostManagementLoading && ghostManagementContacts.length === 0 ? (
+            <div
+              className="parent-layout-page__block-management-empty"
+              aria-live="polite"
+            >
+              Loading contacts
+            </div>
+          ) : ghostManagementContacts.length === 0 ? (
+            <div className="parent-layout-page__block-management-empty">
+              No contacts yet.
+            </div>
+          ) : filteredGhostManagementContacts.length === 0 ? (
+            <div className="parent-layout-page__block-management-empty">
+              No matching contacts.
+            </div>
+          ) : (
+            <div className="parent-layout-page__block-management-list">
+              {filteredGhostManagementContacts.map((contact) => {
+                const isGhosted = Boolean(contact.ghosted);
+                const isBlocked = Boolean(contact.blocked);
+                const isUpdating =
+                  ghostActionAccountNumber === contact.account_number;
+
+                return (
+                  <div
+                    className={`parent-layout-page__block-management-row${
+                      isGhosted ? " is-ghosted" : ""
+                    }`}
+                    key={contact.account_number}
+                  >
+                    <span
+                      className="parent-layout-page__contact-avatar"
+                      aria-hidden="true"
+                    >
+                      {contact.profile_picture ? (
+                        <img src={contact.profile_picture} alt="" />
+                      ) : (
+                        getContactInitials(contact)
+                      )}
+                    </span>
+
+                    <span className="parent-layout-page__contact-text">
+                      <strong>{getContactName(contact)}</strong>
+                      <small>{contact.account_number}</small>
+                    </span>
+
+                    <span
+                      className={`parent-layout-page__block-management-status${
+                        isGhosted ? " is-ghosted" : ""
+                      }`}
+                    >
+                      {isGhosted ? "Ghosted" : "Ghost"}
+                    </span>
+
+                    <button
+                      className={`parent-layout-page__block-management-action${
+                        isGhosted ? " is-unblock" : " is-ghost"
+                      }`}
+                      type="button"
+                      onClick={() => handleToggleManagedContactGhost(contact)}
+                      disabled={Boolean(ghostActionAccountNumber)}
+                    >
+                      {isGhosted ? (
+                        <Eye size={15} aria-hidden="true" />
+                      ) : (
+                        <EyeOff size={15} aria-hidden="true" />
+                      )}
+                      <span>
+                        {isUpdating
+                          ? "Updating"
+                          : isGhosted
+                          ? "Remove"
+                          : "Ghost"}
                       </span>
                     </button>
                   </div>
@@ -3106,6 +3480,16 @@ function Header({
             <button
               className="parent-header__account-button"
               type="button"
+              onClick={openGhostManagementModal}
+              role="menuitem"
+            >
+              <EyeOff size={16} aria-hidden="true" />
+              <span>Ghost Management</span>
+            </button>
+
+            <button
+              className="parent-header__account-button"
+              type="button"
               onClick={openLinkedDevicesModal}
               role="menuitem"
             >
@@ -3132,6 +3516,9 @@ function Header({
       {accountModal ? createPortal(accountModal, document.body) : null}
       {blockManagementModal
         ? createPortal(blockManagementModal, document.body)
+        : null}
+      {ghostManagementModal
+        ? createPortal(ghostManagementModal, document.body)
         : null}
       {linkedDevicesModal ? createPortal(linkedDevicesModal, document.body) : null}
       {defaultDevicePasswordModal

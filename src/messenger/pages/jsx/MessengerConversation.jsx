@@ -2927,18 +2927,39 @@ function MessengerConversation({
       }
 
       const status = eventPayload.type === "message.read" ? "read" : "delivered";
+      const messageStatuses = Array.isArray(eventPayload.message_statuses)
+        ? eventPayload.message_statuses
+        : [];
+      const statusByMessageId = new Map(
+        messageStatuses.map((item) => [
+          Number(item.message_id),
+          item.status || status,
+        ]),
+      );
       const lastMessageId =
         eventPayload.last_read_message_id ||
         eventPayload.last_delivered_message_id;
 
-      if (Number(eventPayload.user_id) === currentUserId || !lastMessageId) {
+      if (
+        Number(eventPayload.user_id) === currentUserId ||
+        (!lastMessageId && statusByMessageId.size === 0)
+      ) {
         return;
       }
 
       setRoomMessages((currentMessages) =>
         currentMessages.map((message) => {
+          const explicitStatus = statusByMessageId.get(Number(message.id));
+          if (explicitStatus) {
+            return {
+              ...message,
+              status: explicitStatus,
+            };
+          }
+
           if (
             Number(message.sender_user_id) !== currentUserId ||
+            !lastMessageId ||
             Number(message.id) > Number(lastMessageId) ||
             (status === "delivered" && message.status === "read")
           ) {

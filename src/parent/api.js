@@ -167,6 +167,12 @@ export const blockParentContact = (data) =>
 export const unblockParentContact = (data) =>
   parentAxios.post("/contacts/unblock", data);
 
+export const ghostParentContact = (data) =>
+  parentAxios.post("/contacts/ghost", data);
+
+export const unghostParentContact = (data) =>
+  parentAxios.post("/contacts/unghost", data);
+
 export const deleteParentContact = (data) =>
   parentAxios.delete("/contacts", { data });
 

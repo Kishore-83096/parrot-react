@@ -2,6 +2,8 @@ import {
   AlertCircle,
   Ban,
   CheckCircle2,
+  Eye,
+  EyeOff,
   MoreVertical,
   Pencil,
   Save,
@@ -18,8 +20,10 @@ import { releaseMessengerRoomBlockedMessages } from "../../api.js";
 import {
   blockParentContact,
   deleteParentContact,
+  ghostParentContact,
   saveParentContact,
   searchParentUser,
+  unghostParentContact,
   unblockParentContact,
   updateParentContactAlias,
 } from "../../../parent/api.js";
@@ -92,6 +96,9 @@ function MessengerRoomHeader({
     .join(" - ");
   const isSelectedConversationBlocked = Boolean(
     selectedConversationContact?.blocked,
+  );
+  const isSelectedConversationGhosted = Boolean(
+    selectedConversationContact?.ghosted,
   );
   const isSelectedPeerOnline = onlineUserIds?.has(
     Number(selectedRoomPeer?.user_id),
@@ -302,6 +309,16 @@ function MessengerRoomHeader({
     }
 
     const willBlockContact = !selectedConversationContact.blocked;
+    if (willBlockContact && selectedConversationContact.ghosted) {
+      const shouldBlock = window.confirm(
+        `Blocking ${selectedConversationName} will remove ghosting for this contact. Continue?`,
+      );
+
+      if (!shouldBlock) {
+        setIsConversationMenuOpen(false);
+        return;
+      }
+    }
 
     setIsContactActionLoading(true);
     setActionMessage("");
@@ -349,6 +366,64 @@ function MessengerRoomHeader({
       onToast?.({
         type: "error",
         title: "Block status not updated",
+        message: errorMessage,
+      });
+    } finally {
+      setIsContactActionLoading(false);
+    }
+  };
+
+  const handleToggleSelectedContactGhost = async () => {
+    if (!selectedConversationContact?.account_number) {
+      return;
+    }
+
+    const willGhostContact = !selectedConversationContact.ghosted;
+    if (willGhostContact && selectedConversationContact.blocked) {
+      const shouldGhost = window.confirm(
+        `Ghosting ${selectedConversationName} will remove blocking for this contact. Continue?`,
+      );
+
+      if (!shouldGhost) {
+        setIsConversationMenuOpen(false);
+        return;
+      }
+    }
+
+    setIsContactActionLoading(true);
+    setActionMessage("");
+    setIsConversationMenuOpen(false);
+
+    try {
+      const payload = {
+        account_number: selectedConversationContact.account_number,
+      };
+      const response = selectedConversationContact.ghosted
+        ? await unghostParentContact(payload)
+        : await ghostParentContact(payload);
+      const updatedContact = response.data?.contact;
+
+      if (updatedContact) {
+        onContactUpdated(updatedContact);
+      }
+
+      onToast?.({
+        type: "success",
+        title: willGhostContact ? "Contact ghosted" : "Ghosting removed",
+        message: `${selectedConversationName} is now ${
+          willGhostContact ? "ghosted" : "not ghosted"
+        }.`,
+      });
+    } catch (error) {
+      const errorMessage = getParentApiErrorMessage(
+        error,
+        "Unable to update ghosting.",
+      );
+
+      setActionMessage(errorMessage);
+      onToast?.({
+        type: "error",
+        title: "Ghosting not updated",
         message: errorMessage,
       });
     } finally {
@@ -556,7 +631,46 @@ function MessengerRoomHeader({
                         <Unlock size={16} aria-hidden="true" />
                       )}
                       <span>
-                        {isSelectedConversationBlocked ? "Blocked" : "Unblocked"}
+                        {isSelectedConversationBlocked ? "Blocked" : "Block"}
+                      </span>
+                    </span>
+                    <span
+                      className="parent-layout-page__block-toggle-switch"
+                      aria-hidden="true"
+                    >
+                      <span />
+                    </span>
+                  </button>
+                  <button
+                    className={`parent-layout-page__block-toggle ${
+                      isSelectedConversationGhosted ? "is-ghosted" : "is-visible"
+                    }`}
+                    type="button"
+                    role="switch"
+                    aria-checked={isSelectedConversationGhosted}
+                    aria-label={
+                      isSelectedConversationGhosted
+                        ? "Remove ghosting"
+                        : "Ghost contact"
+                    }
+                    title={
+                      isSelectedConversationGhosted
+                        ? "Remove ghosting"
+                        : "Ghost contact"
+                    }
+                    onClick={handleToggleSelectedContactGhost}
+                    disabled={isContactActionLoading}
+                  >
+                    <span className="parent-layout-page__block-toggle-label">
+                      {isSelectedConversationGhosted ? (
+                        <EyeOff size={16} aria-hidden="true" />
+                      ) : (
+                        <Eye size={16} aria-hidden="true" />
+                      )}
+                      <span>
+                        {isSelectedConversationGhosted
+                          ? "Ghosted"
+                          : `Ghost ${selectedConversationName}`}
                       </span>
                     </span>
                     <span
