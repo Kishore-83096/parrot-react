@@ -2016,6 +2016,16 @@ function InlineMediaAttachmentPlayer({ attachment, onMaximize }) {
   );
 }
 
+function VoiceNoteButtonLoader() {
+  return (
+    <span className="parent-layout-page__voice-note-button-loader" aria-hidden="true">
+      <i />
+      <i />
+      <i />
+    </span>
+  );
+}
+
 function VoiceNotePlayer({ attachment }) {
   const audioRef = useRef(null);
   const mediaResource = useCachedMediaResource(attachment);
@@ -2191,7 +2201,7 @@ function VoiceNotePlayer({ attachment }) {
         disabled={isPlayButtonLoading}
       >
         {isPlayButtonLoading ? (
-          <LoaderCircle size={18} aria-hidden="true" />
+          <VoiceNoteButtonLoader />
         ) : playbackState.isPlaying ? (
           <Pause size={18} aria-hidden="true" />
         ) : (

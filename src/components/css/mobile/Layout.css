@@ -2901,6 +2901,7 @@
 }
 
 .parent-layout-page__voice-note-play {
+  position: relative;
   width: 38px;
   height: 38px;
   padding: 0;
@@ -2912,6 +2913,8 @@
   background: linear-gradient(135deg, #0f9f7a, #2563eb);
   box-shadow: 0 10px 18px rgba(15, 159, 122, 0.2);
   cursor: pointer;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .parent-layout-page__voice-note-play:disabled {
@@ -2922,12 +2925,56 @@
 .parent-layout-page__voice-note-play.is-loading {
   cursor: progress;
   opacity: 1;
-  background:
-    conic-gradient(from 0deg, rgba(255, 255, 255, 0.18), #ffffff, rgba(255, 255, 255, 0.18)),
-    linear-gradient(135deg, #0f9f7a, #2563eb);
+  background: linear-gradient(135deg, #0f9f7a, #2563eb);
+  box-shadow:
+    0 12px 22px rgba(15, 159, 122, 0.28),
+    0 0 0 5px rgba(15, 159, 122, 0.12);
 }
 
-.parent-layout-page__voice-note-play .lucide-loader-circle,
+.parent-layout-page__voice-note-play.is-loading::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  z-index: 0;
+  border: 2px solid rgba(255, 255, 255, 0.34);
+  border-top-color: #ffffff;
+  border-radius: inherit;
+  animation: parent-layout-page-voice-button-ring 850ms linear infinite;
+}
+
+.parent-layout-page__voice-note-play.is-loading > * {
+  position: relative;
+  z-index: 1;
+}
+
+.parent-layout-page__voice-note-button-loader {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.parent-layout-page__voice-note-button-loader i {
+  width: 3px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  transform-origin: center;
+  animation: parent-layout-page-voice-button-bars 760ms ease-in-out infinite;
+}
+
+.parent-layout-page__voice-note-button-loader i:nth-child(2) {
+  height: 13px;
+  animation-delay: 110ms;
+}
+
+.parent-layout-page__voice-note-button-loader i:nth-child(3) {
+  height: 9px;
+  animation-delay: 220ms;
+}
+
 .parent-layout-page__message-submit .lucide-loader-circle {
   animation: parent-layout-page-spin 900ms linear infinite;
 }
@@ -3495,6 +3542,25 @@
 @keyframes parent-layout-page-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes parent-layout-page-voice-button-ring {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes parent-layout-page-voice-button-bars {
+  0%,
+  100% {
+    transform: scaleY(0.72);
+    opacity: 0.72;
+  }
+
+  50% {
+    transform: scaleY(1.18);
+    opacity: 1;
   }
 }
 
@@ -6372,6 +6438,15 @@ video.parent-layout-page__attachment-modal-media {
 .parent-layout-page__voice-note-play {
   width: 32px;
   height: 32px;
+}
+
+.parent-layout-page__voice-note-button-loader {
+  width: 16px;
+  height: 16px;
+}
+
+.parent-layout-page__voice-note-button-loader i {
+  width: 2px;
 }
 
 .parent-layout-page__voice-note-waveform {
