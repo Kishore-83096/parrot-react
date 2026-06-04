@@ -8,6 +8,7 @@ import {
   getMessengerErrorMessage,
   getMessengerUserCryptoDevices,
   MESSENGER_INBOX_EVENT_NAME,
+  releaseMessengerRoomBlockedMessages,
 } from "../../../messenger/api.js";
 import GroupConversation from "../../../group_messaging/pages/GroupConversation.jsx";
 import GroupRoomHeader from "../../../group_messaging/pages/GroupRoomHeader.jsx";
@@ -1151,6 +1152,38 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     setReleasedMessagesVersion((currentVersion) => currentVersion + 1);
   }, []);
 
+  const handleHeaderContactUpdated = useCallback(
+    (updatedContact, previousContact) => {
+      handleContactUpdated(updatedContact);
+
+      if (!previousContact?.blocked || updatedContact?.blocked) {
+        return;
+      }
+
+      const matchingRoom = findRoomByAccountNumber(
+        rooms,
+        updatedContact.account_number,
+        user,
+      );
+      if (!matchingRoom?.id) {
+        return;
+      }
+
+      releaseMessengerRoomBlockedMessages(matchingRoom.id)
+        .then((releaseResponse) => {
+          handleBlockedMessagesReleased(releaseResponse.data?.result);
+        })
+        .catch(() => {
+          setToast({
+            type: "info",
+            title: "Contact unblocked",
+            message: "Refresh the chat if older sent messages do not appear.",
+          });
+        });
+    },
+    [handleBlockedMessagesReleased, handleContactUpdated, rooms, user],
+  );
+
   useEffect(() => {
     return () => {
       onlineUserTimeoutsRef.current.forEach((timeout) => {
@@ -1395,8 +1428,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       <Layout
         contactHeader={
           <Header
+            contacts={contacts}
             user={user}
             defaultDevicePromptVersion={defaultDevicePromptVersion}
+            onContactsChange={handleContactsChange}
+            onContactUpdated={handleHeaderContactUpdated}
             onDefaultDeviceChanged={handleDefaultDeviceChanged}
             onRecoveryKeyRequested={handleRecoveryKeyRequested}
             onLogout={handleLogout}

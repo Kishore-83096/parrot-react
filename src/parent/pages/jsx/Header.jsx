@@ -1,5 +1,6 @@
 import {
   AlertCircle,
+  Ban,
   CheckCircle2,
   Eye,
   EyeOff,
@@ -8,12 +9,14 @@ import {
   Menu,
   Pencil,
   Save,
+  Search,
   ShieldCheck,
   Trash2,
+  Unlock,
   UserRound,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
@@ -33,12 +36,20 @@ import {
   saveRecoveryKeyBackup,
 } from "../../../messenger/e2ee/recovery.js";
 import {
+  blockParentContact,
   changeParentPassword,
   deleteParentAccount,
+  getParentContacts,
   getParentProfile,
   storeParentSession,
+  unblockParentContact,
   updateParentProfile,
 } from "../../api.js";
+import {
+  getContactInitials,
+  getContactName,
+  getParentApiErrorMessage,
+} from "./contactHelpers.js";
 
 const accountInitialForm = {
   username: "",
@@ -317,9 +328,12 @@ function getHeaderProfileHydrationKey(user) {
 }
 
 function Header({
+  contacts = [],
   user,
   defaultDevicePromptVersion = 0,
+  onContactsChange,
   onDefaultDeviceChanged,
+  onContactUpdated,
   onRecoveryKeyRequested,
   onLogout,
   onUserUpdate,
@@ -329,6 +343,8 @@ function Header({
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isLinkedDevicesModalOpen, setIsLinkedDevicesModalOpen] = useState(false);
+  const [isBlockManagementModalOpen, setIsBlockManagementModalOpen] =
+    useState(false);
   const [isDefaultDeviceSelectionRequired, setIsDefaultDeviceSelectionRequired] =
     useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("view");
@@ -337,6 +353,10 @@ function Header({
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState(() => getProfileForm(user));
   const [accountForm, setAccountForm] = useState(() => getEmptyAccountForm());
+  const [blockManagementContacts, setBlockManagementContacts] = useState(
+    () => contacts,
+  );
+  const [blockManagementSearch, setBlockManagementSearch] = useState("");
   const [recoveryKeyForm, setRecoveryKeyForm] = useState({
     recovery_key: "",
     confirm_recovery_key: "",
@@ -351,6 +371,7 @@ function Header({
   const [profileMessage, setProfileMessage] = useState(null);
   const [accountMessage, setAccountMessage] = useState(null);
   const [linkedDevicesMessage, setLinkedDevicesMessage] = useState(null);
+  const [blockManagementMessage, setBlockManagementMessage] = useState(null);
   const [recoveryKeyMessage, setRecoveryKeyMessage] = useState(null);
   const [defaultDevicePasswordMessage, setDefaultDevicePasswordMessage] =
     useState(null);
@@ -360,6 +381,7 @@ function Header({
   ] = useState(null);
   const [storedRecoveryKey, setStoredRecoveryKey] = useState("");
   const [cryptoDevices, setCryptoDevices] = useState([]);
+  const [blockActionAccountNumber, setBlockActionAccountNumber] = useState("");
   const [hasDefaultCryptoDevice, setHasDefaultCryptoDevice] = useState(false);
   const [isDefaultPasswordConfigured, setIsDefaultPasswordConfigured] =
     useState(false);
@@ -375,6 +397,8 @@ function Header({
   const [isPasswordChanging, setIsPasswordChanging] = useState(false);
   const [isAccountDeleting, setIsAccountDeleting] = useState(false);
   const [isDevicesLoading, setIsDevicesLoading] = useState(false);
+  const [isBlockManagementLoading, setIsBlockManagementLoading] =
+    useState(false);
   const [isRecoveryKeySaving, setIsRecoveryKeySaving] = useState(false);
   const [isDefaultDevicePasswordSaving, setIsDefaultDevicePasswordSaving] =
     useState(false);
@@ -429,6 +453,32 @@ function Header({
   const canManageCryptoDevices = Boolean(currentCryptoDevice?.is_default);
   const canUpdateDefaultDevicePassword =
     canManageCryptoDevices && isDefaultPasswordConfigured;
+  const blockManagementQuery = blockManagementSearch.trim().toLowerCase();
+  const filteredBlockManagementContacts = useMemo(() => {
+    const sourceContacts = Array.isArray(blockManagementContacts)
+      ? blockManagementContacts
+      : [];
+
+    if (!blockManagementQuery) {
+      return sourceContacts;
+    }
+
+    return sourceContacts.filter((contact) => {
+      const name = getContactName(contact).toLowerCase();
+      const account = String(contact.account_number || "").toLowerCase();
+
+      return name.includes(blockManagementQuery) || account.includes(blockManagementQuery);
+    });
+  }, [blockManagementContacts, blockManagementQuery]);
+  const blockedContactsCount = blockManagementContacts.filter(
+    (contact) => contact.blocked,
+  ).length;
+  const unblockedContactsCount =
+    blockManagementContacts.length - blockedContactsCount;
+
+  useEffect(() => {
+    setBlockManagementContacts(Array.isArray(contacts) ? contacts : []);
+  }, [contacts]);
 
   const syncProfile = useCallback(
     (nextProfile) => {
@@ -549,6 +599,28 @@ function Header({
     }
   }, [user]);
 
+  const loadBlockManagementContacts = useCallback(async () => {
+    setIsBlockManagementLoading(true);
+    setBlockManagementMessage(null);
+
+    try {
+      const response = await getParentContacts();
+      const nextContacts = Array.isArray(response.data?.contacts)
+        ? response.data.contacts
+        : [];
+
+      setBlockManagementContacts(nextContacts);
+      onContactsChange?.(nextContacts);
+    } catch (error) {
+      setBlockManagementMessage({
+        type: "error",
+        text: getParentApiErrorMessage(error, "Unable to load contacts."),
+      });
+    } finally {
+      setIsBlockManagementLoading(false);
+    }
+  }, [onContactsChange]);
+
   const refreshStoredRecoveryKey = useCallback(() => {
     setStoredRecoveryKey(getStoredRecoveryKey(user));
   }, [user]);
@@ -556,6 +628,7 @@ function Header({
   const openProfileModal = () => {
     pushLoggedInHistoryView({ modal: "profile", profileTab: "view" });
     setIsMenuOpen(false);
+    setIsBlockManagementModalOpen(false);
     setActiveProfileTab("view");
     setIsProfileModalOpen(true);
     loadProfile();
@@ -564,6 +637,7 @@ function Header({
   const openAccountModal = () => {
     pushLoggedInHistoryView({ modal: "account", accountTab: "password" });
     setIsMenuOpen(false);
+    setIsBlockManagementModalOpen(false);
     setActiveAccountTab("password");
     setAccountForm(getEmptyAccountForm());
     setAccountMessage(null);
@@ -573,12 +647,25 @@ function Header({
   const openLinkedDevicesModal = () => {
     pushLoggedInHistoryView({ modal: "linkedDevices" });
     setIsMenuOpen(false);
+    setIsBlockManagementModalOpen(false);
     setIsDefaultDeviceSelectionRequired(false);
     setActiveLinkedDevicesTab("devices");
     setLinkedDevicesMessage(null);
     setRecoveryKeyMessage(null);
     setIsLinkedDevicesModalOpen(true);
     loadCryptoDevices();
+  };
+
+  const openBlockManagementModal = () => {
+    pushLoggedInHistoryView({ modal: "blockManagement" });
+    setIsMenuOpen(false);
+    setIsProfileModalOpen(false);
+    setIsAccountModalOpen(false);
+    setIsLinkedDevicesModalOpen(false);
+    setBlockManagementSearch("");
+    setBlockManagementMessage(null);
+    setIsBlockManagementModalOpen(true);
+    loadBlockManagementContacts();
   };
 
   useEffect(() => {
@@ -592,6 +679,7 @@ function Header({
 
     handledDefaultDevicePromptVersionRef.current = defaultDevicePromptVersion;
     setIsMenuOpen(false);
+    setIsBlockManagementModalOpen(false);
     setIsDefaultDeviceSelectionRequired(true);
     setActiveLinkedDevicesTab("devices");
     setIsLinkedDevicesModalOpen(true);
@@ -653,6 +741,21 @@ function Header({
     setIsNewDefaultDevicePasswordVisible(false);
     setIsConfirmNewDefaultDevicePasswordVisible(false);
   }, []);
+
+  const resetBlockManagementModal = useCallback(() => {
+    setIsBlockManagementModalOpen(false);
+    setBlockManagementMessage(null);
+    setBlockActionAccountNumber("");
+    setIsBlockManagementLoading(false);
+  }, []);
+
+  const closeBlockManagementModal = useCallback(() => {
+    if (isCurrentHistoryModal("blockManagement")) {
+      clearLoggedInHistoryModal();
+    }
+
+    resetBlockManagementModal();
+  }, [resetBlockManagementModal]);
 
   const closeProfileModal = useCallback(() => {
     if (isCurrentHistoryModal("profile")) {
@@ -750,6 +853,28 @@ function Header({
   ]);
 
   useEffect(() => {
+    if (!isBlockManagementModalOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !blockActionAccountNumber) {
+        closeBlockManagementModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [
+    blockActionAccountNumber,
+    closeBlockManagementModal,
+    isBlockManagementModalOpen,
+  ]);
+
+  useEffect(() => {
     const handlePopState = (event) => {
       const historyView =
         event.state?.[LOGGED_IN_HISTORY_KEY] || getLoggedInHistoryView();
@@ -757,6 +882,7 @@ function Header({
       if (historyView?.modal === "profile") {
         resetAccountModal();
         resetLinkedDevicesModal();
+        resetBlockManagementModal();
         setIsProfileModalOpen(true);
         setActiveProfileTab(historyView.profileTab === "edit" ? "edit" : "view");
         setProfileMessage(null);
@@ -771,6 +897,7 @@ function Header({
       if (historyView?.modal === "account") {
         resetProfileModal();
         resetLinkedDevicesModal();
+        resetBlockManagementModal();
         setIsAccountModalOpen(true);
         setActiveAccountTab(
           historyView.accountTab === "delete"
@@ -785,6 +912,7 @@ function Header({
       if (historyView?.modal === "linkedDevices") {
         resetProfileModal();
         resetAccountModal();
+        resetBlockManagementModal();
         setIsLinkedDevicesModalOpen(true);
         setActiveLinkedDevicesTab("devices");
         setLinkedDevicesMessage(null);
@@ -793,9 +921,20 @@ function Header({
         return;
       }
 
+      if (historyView?.modal === "blockManagement") {
+        resetProfileModal();
+        resetAccountModal();
+        resetLinkedDevicesModal();
+        setIsBlockManagementModalOpen(true);
+        setBlockManagementMessage(null);
+        loadBlockManagementContacts();
+        return;
+      }
+
       resetProfileModal();
       resetAccountModal();
       resetLinkedDevicesModal();
+      resetBlockManagementModal();
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -807,7 +946,9 @@ function Header({
     isProfileModalOpen,
     loadProfile,
     loadCryptoDevices,
+    loadBlockManagementContacts,
     resetAccountModal,
+    resetBlockManagementModal,
     resetLinkedDevicesModal,
     resetProfileModal,
     user,
@@ -821,6 +962,64 @@ function Header({
       [name]: value,
     }));
     setAccountMessage(null);
+  };
+
+  const handleToggleManagedContactBlock = async (contact) => {
+    if (!contact?.account_number || blockActionAccountNumber) {
+      return;
+    }
+
+    const wasBlocked = Boolean(contact.blocked);
+    const nextBlocked = !wasBlocked;
+
+    setBlockActionAccountNumber(contact.account_number);
+    setBlockManagementMessage(null);
+
+    try {
+      const payload = {
+        account_number: contact.account_number,
+      };
+      const response = wasBlocked
+        ? await unblockParentContact(payload)
+        : await blockParentContact(payload);
+      const updatedContact = response.data?.contact || {
+        ...contact,
+        blocked: nextBlocked,
+      };
+
+      setBlockManagementContacts((currentContacts) =>
+        currentContacts.map((currentContact) =>
+          currentContact.account_number === updatedContact.account_number
+            ? { ...currentContact, ...updatedContact }
+            : currentContact,
+        ),
+      );
+      onContactUpdated?.(updatedContact, contact);
+      onToast?.({
+        type: nextBlocked ? "error" : "success",
+        title: nextBlocked ? "Contact blocked" : "Contact unblocked",
+        message: `${getContactName(updatedContact)} is now ${
+          nextBlocked ? "blocked" : "unblocked"
+        }.`,
+      });
+    } catch (error) {
+      const errorMessage = getParentApiErrorMessage(
+        error,
+        "Unable to update block state.",
+      );
+
+      setBlockManagementMessage({
+        type: "error",
+        text: errorMessage,
+      });
+      onToast?.({
+        type: "error",
+        title: "Block status not updated",
+        message: errorMessage,
+      });
+    } finally {
+      setBlockActionAccountNumber("");
+    }
   };
 
   const handleRecoveryKeyFormChange = (event) => {
@@ -2292,6 +2491,157 @@ function Header({
     </div>
   ) : null;
 
+  const blockManagementModal = isBlockManagementModalOpen ? (
+    <div className="parent-layout-page__modal-backdrop" role="presentation">
+      <section
+        className="parent-layout-page__modal parent-layout-page__modal--account parent-layout-page__block-management-modal"
+        aria-modal="true"
+        aria-labelledby="parent-block-management-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close"
+          type="button"
+          onClick={closeBlockManagementModal}
+          aria-label="Close block management"
+          title="Close"
+          disabled={Boolean(blockActionAccountNumber)}
+        >
+          <X size={28} strokeWidth={3} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__modal-header">
+          <span
+            className="parent-layout-page__block-management-icon"
+            aria-hidden="true"
+          >
+            <Ban size={24} />
+          </span>
+          <div>
+            <h2 id="parent-block-management-title">Block Management</h2>
+          </div>
+        </div>
+
+        <div className="parent-layout-page__block-management">
+          <div className="parent-layout-page__block-management-summary">
+            <span>
+              <strong>{blockedContactsCount}</strong>
+              <small>Blocked</small>
+            </span>
+            <span>
+              <strong>{unblockedContactsCount}</strong>
+              <small>Unblocked</small>
+            </span>
+          </div>
+
+          <label className="parent-layout-page__block-management-search">
+            <Search size={17} aria-hidden="true" />
+            <input
+              type="search"
+              value={blockManagementSearch}
+              onChange={(event) => setBlockManagementSearch(event.target.value)}
+              placeholder="Search contacts"
+              aria-label="Search contacts"
+            />
+          </label>
+
+          {blockManagementMessage ? (
+            <p
+              className={
+                blockManagementMessage.type === "error"
+                  ? "parent-layout-page__modal-error"
+                  : "parent-layout-page__form-note"
+              }
+              role={blockManagementMessage.type === "error" ? "alert" : "status"}
+            >
+              {blockManagementMessage.text}
+            </p>
+          ) : null}
+
+          {isBlockManagementLoading && blockManagementContacts.length === 0 ? (
+            <div
+              className="parent-layout-page__block-management-empty"
+              aria-live="polite"
+            >
+              Loading contacts
+            </div>
+          ) : blockManagementContacts.length === 0 ? (
+            <div className="parent-layout-page__block-management-empty">
+              No contacts yet.
+            </div>
+          ) : filteredBlockManagementContacts.length === 0 ? (
+            <div className="parent-layout-page__block-management-empty">
+              No matching contacts.
+            </div>
+          ) : (
+            <div className="parent-layout-page__block-management-list">
+              {filteredBlockManagementContacts.map((contact) => {
+                const isBlocked = Boolean(contact.blocked);
+                const isUpdating =
+                  blockActionAccountNumber === contact.account_number;
+
+                return (
+                  <div
+                    className={`parent-layout-page__block-management-row${
+                      isBlocked ? " is-blocked" : ""
+                    }`}
+                    key={contact.account_number}
+                  >
+                    <span
+                      className="parent-layout-page__contact-avatar"
+                      aria-hidden="true"
+                    >
+                      {contact.profile_picture ? (
+                        <img src={contact.profile_picture} alt="" />
+                      ) : (
+                        getContactInitials(contact)
+                      )}
+                    </span>
+
+                    <span className="parent-layout-page__contact-text">
+                      <strong>{getContactName(contact)}</strong>
+                      <small>{contact.account_number}</small>
+                    </span>
+
+                    <span
+                      className={`parent-layout-page__block-management-status${
+                        isBlocked ? " is-blocked" : ""
+                      }`}
+                    >
+                      {isBlocked ? "Blocked" : "Unblocked"}
+                    </span>
+
+                    <button
+                      className={`parent-layout-page__block-management-action${
+                        isBlocked ? " is-unblock" : " is-block"
+                      }`}
+                      type="button"
+                      onClick={() => handleToggleManagedContactBlock(contact)}
+                      disabled={Boolean(blockActionAccountNumber)}
+                    >
+                      {isBlocked ? (
+                        <Unlock size={15} aria-hidden="true" />
+                      ) : (
+                        <Ban size={15} aria-hidden="true" />
+                      )}
+                      <span>
+                        {isUpdating
+                          ? "Updating"
+                          : isBlocked
+                          ? "Unblock"
+                          : "Block"}
+                      </span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  ) : null;
+
   const linkedDevicesModal = isLinkedDevicesModalOpen ? (
     <div className="parent-layout-page__modal-backdrop" role="presentation">
       <section
@@ -2746,6 +3096,16 @@ function Header({
             <button
               className="parent-header__account-button"
               type="button"
+              onClick={openBlockManagementModal}
+              role="menuitem"
+            >
+              <Ban size={16} aria-hidden="true" />
+              <span>Block Management</span>
+            </button>
+
+            <button
+              className="parent-header__account-button"
+              type="button"
               onClick={openLinkedDevicesModal}
               role="menuitem"
             >
@@ -2770,6 +3130,9 @@ function Header({
 
       {profileModal ? createPortal(profileModal, document.body) : null}
       {accountModal ? createPortal(accountModal, document.body) : null}
+      {blockManagementModal
+        ? createPortal(blockManagementModal, document.body)
+        : null}
       {linkedDevicesModal ? createPortal(linkedDevicesModal, document.body) : null}
       {defaultDevicePasswordModal
         ? createPortal(defaultDevicePasswordModal, document.body)
