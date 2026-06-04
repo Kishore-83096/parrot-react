@@ -16,7 +16,10 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
-import { releaseMessengerRoomBlockedMessages } from "../../api.js";
+import {
+  markMessengerRoomRead,
+  releaseMessengerRoomBlockedMessages,
+} from "../../api.js";
 import {
   blockParentContact,
   deleteParentContact,
@@ -405,6 +408,14 @@ function MessengerRoomHeader({
 
       if (updatedContact) {
         onContactUpdated(updatedContact);
+      }
+
+      if (!willGhostContact && selectedRoom?.id) {
+        markMessengerRoomRead(selectedRoom.id, {}).catch(() => {
+          setActionMessage(
+            "Ghosting removed. Open the chat again if older message ticks do not update.",
+          );
+        });
       }
 
       onToast?.({
