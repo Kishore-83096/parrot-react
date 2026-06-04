@@ -168,7 +168,11 @@ function MessengerRoomList({
             peer?.display_name ||
             peerAccountNumber ||
             `Room ${room.id}`;
-      const lastMessagePreview = getLastMessagePreview(room, user);
+      const lastMessagePreview = getLastMessagePreview(
+        room,
+        user,
+        contactsByAccountNumber,
+      );
       const searchText = [
         roomName,
         isGroup ? "" : peerAccountNumber,
@@ -248,7 +252,11 @@ function MessengerRoomList({
             const lastMessageTime = formatRoomTime(
               room.last_message?.created_at || room.updated_at,
             );
-            const lastMessagePreview = getLastMessagePreviewDetails(room, user);
+            const lastMessagePreview = getLastMessagePreviewDetails(
+              room,
+              user,
+              contactsByAccountNumber,
+            );
             const LastMessagePreviewIcon =
               ROOM_PREVIEW_ICONS[lastMessagePreview.icon] || null;
 

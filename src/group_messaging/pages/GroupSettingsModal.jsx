@@ -57,9 +57,21 @@ function getRoleLabel(role) {
   return "Member";
 }
 
-function getParticipantName(participant) {
+function getSavedContactName(contactNamesByAccountNumber, accountNumber) {
+  const normalizedAccountNumber = String(accountNumber || "");
+
+  return normalizedAccountNumber
+    ? contactNamesByAccountNumber?.get?.(normalizedAccountNumber) || ""
+    : "";
+}
+
+function getParticipantName(participant, contactNamesByAccountNumber, currentUserId) {
+  if (currentUserId && Number(participant?.user_id) === Number(currentUserId)) {
+    return "You";
+  }
+
   return (
-    participant?.display_name ||
+    getSavedContactName(contactNamesByAccountNumber, participant?.account_number) ||
     participant?.account_number ||
     `User ${participant?.user_id || ""}`.trim()
   );
@@ -113,6 +125,20 @@ function GroupSettingsModal({
   const currentRole = getParticipantRole(currentParticipant) || room?.my_role || "member";
   const canManageGroup = currentRole === "admin" || currentRole === "sub_admin";
   const isAdmin = currentRole === "admin";
+  const contactNamesByAccountNumber = useMemo(() => {
+    const namesByAccountNumber = new Map();
+
+    (Array.isArray(contacts) ? contacts : []).forEach((contact) => {
+      const accountNumber = String(contact?.account_number || "");
+      const contactName = getContactName(contact);
+
+      if (accountNumber && contactName) {
+        namesByAccountNumber.set(accountNumber, contactName);
+      }
+    });
+
+    return namesByAccountNumber;
+  }, [contacts]);
   const activeAccountNumbers = useMemo(
     () =>
       new Set(
@@ -332,7 +358,11 @@ function GroupSettingsModal({
     }
 
     const confirmed = globalThis.confirm(
-      `Make ${getParticipantName(participant)} the group admin? You will become a member.`,
+      `Make ${getParticipantName(
+        participant,
+        contactNamesByAccountNumber,
+        currentUserId,
+      )} the group admin? You will become a member.`,
     );
     if (!confirmed) {
       return;
@@ -527,6 +557,11 @@ function GroupSettingsModal({
               const canActOnMember = canManageGroup && !isSelf && !isTargetAdmin;
               const canTransfer = isAdmin && !isSelf;
               const hasActions = canActOnMember || canTransfer;
+              const participantName = getParticipantName(
+                participant,
+                contactNamesByAccountNumber,
+                currentUserId,
+              );
 
               return (
                 <div
@@ -536,10 +571,10 @@ function GroupSettingsModal({
                   key={participant.user_id}
                 >
                   <span className="parent-layout-page__contact-avatar" aria-hidden="true">
-                    {getInitials(getParticipantName(participant))}
+                    {getInitials(participantName)}
                   </span>
                   <span>
-                    <strong>{getParticipantName(participant)}</strong>
+                    <strong>{participantName}</strong>
                     <small>{participant.account_number}</small>
                   </span>
                   <em className={`parent-layout-page__group-role-badge is-${role}`}>

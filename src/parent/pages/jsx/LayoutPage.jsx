@@ -1437,6 +1437,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         room={
           selectedRoom?.is_group ? (
             <GroupConversation
+              contacts={contacts}
               selectedRoom={selectedRoom}
               user={user}
               cachedConversation={

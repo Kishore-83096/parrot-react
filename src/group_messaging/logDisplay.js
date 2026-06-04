@@ -2,26 +2,51 @@ export function getGroupLogUserId(user) {
   return Number(user?.id || user?.user_id || 0);
 }
 
-function getActorName(log, currentUserId) {
+function getSavedContactName(contactNamesByAccountNumber, accountNumber) {
+  const normalizedAccountNumber = String(accountNumber || "");
+  const savedContact = normalizedAccountNumber
+    ? contactNamesByAccountNumber?.get?.(normalizedAccountNumber)
+    : null;
+
+  if (!savedContact) {
+    return "";
+  }
+
+  if (typeof savedContact === "string") {
+    return savedContact;
+  }
+
+  return savedContact.alias_name || savedContact.account_number || "";
+}
+
+function getActorName(log, currentUserId, contactNamesByAccountNumber) {
   if (currentUserId && Number(log?.actor_user_id) === currentUserId) {
     return "You";
   }
 
-  return log?.actor_display_name || log?.actor_account_number || "Someone";
+  return (
+    getSavedContactName(contactNamesByAccountNumber, log?.actor_account_number) ||
+    log?.actor_account_number ||
+    "Someone"
+  );
 }
 
-function getTargetName(log, currentUserId) {
+function getTargetName(log, currentUserId, contactNamesByAccountNumber) {
   if (currentUserId && Number(log?.target_user_id) === currentUserId) {
     return "you";
   }
 
-  return log?.target_display_name || log?.target_account_number || "a member";
+  return (
+    getSavedContactName(contactNamesByAccountNumber, log?.target_account_number) ||
+    log?.target_account_number ||
+    "a member"
+  );
 }
 
-export function getGroupLogDisplay(log, user) {
+export function getGroupLogDisplay(log, user, contactNamesByAccountNumber = null) {
   const currentUserId = typeof user === "number" ? user : getGroupLogUserId(user);
-  const actor = getActorName(log, currentUserId);
-  const target = getTargetName(log, currentUserId);
+  const actor = getActorName(log, currentUserId, contactNamesByAccountNumber);
+  const target = getTargetName(log, currentUserId, contactNamesByAccountNumber);
 
   switch (log?.action) {
     case "group.created":
@@ -81,7 +106,7 @@ export function getGroupLogDisplay(log, user) {
     default:
       return {
         kind: "updated",
-        text: log?.text || "Group updated",
+        text: "Group updated",
       };
   }
 }

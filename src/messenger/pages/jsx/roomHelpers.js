@@ -109,11 +109,36 @@ export function getRoomInitials(room, contact, peer) {
   return getInitials(getRoomName(room, contact, peer));
 }
 
-export function getLastMessagePreview(room, currentUser) {
-  return getLastMessagePreviewDetails(room, currentUser).text;
+function getSavedContactName(contactNamesByAccountNumber, accountNumber) {
+  const normalizedAccountNumber = String(accountNumber || "");
+  const savedContact = normalizedAccountNumber
+    ? contactNamesByAccountNumber?.get?.(normalizedAccountNumber)
+    : null;
+
+  if (!savedContact) {
+    return "";
+  }
+
+  if (typeof savedContact === "string") {
+    return savedContact;
+  }
+
+  return getContactName(savedContact);
 }
 
-export function getLastMessagePreviewDetails(room, currentUser) {
+export function getLastMessagePreview(room, currentUser, contactNamesByAccountNumber = null) {
+  return getLastMessagePreviewDetails(
+    room,
+    currentUser,
+    contactNamesByAccountNumber,
+  ).text;
+}
+
+export function getLastMessagePreviewDetails(
+  room,
+  currentUser,
+  contactNamesByAccountNumber = null,
+) {
   const message = room?.last_message;
 
   if (isGroupRoom(room)) {
@@ -157,7 +182,11 @@ export function getLastMessagePreviewDetails(room, currentUser) {
         (participant) =>
           Number(participant?.user_id) === Number(message.sender_user_id),
       );
-      const senderName = sender?.display_name || sender?.account_number || "";
+      const senderAccountNumber =
+        message.sender_account_number || sender?.account_number || "";
+      const senderName =
+        getSavedContactName(contactNamesByAccountNumber, senderAccountNumber) ||
+        senderAccountNumber;
 
       return {
         icon,
@@ -171,7 +200,11 @@ export function getLastMessagePreviewDetails(room, currentUser) {
     return {
       icon: "",
       text: latestLog
-        ? getGroupLogDisplay(latestLog, currentUser).text
+        ? getGroupLogDisplay(
+            latestLog,
+            currentUser,
+            contactNamesByAccountNumber,
+          ).text
         : "No messages yet.",
     };
   }

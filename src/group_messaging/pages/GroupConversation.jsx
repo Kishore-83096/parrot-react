@@ -10,6 +10,7 @@
   ExternalLink,
   FileText,
   Image as ImageIcon,
+  Info,
   LoaderCircle,
   LogOut,
   Mic,
@@ -79,6 +80,7 @@ import {
   MESSAGE_REACTION_KEYS,
   MESSAGE_REACTIONS,
 } from "../../messenger/reactions.js";
+import { getContactName } from "../../parent/pages/jsx/contactHelpers.js";
 import { getGroupLogDisplay } from "../logDisplay.js";
 
 const MESSAGE_PAGE_SIZE = 20;
@@ -95,6 +97,7 @@ const TYPING_REMOTE_TIMEOUT_MS = 8000;
 const ROOM_SOCKET_PING_INTERVAL_MS = 25000;
 const MESSAGE_ACTION_LONG_PRESS_MS = 420;
 const MESSAGE_ACTION_LONG_PRESS_MOVE_TOLERANCE = 10;
+const MAX_VISIBLE_REACTION_MARKS = 5;
 const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
 const VOICE_NOTE_MAX_DURATION_SECONDS = 180;
 const VOICE_NOTE_AUDIO_BITRATE = 32000;
@@ -315,7 +318,20 @@ function applyReactionSnapshot(message, snapshot, currentUserId) {
   };
 }
 
-function getMessageSenderLabel(message, currentUserId, participantNamesByUserId) {
+function getSavedContactName(contactNamesByAccountNumber, accountNumber) {
+  const normalizedAccountNumber = String(accountNumber || "");
+
+  return normalizedAccountNumber
+    ? contactNamesByAccountNumber?.get?.(normalizedAccountNumber) || ""
+    : "";
+}
+
+function getMessageSenderLabel(
+  message,
+  currentUserId,
+  participantNamesByUserId,
+  contactNamesByAccountNumber,
+) {
   const senderUserId = Number(message?.sender_user_id);
 
   if (senderUserId === Number(currentUserId)) {
@@ -323,14 +339,19 @@ function getMessageSenderLabel(message, currentUserId, participantNamesByUserId)
   }
 
   return (
-    message?.sender_display_name ||
-    participantNamesByUserId.get(senderUserId) ||
+    getSavedContactName(contactNamesByAccountNumber, message?.sender_account_number) ||
     message?.sender_account_number ||
+    participantNamesByUserId.get(senderUserId) ||
     "Member"
   );
 }
 
-function getReactionActorName(reactionUser, currentUserId, participantNamesByUserId) {
+function getReactionActorName(
+  reactionUser,
+  currentUserId,
+  participantNamesByUserId,
+  contactNamesByAccountNumber,
+) {
   const userId = Number(reactionUser?.user_id);
 
   if (userId && userId === Number(currentUserId)) {
@@ -338,29 +359,234 @@ function getReactionActorName(reactionUser, currentUserId, participantNamesByUse
   }
 
   return (
-    reactionUser?.display_name ||
-    participantNamesByUserId.get(userId) ||
+    getSavedContactName(contactNamesByAccountNumber, reactionUser?.account_number) ||
     reactionUser?.account_number ||
-    (userId ? `User ${userId}` : "Member")
+    participantNamesByUserId.get(userId) ||
+    "Member"
   );
 }
 
-function getReactionActorSummary(reactionItem, currentUserId, participantNamesByUserId) {
-  const actorNames = (Array.isArray(reactionItem?.users) ? reactionItem.users : [])
-    .map((reactionUser) =>
-      getReactionActorName(reactionUser, currentUserId, participantNamesByUserId),
-    )
-    .filter(Boolean);
+function getReactionVisibleCount(reactionItem) {
+  return Math.max(
+    Number(reactionItem?.count || 0),
+    Array.isArray(reactionItem?.users) ? reactionItem.users.length : 0,
+  );
+}
 
-  if (actorNames.length === 0) {
-    return "";
+function getReactionMarks(reactions) {
+  const marks = [];
+
+  reactions.forEach((reactionItem) => {
+    const reactionConfig = getReactionConfig(reactionItem.reaction);
+    const visibleCount = getReactionVisibleCount(reactionItem);
+
+    if (!reactionConfig || visibleCount <= 0) {
+      return;
+    }
+
+    for (let index = 0; index < visibleCount; index += 1) {
+      marks.push({
+        emoji: reactionConfig.emoji,
+        key: `${reactionItem.reaction}-${index}`,
+        label: reactionConfig.label,
+        reaction: reactionItem.reaction,
+        reactedByMe: reactionItem.reacted_by_me,
+      });
+    }
+  });
+
+  return marks;
+}
+
+function getReactionDetailRows(
+  reactions,
+  currentUserId,
+  participantNamesByUserId,
+  contactNamesByAccountNumber,
+) {
+  const rows = [];
+
+  reactions.forEach((reactionItem) => {
+    const reactionConfig = getReactionConfig(reactionItem.reaction);
+
+    if (!reactionConfig) {
+      return;
+    }
+
+    const users = Array.isArray(reactionItem.users) ? reactionItem.users : [];
+    const rowUsers =
+      users.length > 0
+        ? users
+        : Array.from(
+            { length: getReactionVisibleCount(reactionItem) },
+            () => null,
+          );
+
+    rowUsers.forEach((reactionUser, index) => {
+      rows.push({
+        emoji: reactionConfig.emoji,
+        key: `${reactionItem.reaction}-${reactionUser?.user_id || index}`,
+        label: reactionConfig.label,
+        name: reactionUser
+          ? getReactionActorName(
+              reactionUser,
+              currentUserId,
+              participantNamesByUserId,
+              contactNamesByAccountNumber,
+            )
+          : "Member",
+      });
+    });
+  });
+
+  return rows;
+}
+
+function getReceiptActorName(
+  receipt,
+  currentUserId,
+  participantNamesByUserId,
+  contactNamesByAccountNumber,
+) {
+  const userId = Number(receipt?.user_id);
+
+  if (userId && userId === Number(currentUserId)) {
+    return "You";
   }
 
-  if (actorNames.length <= 3) {
-    return actorNames.join(", ");
+  return (
+    getSavedContactName(contactNamesByAccountNumber, receipt?.account_number) ||
+    receipt?.account_number ||
+    participantNamesByUserId.get(userId) ||
+    "Member"
+  );
+}
+
+function getMessageReceiptRows(
+  message,
+  currentUserId,
+  participantNamesByUserId,
+  contactNamesByAccountNumber,
+) {
+  const receipts = Array.isArray(message?.receipts) ? message.receipts : [];
+
+  return receipts
+    .map((receipt) => {
+      const readAt = receipt?.read_at || "";
+      const deliveredAt = receipt?.delivered_at || "";
+      const status = readAt ? "read" : deliveredAt ? "delivered" : "sent";
+      const timestamp = readAt || deliveredAt || "";
+
+      return {
+        key: `${receipt?.user_id || "member"}-${timestamp || status}`,
+        name: getReceiptActorName(
+          receipt,
+          currentUserId,
+          participantNamesByUserId,
+          contactNamesByAccountNumber,
+        ),
+        status,
+        statusLabel:
+          status === "read"
+            ? "Read"
+            : status === "delivered"
+              ? "Delivered"
+              : "Sent",
+        timestamp,
+      };
+    })
+    .sort((first, second) => {
+      const rank = {
+        read: 0,
+        delivered: 1,
+        sent: 2,
+      };
+      const firstRank = rank[first.status] ?? 3;
+      const secondRank = rank[second.status] ?? 3;
+
+      if (firstRank !== secondRank) {
+        return firstRank - secondRank;
+      }
+
+      const firstTime = new Date(first.timestamp || 0).getTime();
+      const secondTime = new Date(second.timestamp || 0).getTime();
+
+      if (firstTime !== secondTime) {
+        return secondTime - firstTime;
+      }
+
+      return first.name.localeCompare(second.name);
+    });
+}
+
+function applyGroupMessageReceiptEvent(
+  message,
+  eventPayload,
+  status,
+  currentUserId,
+) {
+  const eventUserId = Number(eventPayload?.user_id);
+  const lastMessageId =
+    eventPayload?.last_read_message_id || eventPayload?.last_delivered_message_id;
+
+  if (
+    !eventUserId ||
+    eventUserId === Number(currentUserId) ||
+    !lastMessageId ||
+    Number(message?.sender_user_id) !== Number(currentUserId) ||
+    Number(message?.id) > Number(lastMessageId)
+  ) {
+    return message;
   }
 
-  return `${actorNames.slice(0, 3).join(", ")} +${actorNames.length - 3} more`;
+  const statusTimestamp =
+    status === "read" ? eventPayload?.last_read_at : eventPayload?.delivered_until;
+
+  if (!statusTimestamp) {
+    return message;
+  }
+
+  let foundReceipt = false;
+  let changedReceipt = false;
+  const nextReceipts = (Array.isArray(message?.receipts)
+    ? message.receipts
+    : []
+  ).map((receipt) => {
+    if (Number(receipt?.user_id) !== eventUserId) {
+      return receipt;
+    }
+
+    foundReceipt = true;
+    const nextReceipt =
+      status === "read"
+        ? {
+            ...receipt,
+            delivered_at: receipt?.delivered_at || statusTimestamp,
+            read_at: receipt?.read_at || statusTimestamp,
+          }
+        : {
+            ...receipt,
+            delivered_at: receipt?.delivered_at || statusTimestamp,
+          };
+
+    changedReceipt =
+      changedReceipt ||
+      nextReceipt.delivered_at !== receipt?.delivered_at ||
+      nextReceipt.read_at !== receipt?.read_at;
+
+    return nextReceipt;
+  });
+
+  if (!foundReceipt) {
+    nextReceipts.push({
+      user_id: eventUserId,
+      delivered_at: statusTimestamp,
+      read_at: status === "read" ? statusTimestamp : null,
+    });
+    changedReceipt = true;
+  }
+
+  return changedReceipt ? { ...message, receipts: nextReceipts } : message;
 }
 
 function isTextEntryElement(element) {
@@ -2387,21 +2613,22 @@ function AttachmentIcon({ fileType, size = 16 }) {
 }
 
 function getParticipantDisplayName(participant) {
-  return (
-    participant?.display_name ||
-    participant?.account_number ||
-    ""
-  );
+  return participant?.account_number || "";
 }
 
-function getReplyAuthorLabel(message, currentUserId, participantNamesByUserId) {
+function getReplyAuthorLabel(
+  message,
+  currentUserId,
+  participantNamesByUserId,
+  contactNamesByAccountNumber,
+) {
   const senderUserId = Number(message?.sender_user_id);
 
   return senderUserId === Number(currentUserId)
     ? "You"
-    : message?.sender_display_name ||
-        participantNamesByUserId.get(senderUserId) ||
+    : getSavedContactName(contactNamesByAccountNumber, message?.sender_account_number) ||
         message?.sender_account_number ||
+        participantNamesByUserId.get(senderUserId) ||
         "Member";
 }
 
@@ -2427,10 +2654,8 @@ function mergeMessagePage(currentMessages, pageMessages) {
 }
 
 function MessageReactionSummary({
-  currentUserId,
   message,
-  onSelect,
-  participantNamesByUserId,
+  onOpenInfo,
 }) {
   const reactions = normalizeReactionGroups(
     message?.reactions,
@@ -2441,46 +2666,49 @@ function MessageReactionSummary({
     return null;
   }
 
+  const reactionMarks = getReactionMarks(reactions);
+  const visibleReactionMarks = reactionMarks.slice(0, MAX_VISIBLE_REACTION_MARKS);
+  const overflowReactionCount = Math.max(
+    reactionMarks.length - visibleReactionMarks.length,
+    0,
+  );
+
   return (
     <div
-      className="parent-layout-page__message-reactions"
+      className={`parent-layout-page__message-reactions${
+        reactionMarks.length === 0 ? " is-info-only" : ""
+      }`}
       aria-label="Message reactions"
     >
-      {reactions.map((reactionItem) => {
-        const reactionConfig = getReactionConfig(reactionItem.reaction);
-
-        if (!reactionConfig) {
-          return null;
-        }
-
-        const actorSummary = getReactionActorSummary(
-          reactionItem,
-          currentUserId,
-          participantNamesByUserId,
-        );
-        const reactionLabel = actorSummary
-          ? `${reactionConfig.label} by ${actorSummary}`
-          : reactionConfig.label;
-
-        return (
-          <button
-            key={reactionItem.reaction}
-            type="button"
-            className={`parent-layout-page__message-reaction-pill${
-              reactionItem.reacted_by_me ? " is-selected" : ""
-            }`}
-            onClick={() => onSelect(message, reactionItem.reaction)}
-            aria-label={`${reactionLabel} reaction${
-              reactionItem.count > 1 ? `, ${reactionItem.count} total` : ""
-            }`}
-            data-reaction-actors={actorSummary || undefined}
-            title={reactionLabel}
-          >
-            <span>{reactionConfig.emoji}</span>
-            {reactionItem.count > 1 ? <strong>{reactionItem.count}</strong> : null}
-          </button>
-        );
-      })}
+      {reactionMarks.length > 0 ? (
+        <div className="parent-layout-page__message-reaction-strip">
+          {visibleReactionMarks.map((reactionMark) => (
+            <button
+              key={reactionMark.key}
+              type="button"
+              className={`parent-layout-page__message-reaction-pill${
+                reactionMark.reactedByMe ? " is-selected" : ""
+              }`}
+              onClick={() => onOpenInfo(message, "reactions")}
+              aria-label={`Show ${reactionMark.label.toLowerCase()} reaction info`}
+              title="Reaction info"
+            >
+              <span>{reactionMark.emoji}</span>
+            </button>
+          ))}
+          {overflowReactionCount > 0 ? (
+            <button
+              type="button"
+              className="parent-layout-page__message-reaction-more"
+              onClick={() => onOpenInfo(message, "reactions")}
+              aria-label={`Show ${overflowReactionCount} more reactions`}
+              title="Show more reactions"
+            >
+              More
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2512,7 +2740,185 @@ function MessageReactionPicker({ message, onSelect }) {
   );
 }
 
+function MessageInfoModal({
+  contactNamesByAccountNumber,
+  currentUserId,
+  initialTab = "reactions",
+  message,
+  onClose,
+  participantNamesByUserId,
+}) {
+  const isMine = Number(message?.sender_user_id) === Number(currentUserId);
+  const normalizedInitialTab =
+    isMine && initialTab === "read_status" ? "read_status" : "reactions";
+  const [activeTab, setActiveTab] = useState(normalizedInitialTab);
+  const reactions = useMemo(
+    () =>
+      normalizeReactionGroups(
+        message?.reactions,
+        getMessageMyReaction(message) || null,
+      ),
+    [message],
+  );
+  const reactionRows = useMemo(
+    () =>
+      getReactionDetailRows(
+        reactions,
+        currentUserId,
+        participantNamesByUserId,
+        contactNamesByAccountNumber,
+      ),
+    [
+      contactNamesByAccountNumber,
+      currentUserId,
+      participantNamesByUserId,
+      reactions,
+    ],
+  );
+  const receiptRows = useMemo(
+    () =>
+      getMessageReceiptRows(
+        message,
+        currentUserId,
+        participantNamesByUserId,
+        contactNamesByAccountNumber,
+      ),
+    [
+      contactNamesByAccountNumber,
+      currentUserId,
+      message,
+      participantNamesByUserId,
+    ],
+  );
+
+  useEffect(() => {
+    setActiveTab(normalizedInitialTab);
+  }, [message?.id, normalizedInitialTab]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  if (!message) {
+    return null;
+  }
+
+  const safeActiveTab = activeTab === "read_status" && isMine ? activeTab : "reactions";
+  const titleId = `group-message-info-title-${message.id}`;
+  const modalTitle = isMine ? "Message info" : "Reaction info";
+  const modal = (
+    <div
+      className="parent-layout-page__modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className={`parent-layout-page__modal parent-layout-page__message-info-modal${
+          isMine ? "" : " is-reaction-info-only"
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <button
+          type="button"
+          className="parent-layout-page__modal-close"
+          onClick={onClose}
+          aria-label={`Close ${modalTitle.toLowerCase()}`}
+          title="Close"
+        >
+          <X size={18} aria-hidden="true" />
+        </button>
+        <header className="parent-layout-page__modal-header parent-layout-page__message-info-header">
+          <h2 id={titleId}>{modalTitle}</h2>
+        </header>
+        {isMine ? (
+          <div className="parent-layout-page__message-info-tabs" role="tablist">
+            <button
+              type="button"
+              className={safeActiveTab === "reactions" ? "is-active" : ""}
+              onClick={() => setActiveTab("reactions")}
+              role="tab"
+              aria-selected={safeActiveTab === "reactions"}
+            >
+              Reactions
+            </button>
+            <button
+              type="button"
+              className={safeActiveTab === "read_status" ? "is-active" : ""}
+              onClick={() => setActiveTab("read_status")}
+              role="tab"
+              aria-selected={safeActiveTab === "read_status"}
+            >
+              Read status
+            </button>
+          </div>
+        ) : null}
+        <div className="parent-layout-page__message-info-panel">
+          {safeActiveTab === "reactions" ? (
+            reactionRows.length > 0 ? (
+              <div className="parent-layout-page__message-info-list">
+                {reactionRows.map((row) => (
+                  <span
+                    className="parent-layout-page__message-reaction-detail-row"
+                    key={row.key}
+                  >
+                    <i aria-hidden="true">{row.emoji}</i>
+                    <span>{row.name}</span>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="parent-layout-page__message-info-empty">
+                No reactions
+              </p>
+            )
+          ) : receiptRows.length > 0 ? (
+            <div className="parent-layout-page__message-info-list">
+              {receiptRows.map((row) => (
+                <span
+                  className="parent-layout-page__message-read-row"
+                  key={row.key}
+                >
+                  <span>{row.name}</span>
+                  <i
+                    className={`parent-layout-page__message-read-status is-${row.status}`}
+                  >
+                    {row.statusLabel}
+                  </i>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="parent-layout-page__message-info-empty">
+              No status
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  if (typeof document === "undefined") {
+    return modal;
+  }
+
+  return createPortal(modal, document.body);
+}
+
 function GroupConversation({
+  contacts = [],
   selectedRoom,
   user,
   cachedConversation,
@@ -2549,6 +2955,10 @@ function GroupConversation({
   });
   const [activeMessageActionsId, setActiveMessageActionsId] = useState(null);
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
+  const [messageInfoModal, setMessageInfoModal] = useState({
+    initialTab: "reactions",
+    messageId: null,
+  });
   const [attachmentViewer, setAttachmentViewer] = useState({
     attachments: [],
     playback: null,
@@ -2597,6 +3007,13 @@ function GroupConversation({
   useEffect(() => {
     setLogs(Array.isArray(selectedRoom?.latest_logs) ? selectedRoom.latest_logs : []);
   }, [selectedRoom?.id, selectedRoom?.latest_logs]);
+
+  useEffect(() => {
+    setMessageInfoModal({
+      initialTab: "reactions",
+      messageId: null,
+    });
+  }, [selectedRoom?.id]);
 
   const focusMessageDraft = useCallback(() => {
     const textarea = messageDraftRef.current;
@@ -3009,43 +3426,23 @@ function GroupConversation({
       const messageStatuses = Array.isArray(eventPayload.message_statuses)
         ? eventPayload.message_statuses
         : [];
-      const lastMessageId =
-        eventPayload.last_read_message_id ||
-        eventPayload.last_delivered_message_id;
-
-      if (messageStatuses.length > 0) {
-        setRoomMessages((currentMessages) =>
-          currentMessages.map((message) => {
-            const snapshot = messageStatuses.find(
-              (item) => Number(item.message_id) === Number(message.id),
-            );
-
-            return snapshot ? { ...message, status: snapshot.status } : message;
-          }),
-        );
-        return;
-      }
-
-      return;
-
-      if (Number(eventPayload.user_id) === currentUserId || !lastMessageId) {
-        return;
-      }
+      const statusByMessageId = new Map(
+        messageStatuses.map((item) => [Number(item.message_id), item]),
+      );
 
       setRoomMessages((currentMessages) =>
         currentMessages.map((message) => {
-          if (
-            Number(message.sender_user_id) !== currentUserId ||
-            Number(message.id) > Number(lastMessageId) ||
-            (status === "delivered" && message.status === "read")
-          ) {
-            return message;
-          }
+          const snapshot = statusByMessageId.get(Number(message.id));
+          const nextMessage = snapshot
+            ? { ...message, status: snapshot.status }
+            : message;
 
-          return {
-            ...message,
+          return applyGroupMessageReceiptEvent(
+            nextMessage,
+            eventPayload,
             status,
-          };
+            currentUserId,
+          );
         }),
       );
     },
@@ -3213,6 +3610,10 @@ function GroupConversation({
     setReplyTarget(null);
     setActiveMessageActionsId(null);
     setReactionPickerMessageId(null);
+    setMessageInfoModal({
+      initialTab: "reactions",
+      messageId: null,
+    });
     setSelectedFiles([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -3330,7 +3731,11 @@ function GroupConversation({
     }
 
     const handlePointerDown = (event) => {
-      if (event.target?.closest?.("[data-reaction-picker-root]")) {
+      if (
+        event.target?.closest?.(
+          "[data-reaction-picker-root]",
+        )
+      ) {
         return;
       }
 
@@ -3739,6 +4144,27 @@ function GroupConversation({
     return nextMessagesById;
   }, [roomMessages]);
 
+  const messageInfoMessage = useMemo(() => {
+    const messageId = Number(messageInfoModal.messageId);
+
+    return messageId ? messagesById.get(messageId) || null : null;
+  }, [messageInfoModal.messageId, messagesById]);
+
+  const contactNamesByAccountNumber = useMemo(() => {
+    const namesByAccountNumber = new Map();
+
+    (Array.isArray(contacts) ? contacts : []).forEach((contact) => {
+      const accountNumber = String(contact?.account_number || "");
+      const contactName = getContactName(contact);
+
+      if (accountNumber && contactName) {
+        namesByAccountNumber.set(accountNumber, contactName);
+      }
+    });
+
+    return namesByAccountNumber;
+  }, [contacts]);
+
   const participantNamesByUserId = useMemo(() => {
     const namesByUserId = new Map();
     const participants = [
@@ -3757,7 +4183,11 @@ function GroupConversation({
         return;
       }
 
-      const displayName = getParticipantDisplayName(participant);
+      const displayName =
+        getSavedContactName(
+          contactNamesByAccountNumber,
+          participant?.account_number,
+        ) || getParticipantDisplayName(participant);
 
       if (displayName) {
         namesByUserId.set(userId, displayName);
@@ -3765,7 +4195,7 @@ function GroupConversation({
     });
 
     return namesByUserId;
-  }, [selectedRoom]);
+  }, [contactNamesByAccountNumber, selectedRoom]);
 
   const typingIndicatorText = useMemo(() => {
     const typingNames = typingUserIds
@@ -3809,11 +4239,37 @@ function GroupConversation({
 
       setActiveMessageActionsId(null);
       setReactionPickerMessageId(null);
+      setMessageInfoModal({
+        initialTab: "reactions",
+        messageId: null,
+      });
       setReplyTarget(message);
       focusMessageDraft();
     },
     [focusMessageDraft],
   );
+
+  const handleOpenMessageInfo = useCallback((message, initialTab = "reactions") => {
+    const messageId = Number(message?.id);
+
+    if (!messageId) {
+      return;
+    }
+
+    setMessageInfoModal({
+      initialTab,
+      messageId,
+    });
+    setReactionPickerMessageId(null);
+    setActiveMessageActionsId(null);
+  }, []);
+
+  const handleCloseMessageInfo = useCallback(() => {
+    setMessageInfoModal({
+      initialTab: "reactions",
+      messageId: null,
+    });
+  }, []);
 
   const handleMessageBubbleMouseEnter = useCallback((message) => {
     if (!message?.id || !supportsFineHoverPointer()) {
@@ -3867,6 +4323,10 @@ function GroupConversation({
 
     setActiveMessageActionsId(messageId);
     setReactionPickerMessageId(messageId);
+    setMessageInfoModal({
+      initialTab: "reactions",
+      messageId: null,
+    });
   }, []);
 
   const handleClearReplyTarget = useCallback(() => {
@@ -4761,7 +5221,11 @@ function GroupConversation({
             {groupedTimelineItems.map(
               ({ dateLabel, id, log, message, shouldShowDateDivider, type }) => {
             if (type === "log") {
-              const display = getGroupLogDisplay(log, user);
+              const display = getGroupLogDisplay(
+                log,
+                user,
+                contactNamesByAccountNumber,
+              );
               const LogIcon = GROUP_LOG_ICONS[display.kind] || MessageCircle;
 
               return (
@@ -4786,6 +5250,7 @@ function GroupConversation({
               message,
               currentUserId,
               participantNamesByUserId,
+              contactNamesByAccountNumber,
             );
             const messageStatus = getMessageStatusLabel(message.status);
             const sentWhileBlocked = false;
@@ -4887,6 +5352,7 @@ function GroupConversation({
                             replyPreview,
                             currentUserId,
                             participantNamesByUserId,
+                            contactNamesByAccountNumber,
                           )}
                         </span>
                         <p>{getMessagePreviewText(replyPreview)}</p>
@@ -4950,16 +5416,25 @@ function GroupConversation({
                       ) : null}
                     </footer>
                     <MessageReactionSummary
-                      currentUserId={currentUserId}
                       message={message}
-                      onSelect={handleSelectMessageReaction}
-                      participantNamesByUserId={participantNamesByUserId}
+                      onOpenInfo={handleOpenMessageInfo}
                     />
                   </div>
                   <div
                     className="parent-layout-page__message-actions"
                     data-reaction-picker-root="true"
                   >
+                    {isMine ? (
+                      <button
+                        type="button"
+                        className="parent-layout-page__message-info-action"
+                        onClick={() => handleOpenMessageInfo(message, "read_status")}
+                        aria-label="Message info"
+                        title="Message info"
+                      >
+                        <Info size={15} aria-hidden="true" />
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="parent-layout-page__message-reply-action"
@@ -5023,6 +5498,7 @@ function GroupConversation({
                   replyTarget,
                   currentUserId,
                   participantNamesByUserId,
+                  contactNamesByAccountNumber,
                 )}
               </span>
               <p>{getMessagePreviewText(replyTarget)}</p>
@@ -5181,6 +5657,16 @@ function GroupConversation({
           onDownload={handleDownloadAttachment}
           onNavigate={handleNavigateAttachment}
           onOpen={handleOpenAttachment}
+        />
+      ) : null}
+      {messageInfoMessage ? (
+        <MessageInfoModal
+          contactNamesByAccountNumber={contactNamesByAccountNumber}
+          currentUserId={currentUserId}
+          initialTab={messageInfoModal.initialTab}
+          message={messageInfoMessage}
+          onClose={handleCloseMessageInfo}
+          participantNamesByUserId={participantNamesByUserId}
         />
       ) : null}
     </section>
