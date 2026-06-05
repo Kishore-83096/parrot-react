@@ -89,6 +89,29 @@ const TYPING_REFRESH_INTERVAL_MS = 3000;
 const TYPING_STOP_DELAY_MS = 1600;
 const TYPING_REMOTE_TIMEOUT_MS = 8000;
 const ROOM_SOCKET_PING_INTERVAL_MS = 25000;
+
+function buildContactPolicyCache({ contact, peerAccountNumber, user }) {
+  const normalizedPeerAccountNumber = String(peerAccountNumber || "").trim();
+
+  if (
+    !contact ||
+    !normalizedPeerAccountNumber ||
+    String(contact.account_number || "") !== normalizedPeerAccountNumber
+  ) {
+    return null;
+  }
+
+  return {
+    owner_user_id: getCurrentUserId(user) || null,
+    owner_account_number: String(user?.account_number || ""),
+    contact_user_id: contact.user_id ? Number(contact.user_id) : null,
+    contact_account_number: normalizedPeerAccountNumber,
+    blocked: Boolean(contact.blocked),
+    ghosted: Boolean(contact.ghosted),
+    updated_at: contact.updated_at || null,
+    source: "messenger_ui_cache",
+  };
+}
 const MESSAGE_ACTION_LONG_PRESS_MS = 420;
 const MESSAGE_ACTION_LONG_PRESS_MOVE_TOLERANCE = 10;
 const VOICE_NOTE_ATTACHMENT_KIND = "voice_note";
@@ -2436,6 +2459,7 @@ function MessageReactionPicker({ message, onSelect }) {
 }
 
 function MessengerConversation({
+  contacts = [],
   selectedContact,
   selectedRoom,
   user,
@@ -2547,6 +2571,34 @@ function MessengerConversation({
     selectedRoom,
     user,
   });
+  const selectedConversationContact = useMemo(() => {
+    if (!selectedPeerAccountNumber) {
+      return null;
+    }
+
+    if (
+      selectedContact &&
+      String(selectedContact.account_number || "") === selectedPeerAccountNumber
+    ) {
+      return selectedContact;
+    }
+
+    return (
+      (Array.isArray(contacts) ? contacts : []).find(
+        (contact) =>
+          String(contact.account_number || "") === selectedPeerAccountNumber,
+      ) || null
+    );
+  }, [contacts, selectedContact, selectedPeerAccountNumber]);
+  const selectedContactPolicyCache = useMemo(
+    () =>
+      buildContactPolicyCache({
+        contact: selectedConversationContact,
+        peerAccountNumber: selectedPeerAccountNumber,
+        user,
+      }),
+    [selectedConversationContact, selectedPeerAccountNumber, user],
+  );
   const hasActiveConversation = Boolean(selectedPeerAccountNumber);
 
   const clearMessageActionLongPress = useCallback(() => {
@@ -4294,6 +4346,9 @@ function MessengerConversation({
             ...(queuedMessage.replyTargetId
               ? { reply_to_message_id: queuedMessage.replyTargetId }
               : {}),
+            ...(queuedMessage.contactPolicyCache
+              ? { contact_policy_cache: queuedMessage.contactPolicyCache }
+              : {}),
             client_message_id: queuedMessage.clientMessageId,
             encrypted_upload_intent_ids: encryptedAttachments
               .map((attachment) => attachment.upload_intent_id)
@@ -4444,6 +4499,7 @@ function MessengerConversation({
 
       sendQueueRef.current.push({
         clientMessageId,
+        contactPolicyCache: selectedContactPolicyCache,
         filesToSend: safeFilesToSend,
         recipientAccountNumber: selectedPeerAccountNumber,
         releaseOptimisticPreviews,
@@ -4458,6 +4514,7 @@ function MessengerConversation({
       currentUserId,
       focusMessageDraft,
       processSendQueue,
+      selectedContactPolicyCache,
       selectedPeerAccountNumber,
       selectedRoom?.id,
       sendTypingStopped,
