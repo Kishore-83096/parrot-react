@@ -7,7 +7,6 @@ import {
   Music,
   Paperclip,
   Search,
-  UsersRound,
   Video,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,6 +16,7 @@ import {
   getMessengerRooms,
 } from "../../api.js";
 import CreateGroupModal from "../../../group_messaging/pages/CreateGroupModal.jsx";
+import GroupPeopleIcon from "../../../components/icons/GroupPeopleIcon.jsx";
 import { decryptGroupRoomsForUser } from "../../../group_messaging/e2ee/messages.js";
 import { decryptRoomsForUser } from "../../e2ee/messages.js";
 import { getParentContacts } from "../../../parent/api.js";
@@ -205,7 +205,7 @@ function MessengerRoomList({
           aria-label="Create group"
           title="Create group"
         >
-          <UsersRound size={18} aria-hidden="true" />
+          <GroupPeopleIcon size={20} aria-hidden="true" />
         </button>
       </div>
 
@@ -295,8 +295,18 @@ function MessengerRoomList({
                         : undefined
                     }
                   >
-                    {isGroup ? <UsersRound size={13} aria-hidden="true" /> : null}
-                    <span>{roomName}</span>
+                    <span className="parent-layout-page__group-room-name-text">
+                      {roomName}
+                    </span>
+                    {isGroup ? (
+                      <span
+                        className="parent-layout-page__group-room-badge"
+                        aria-label="Group chat"
+                        title="Group chat"
+                      >
+                        <GroupPeopleIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+                      </span>
+                    ) : null}
                   </strong>
                   {!isGroup && !contact ? (
                     <small>

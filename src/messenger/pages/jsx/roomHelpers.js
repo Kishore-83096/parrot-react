@@ -142,6 +142,20 @@ export function getLastMessagePreviewDetails(
   const message = room?.last_message;
 
   if (isGroupRoom(room)) {
+    const latestLogs = Array.isArray(room?.latest_logs) ? room.latest_logs : [];
+    const latestLog = latestLogs[latestLogs.length - 1];
+
+    if (room?.is_deleted && latestLog?.action === "group.deleted") {
+      return {
+        icon: "",
+        text: getGroupLogDisplay(
+          latestLog,
+          currentUser,
+          contactNamesByAccountNumber,
+        ).text,
+      };
+    }
+
     if (message) {
       const messageText = getGroupMessagePreviewLabel(message);
       const attachments = Array.isArray(message.decrypted_attachments)
@@ -193,9 +207,6 @@ export function getLastMessagePreviewDetails(
         text: senderName ? `${senderName}: ${preview}` : preview,
       };
     }
-
-    const latestLogs = Array.isArray(room?.latest_logs) ? room.latest_logs : [];
-    const latestLog = latestLogs[latestLogs.length - 1];
 
     return {
       icon: "",

@@ -1,6 +1,7 @@
 import { Crown, MoreVertical, Shield, X } from "lucide-react";
 import { useState } from "react";
 
+import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getInitials } from "../../messenger/pages/jsx/roomHelpers.js";
 import GroupSettingsModal from "./GroupSettingsModal.jsx";
 
@@ -31,6 +32,7 @@ function GroupRoomHeader({
   const avatarUrl = selectedRoom?.avatar_url || "";
   const memberCount = Number(selectedRoom?.member_count || selectedRoom?.participants?.length || 0);
   const groupRole = getCurrentUserGroupRole(selectedRoom, user);
+  const isGroupDeleted = Boolean(selectedRoom?.is_deleted || selectedRoom?.deleted_at);
 
   const handleCloseConversation = () => {
     setIsSettingsOpen(false);
@@ -50,19 +52,28 @@ function GroupRoomHeader({
       <div className="parent-layout-page__conversation-title">
         <div className="parent-layout-page__conversation-title-row">
           <h2 id="parrot-layout-room-title">{groupName}</h2>
+          <span
+            className="parent-layout-page__group-room-badge parent-layout-page__group-room-badge--header"
+            aria-label="Group chat"
+            title="Group chat"
+          >
+            <GroupPeopleIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+          </span>
         </div>
 
         <div className="parent-layout-page__conversation-meta">
           <span className="parent-layout-page__conversation-subtitle">
-            {memberCount} member{memberCount === 1 ? "" : "s"}
+            {isGroupDeleted
+              ? "Deleted group"
+              : `${memberCount} member${memberCount === 1 ? "" : "s"}`}
           </span>
-          {groupRole === "admin" ? (
+          {!isGroupDeleted && groupRole === "admin" ? (
             <span className="parent-layout-page__conversation-subtitle">
               <Crown size={13} aria-hidden="true" />
               Admin
             </span>
           ) : null}
-          {groupRole === "sub_admin" ? (
+          {!isGroupDeleted && groupRole === "sub_admin" ? (
             <span className="parent-layout-page__conversation-subtitle">
               <Shield size={13} aria-hidden="true" />
               Sub Admin

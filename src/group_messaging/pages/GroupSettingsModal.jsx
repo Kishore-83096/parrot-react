@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import { getInitials } from "../../messenger/pages/jsx/roomHelpers.js";
 import {
@@ -123,8 +124,10 @@ function GroupSettingsModal({
       null,
     [currentUserId, participants],
   );
+  const isGroupDeleted = Boolean(room?.is_deleted || room?.deleted_at);
   const currentRole = getParticipantRole(currentParticipant) || room?.my_role || "member";
-  const canManageGroup = currentRole === "admin" || currentRole === "sub_admin";
+  const canManageGroup =
+    !isGroupDeleted && (currentRole === "admin" || currentRole === "sub_admin");
   const isAdmin = currentRole === "admin";
   const contactNamesByAccountNumber = useMemo(() => {
     const namesByAccountNumber = new Map();
@@ -214,7 +217,7 @@ function GroupSettingsModal({
   }, [onGroupUpdated, selectedRoom?.id]);
 
   const applyResult = (result) => {
-    if (result?.removed_room_id || result?.status === "left" || result?.status === "deleted") {
+    if (result?.removed_room_id || result?.status === "left") {
       onGroupRemoved?.(result.removed_room_id || result.room_id || room?.id);
       onClose?.();
       return;
@@ -224,6 +227,9 @@ function GroupSettingsModal({
       setRoom(result.room);
       setTitleDraft(result.room.title || "");
       onGroupUpdated?.(result.room);
+      if (result?.status === "deleted") {
+        onClose?.();
+      }
     }
   };
 
@@ -392,7 +398,9 @@ function GroupSettingsModal({
       return;
     }
 
-    const confirmed = globalThis.confirm("Permanently delete this group?");
+    const confirmed = globalThis.confirm(
+      "Delete this group? Messages and logs will stay visible, but nobody can send new messages.",
+    );
     if (!confirmed) {
       return;
     }
@@ -425,8 +433,17 @@ function GroupSettingsModal({
           <span className="parent-layout-page__group-settings-avatar" aria-hidden="true">
             {room?.avatar_url ? <img src={room.avatar_url} alt="" /> : getInitials(groupName)}
           </span>
-          <div>
-            <h2 id="group-settings-title">{groupName}</h2>
+          <div className="parent-layout-page__group-settings-title">
+            <div className="parent-layout-page__group-settings-title-row">
+              <h2 id="group-settings-title">{groupName}</h2>
+              <span
+                className="parent-layout-page__group-room-badge"
+                aria-label="Group chat"
+                title="Group chat"
+              >
+                <GroupPeopleIcon size={12} strokeWidth={2.2} aria-hidden="true" />
+              </span>
+            </div>
             <p>{participants.length} member{participants.length === 1 ? "" : "s"}</p>
           </div>
         </div>
@@ -434,6 +451,12 @@ function GroupSettingsModal({
         {message ? (
           <p className="parent-layout-page__modal-error" role="alert">
             {message}
+          </p>
+        ) : null}
+
+        {isGroupDeleted ? (
+          <p className="parent-layout-page__modal-error" role="status">
+            This group has been deleted. Messages are read-only.
           </p>
         ) : null}
 
@@ -658,7 +681,7 @@ function GroupSettingsModal({
             className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
             type="button"
             onClick={handleLeave}
-            disabled={isBusy || isAdmin}
+            disabled={isBusy || isAdmin || isGroupDeleted}
             title={isAdmin ? "Transfer admin before leaving" : "Leave group"}
           >
             {loadingAction === "leave" ? (
@@ -669,7 +692,7 @@ function GroupSettingsModal({
             <span>Leave Group</span>
           </button>
 
-          {isAdmin ? (
+          {isAdmin && !isGroupDeleted ? (
             <button
               className="parent-layout-page__modal-submit parent-layout-page__modal-submit--danger"
               type="button"

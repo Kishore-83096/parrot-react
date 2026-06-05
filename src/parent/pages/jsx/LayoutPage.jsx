@@ -652,7 +652,6 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       const log = eventPayload?.log || {};
       const removedRoomId =
         eventPayload?.removed_room_id ||
-        (eventType === "group.deleted" ? eventPayload?.room_id : null) ||
         (
           ["group.member_removed", "group.member_left"].includes(eventType) &&
           Number(log.target_user_id || eventPayload?.target_user_id || 0) === currentUserId

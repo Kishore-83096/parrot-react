@@ -1,7 +1,8 @@
-import { Check, ImagePlus, LoaderCircle, Search, UsersRound, X } from "lucide-react";
+import { Check, ImagePlus, LoaderCircle, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
+import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import {
   getContactInitials,
@@ -137,7 +138,7 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
 
         <div className="parent-layout-page__modal-header">
           <span className="parent-layout-page__group-modal-icon" aria-hidden="true">
-            <UsersRound size={28} />
+            <GroupPeopleIcon size={30} strokeWidth={1.9} />
           </span>
           <h2 id="create-group-title">Create Group</h2>
           <p>Select saved contacts to start a private group room.</p>

@@ -26,7 +26,6 @@
   Trash2,
   UserMinus,
   UserPlus,
-  UsersRound,
   Video,
   Volume1,
   Volume2,
@@ -87,6 +86,7 @@ import {
   MESSAGE_REACTION_KEYS,
   MESSAGE_REACTIONS,
 } from "../../messenger/reactions.js";
+import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getContactName } from "../../parent/pages/jsx/contactHelpers.js";
 import { getGroupLogDisplay } from "../logDisplay.js";
 
@@ -145,7 +145,7 @@ const GROUP_LOG_ICONS = {
   "added-you": UserPlus,
   "admin-you": Crown,
   admin: Crown,
-  created: UsersRound,
+  created: GroupPeopleIcon,
   deleted: Trash2,
   "member-added": UserPlus,
   "member-left": LogOut,
@@ -3123,14 +3123,15 @@ function GroupConversation({
   const selectedGroupRoomId =
     selectedRoom?.is_group && selectedRoom?.id ? String(selectedRoom.id) : "";
   const hasActiveConversation = Boolean(selectedGroupRoomId);
+  const isGroupDeleted = Boolean(selectedRoom?.is_deleted || selectedRoom?.deleted_at);
   const prewarmGroupMessaging = useCallback(() => {
-    if (!selectedGroupRoomId) {
+    if (!selectedGroupRoomId || isGroupDeleted) {
       return;
     }
 
     preloadGroupDevicesForMessage(selectedGroupRoomId, user).catch(() => {});
     prewarmGroupReceiptVisibility(selectedGroupRoomId).catch(() => {});
-  }, [selectedGroupRoomId, user]);
+  }, [isGroupDeleted, selectedGroupRoomId, user]);
 
   const clearMessageActionLongPress = useCallback(() => {
     if (messageActionLongPressRef.current?.timeoutId) {
@@ -3250,6 +3251,30 @@ function GroupConversation({
     });
   }, [clearVoiceRecordingTimer, stopVoiceRecordingStream]);
 
+  useEffect(() => {
+    if (!isGroupDeleted) {
+      return;
+    }
+
+    sendQueueRef.current = sendQueueRef.current.filter(
+      (queuedMessage) =>
+        Number(queuedMessage.roomId) !== Number(selectedGroupRoomId),
+    );
+    setMessageDraft("");
+    setReplyTarget(null);
+    setSelectedFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+    resetVoiceRecordingState();
+    sendTypingStopped();
+  }, [
+    isGroupDeleted,
+    resetVoiceRecordingState,
+    selectedGroupRoomId,
+    sendTypingStopped,
+  ]);
+
   const finishVoiceRecording = useCallback(
     ({ discard = false } = {}) =>
       new Promise((resolve, reject) => {
@@ -3321,7 +3346,7 @@ function GroupConversation({
   );
 
   const handleStartVoiceRecording = useCallback(async () => {
-    if (isVoiceRecording || !hasActiveConversation) {
+    if (isVoiceRecording || !hasActiveConversation || isGroupDeleted) {
       return;
     }
 
@@ -3399,6 +3424,7 @@ function GroupConversation({
   }, [
     clearVoiceRecordingTimer,
     hasActiveConversation,
+    isGroupDeleted,
     isVoiceRecording,
     resetVoiceRecordingState,
     sendTypingStopped,
@@ -4433,8 +4459,12 @@ function GroupConversation({
         !messageId ||
         messageId < 0 ||
         !selectedRoom?.id ||
+        isGroupDeleted ||
         !MESSAGE_REACTION_KEYS.includes(reactionKey)
       ) {
+        if (isGroupDeleted) {
+          setRoomMessage("This group has been deleted. Reactions are read-only.");
+        }
         return;
       }
 
@@ -4491,11 +4521,17 @@ function GroupConversation({
         );
       }
     },
-    [currentUserId, messagesById, selectedRoom?.id],
+    [currentUserId, isGroupDeleted, messagesById, selectedRoom?.id],
   );
 
   const handleFileInputChange = useCallback((event) => {
     const incomingFiles = Array.from(event.target.files || []);
+
+    if (isGroupDeleted) {
+      event.target.value = "";
+      setRoomMessage("This group has been deleted. Messaging is closed.");
+      return;
+    }
 
     if (incomingFiles.length === 0) {
       return;
@@ -4537,7 +4573,7 @@ function GroupConversation({
 
     event.target.value = "";
     focusMessageDraft();
-  }, [focusMessageDraft]);
+  }, [focusMessageDraft, isGroupDeleted]);
 
   const handleRemoveSelectedFile = useCallback((fileId) => {
     setSelectedFiles((currentFiles) =>
@@ -5058,6 +5094,11 @@ function GroupConversation({
         return false;
       }
 
+      if (isGroupDeleted) {
+        setRoomMessage("This group has been deleted. Messaging is closed.");
+        return false;
+      }
+
       const replyTargetId = replyTargetSnapshot?.id;
       const clientMessageId = createMessengerClientMessageId();
       optimisticMessageSequenceRef.current =
@@ -5132,6 +5173,7 @@ function GroupConversation({
     [
       currentUserId,
       focusMessageDraft,
+      isGroupDeleted,
       processSendQueue,
       selectedGroupRoomId,
       selectedRoom?.id,
@@ -5141,6 +5183,12 @@ function GroupConversation({
 
   const handleSendVoiceRecording = useCallback(async () => {
     try {
+      if (isGroupDeleted) {
+        await finishVoiceRecording({ discard: true });
+        setRoomMessage("This group has been deleted. Messaging is closed.");
+        return;
+      }
+
       const recording = await finishVoiceRecording();
 
       if (!recording?.blob) {
@@ -5180,6 +5228,7 @@ function GroupConversation({
     }
   }, [
     finishVoiceRecording,
+    isGroupDeleted,
     queueOutgoingMessage,
     replyTarget,
     resetVoiceRecordingState,
@@ -5209,6 +5258,12 @@ function GroupConversation({
   };
 
   const handleMessageDraftChange = (event) => {
+    if (isGroupDeleted) {
+      setMessageDraft("");
+      sendTypingStopped();
+      return;
+    }
+
     const nextMessageDraft = event.target.value;
     setMessageDraft(nextMessageDraft);
 
@@ -5221,7 +5276,7 @@ function GroupConversation({
   };
 
   const handleMessageDraftKeyDown = (event) => {
-    if (isVoiceRecording) {
+    if (isVoiceRecording || isGroupDeleted) {
       return;
     }
 
@@ -5409,7 +5464,7 @@ function GroupConversation({
                   data-message-id={message.id}
                   style={messageStyle}
                   onPointerDown={(event) =>
-                    handleReplyDragStart(event, message)
+                    !isGroupDeleted && handleReplyDragStart(event, message)
                   }
                   onPointerMove={handleReplyDragMove}
                   onPointerUp={handleReplyDragEnd}
@@ -5541,15 +5596,18 @@ function GroupConversation({
                       type="button"
                       className="parent-layout-page__message-reply-action"
                       onClick={() => handleSelectReplyTarget(message)}
+                      disabled={isGroupDeleted}
                       aria-label="Reply to message"
-                      title="Reply"
+                      title={isGroupDeleted ? "Group deleted" : "Reply"}
                     >
                       <Reply size={15} aria-hidden="true" />
                     </button>
-                    <MessageReactionPicker
-                      message={message}
-                      onSelect={handleSelectMessageReaction}
-                    />
+                    {!isGroupDeleted ? (
+                      <MessageReactionPicker
+                        message={message}
+                        onSelect={handleSelectMessageReaction}
+                      />
+                    ) : null}
                   </div>
                 </article>
               </Fragment>
@@ -5580,12 +5638,23 @@ function GroupConversation({
         </div>
       ) : null}
 
-      <form
-        className={`parent-layout-page__message-form${
-          isVoiceRecording ? " is-recording" : ""
-        }`}
-        onSubmit={handleSendMessage}
-      >
+      {isGroupDeleted ? (
+        <div
+          className="parent-layout-page__message-form is-read-only"
+          role="status"
+        >
+          <span className="parent-layout-page__message-read-only-icon" aria-hidden="true">
+            <Ban size={18} />
+          </span>
+          <p>This group was deleted. Messages are read-only.</p>
+        </div>
+      ) : (
+        <form
+          className={`parent-layout-page__message-form${
+            isVoiceRecording ? " is-recording" : ""
+          }`}
+          onSubmit={handleSendMessage}
+        >
         {replyTarget ? (
           <div
             className={`parent-layout-page__message-reply-composer ${
@@ -5749,7 +5818,8 @@ function GroupConversation({
             </button>
           </>
         )}
-      </form>
+        </form>
+      )}
       {attachmentViewer.attachments.length > 0 ? (
         <AttachmentViewerModal
           attachments={attachmentViewer.attachments}

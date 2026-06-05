@@ -768,24 +768,38 @@
 }
 
 .parent-layout-page__contact-text .parent-layout-page__group-room-name {
-  display: flex;
+  max-width: 100%;
+  display: inline-flex;
   align-items: center;
   gap: 5px;
 }
 
-.parent-layout-page__contact-text .parent-layout-page__group-room-name svg {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 13px;
-  color: var(--layout-blue);
-  stroke-width: 2.6;
-}
-
-.parent-layout-page__contact-text .parent-layout-page__group-room-name span {
+.parent-layout-page__contact-text .parent-layout-page__group-room-name-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.parent-layout-page__group-room-badge {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #2f80ff, #0969e8);
+  box-shadow:
+    0 0 0 2px rgba(255, 255, 255, 0.9),
+    0 3px 8px rgba(9, 105, 232, 0.25);
+}
+
+.parent-layout-page__group-room-badge svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  stroke-width: 2.25;
 }
 
 .parent-layout-page__chat-meta {
@@ -3648,6 +3662,38 @@
     "attach draft draft send";
 }
 
+.parent-layout-page__message-form.is-read-only {
+  min-height: 64px;
+  padding: 12px 18px 14px;
+  grid-template-columns: 38px minmax(0, 1fr);
+  grid-template-areas: "icon copy";
+  align-items: center;
+  color: #6a6078;
+}
+
+.parent-layout-page__message-read-only-icon {
+  grid-area: icon;
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 14px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #6b7280, #3f4652);
+}
+
+.parent-layout-page__message-form.is-read-only p {
+  grid-area: copy;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #5c5369;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 780;
+}
+
 .parent-layout-page__message-form textarea {
   grid-area: draft;
   width: 100%;
@@ -4996,6 +5042,26 @@ video.parent-layout-page__attachment-modal-media {
 
 .parent-layout-page__group-settings-header {
   margin-bottom: 2px;
+}
+
+.parent-layout-page__group-settings-title {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.parent-layout-page__group-settings-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.parent-layout-page__group-settings-title-row h2 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .parent-layout-page__group-settings-avatar {
