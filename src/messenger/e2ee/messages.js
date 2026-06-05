@@ -115,6 +115,14 @@ async function getCachedRecipientDevices(recipientAccountNumber, user) {
   return promise;
 }
 
+export async function preloadRecipientDevicesForMessage(
+  recipientAccountNumber,
+  user,
+) {
+  await sodium.ready;
+  return getCachedRecipientDevices(recipientAccountNumber, user);
+}
+
 function getEnvelopeKey(device) {
   return `${device.user_id || "unknown"}:${device.device_id}`;
 }

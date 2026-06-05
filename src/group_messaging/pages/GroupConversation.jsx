@@ -53,6 +53,7 @@ import {
 import {
   getGroupRoomMessages,
   markGroupRoomRead,
+  prewarmGroupReceiptVisibility,
   reactToGroupMessage,
   sendGroupMessage,
 } from "../api.js";
@@ -61,6 +62,7 @@ import {
   decryptGroupMessagesForUser,
   encryptGroupMessageText,
   getRenderableMessageText,
+  preloadGroupDevicesForMessage,
 } from "../e2ee/messages.js";
 import {
   extractMessageLinks,
@@ -3121,6 +3123,14 @@ function GroupConversation({
   const selectedGroupRoomId =
     selectedRoom?.is_group && selectedRoom?.id ? String(selectedRoom.id) : "";
   const hasActiveConversation = Boolean(selectedGroupRoomId);
+  const prewarmGroupMessaging = useCallback(() => {
+    if (!selectedGroupRoomId) {
+      return;
+    }
+
+    preloadGroupDevicesForMessage(selectedGroupRoomId, user).catch(() => {});
+    prewarmGroupReceiptVisibility(selectedGroupRoomId).catch(() => {});
+  }, [selectedGroupRoomId, user]);
 
   const clearMessageActionLongPress = useCallback(() => {
     if (messageActionLongPressRef.current?.timeoutId) {
@@ -3135,6 +3145,10 @@ function GroupConversation({
       roomId: selectedRoom?.id || null,
     };
   }, [selectedRoom?.id]);
+
+  useEffect(() => {
+    prewarmGroupMessaging();
+  }, [prewarmGroupMessaging]);
 
   useEffect(() => {
     return () => {
@@ -5199,6 +5213,7 @@ function GroupConversation({
     setMessageDraft(nextMessageDraft);
 
     if (nextMessageDraft.trim()) {
+      prewarmGroupMessaging();
       sendTypingStarted();
     } else {
       sendTypingStopped();

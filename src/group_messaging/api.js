@@ -120,3 +120,9 @@ export const markGroupRoomRead = (roomId, data = {}) =>
     `/groups/${encodeURIComponent(roomId)}/messages/read/`,
     data,
   );
+
+export const prewarmGroupReceiptVisibility = (roomId) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/receipts/visibility/prewarm/`,
+    {},
+  );

@@ -50,6 +50,7 @@ import {
   decryptMessagesForUser,
   encryptMessageText,
   getRenderableMessageText,
+  preloadRecipientDevicesForMessage,
 } from "../../e2ee/messages.js";
 import {
   extractMessageLinks,
@@ -2600,6 +2601,15 @@ function MessengerConversation({
     [selectedConversationContact, selectedPeerAccountNumber, user],
   );
   const hasActiveConversation = Boolean(selectedPeerAccountNumber);
+  const prewarmRecipientAuthorization = useCallback(() => {
+    if (!selectedPeerAccountNumber) {
+      return;
+    }
+
+    preloadRecipientDevicesForMessage(selectedPeerAccountNumber, user).catch(
+      () => {},
+    );
+  }, [selectedPeerAccountNumber, user]);
 
   const clearMessageActionLongPress = useCallback(() => {
     if (messageActionLongPressRef.current?.timeoutId) {
@@ -2615,6 +2625,10 @@ function MessengerConversation({
       roomId: selectedRoom?.id || null,
     };
   }, [selectedPeerAccountNumber, selectedRoom?.id]);
+
+  useEffect(() => {
+    prewarmRecipientAuthorization();
+  }, [prewarmRecipientAuthorization]);
 
   useEffect(() => {
     return () => {
@@ -4595,6 +4609,7 @@ function MessengerConversation({
     setMessageDraft(nextMessageDraft);
 
     if (nextMessageDraft.trim()) {
+      prewarmRecipientAuthorization();
       sendTypingStarted();
     } else {
       sendTypingStopped();

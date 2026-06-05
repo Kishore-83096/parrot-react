@@ -114,6 +114,11 @@ async function getCachedGroupDevices(roomId, user) {
   return promise;
 }
 
+export async function preloadGroupDevicesForMessage(roomId, user) {
+  await sodium.ready;
+  return getCachedGroupDevices(roomId, user);
+}
+
 function getEnvelopeKey(device) {
   return `${device.user_id || "unknown"}:${device.device_id}`;
 }
