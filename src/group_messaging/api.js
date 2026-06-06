@@ -109,6 +109,18 @@ export const reactToGroupMessage = (roomId, messageId, reaction) =>
     { reaction },
   );
 
+export const editGroupMessage = (roomId, messageId, data) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}/edit/`,
+    data,
+  );
+
+export const deleteGroupMessage = (roomId, messageId) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}/delete/`,
+    {},
+  );
+
 export const markGroupRoomDelivered = (roomId, data = {}) =>
   messengerAxios.post(
     `/groups/${encodeURIComponent(roomId)}/messages/delivered/`,

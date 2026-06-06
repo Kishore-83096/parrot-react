@@ -1,6 +1,6 @@
 # Parrot React Frontend
 
-This is the browser frontend for Parrot. It handles account login, profile management, contacts, real-time chat, encrypted messages, message replies, emoji reactions, voice notes, inline audio/video playback, linked devices, and recovery-key flows.
+This is the browser frontend for Parrot. It handles account login, profile management, contacts, direct chat, group chat, encrypted messages, message replies, emoji reactions, message edit/delete, voice notes, inline audio/video playback, encrypted stories, linked devices, and recovery-key flows.
 
 ## Tech Stack
 
@@ -65,7 +65,7 @@ src/
 |   |-- api.js                      # Parent API client and parent JWT storage
 |   |-- pages/jsx/WelcomePage.jsx   # registration/login UI
 |   |-- pages/jsx/LayoutPage.jsx    # authenticated app shell
-|   |-- pages/jsx/Header.jsx        # profile/account/linked-device modals
+|   |-- pages/jsx/Header.jsx        # profile/account/block/ghost/device modals
 |   `-- pages/jsx/ContactPanel.jsx  # contact search and management
 |-- messenger/
 |   |-- api.js                      # Messenger API client, JWT refresh, WS URLs
@@ -82,7 +82,18 @@ src/
 |   `-- pages/jsx/
 |       |-- MessengerRoomList.jsx
 |       |-- MessengerConversation.jsx
+|       |-- StoriesPanel.jsx
 |       `-- MessengerRoomHeader.jsx
+|-- group_messaging/
+|   |-- api.js                      # group room/member/message APIs
+|   |-- e2ee/
+|   |   |-- messages.js             # group message encryption/decryption
+|   |   `-- files.js                # encrypted group attachment uploads
+|   `-- pages/
+|       |-- CreateGroupModal.jsx
+|       |-- GroupConversation.jsx
+|       |-- GroupRoomHeader.jsx
+|       `-- GroupSettingsModal.jsx
 `-- components/
     |-- Layout.jsx
     `-- ParrotToast.jsx
@@ -101,12 +112,14 @@ src/
 - inbox WebSocket
 - contacts/chats panel
 - room list and active conversation
+- group creation/settings surfaces
+- stories panel
 - E2EE device setup
 - recovery setup/restore/verify modals
 
 The logged-in app is keyed by the current Parent account. If a different account logs in on the same browser, React remounts the authenticated app and drops the old account's contacts, rooms, selected conversation, and runtime E2EE caches.
 
-`LayoutPage` also hydrates messenger UI from an account-scoped localStorage cache before network requests finish. The cache stores saved contacts, room list data, selected room/contact, peer profile data used by the conversation header, and fetched message pages by room. API responses, websocket events, message-status events, contact edits, and paginated message loads update the cache immediately. Logout or session expiry clears that account's messenger UI cache.
+`LayoutPage` also hydrates messenger UI from an account-scoped localStorage cache before network requests finish. The cache stores saved contacts, room list data, selected room/contact, group room data, peer profile data used by the conversation header, and fetched message pages by room. API responses, websocket events, message edit/delete/status events, contact edits, group events, story events, and paginated message loads update the cache immediately. Logout or session expiry clears that account's messenger UI cache.
 
 ### First Device
 
@@ -155,9 +168,17 @@ The default device may store the plain recovery key locally so it can show it to
 
 The default-device password is sent only when making a device default or updating that password. Messenger stores a password hash, and React does not persist the plain password.
 
+## Contact Privacy Controls
+
+Saved contacts support alias editing, blocking, ghosting, unblocking, unghosting, and deletion. Blocking and ghosting are mutually exclusive in the UI: turning on one clears the other after confirmation. Contact privacy updates refresh the room header and let Messenger refresh presence, receipt, and delivery visibility.
+
+Block management and ghost management are available from the account/header controls. A direct room header also exposes contact-specific block, ghost, alias, and delete actions.
+
 ## Message Send Queue
 
 The conversation composer stays usable while a send is in progress. Each submitted draft is added to an in-memory FIFO queue with an optimistic message and unique `client_message_id`. React encrypts and sends one queued message at a time, which keeps first-come-first-serve order for rapid sends. Messenger treats repeated `client_message_id` values from the same sender as duplicates, so retry behavior remains safe.
+
+The group composer uses the same queue shape for encrypted group messages and attachments. Messages are queued with a group `client_message_id`, encrypted for active group member devices, and sent in order.
 
 ## Conversation Composer And Media
 
@@ -171,7 +192,7 @@ Single non-voice-note audio/video attachments render as inline players inside th
 
 ## Replies And Reactions
 
-Messages support reply targeting and five emoji reactions: thumbs up, heart, laugh, surprised, and sad. The frontend owns the visual emoji mapping and themed styling, while Messenger stores the reaction key and returns grouped reaction counts plus the current user's reaction.
+Direct and group messages support reply targeting and five emoji reactions: thumbs up, heart, laugh, surprised, and sad. The frontend owns the visual emoji mapping and themed styling, while Messenger stores the reaction key and returns grouped reaction counts plus the current user's reaction.
 
 Reply previews are target-aware. If the replied-to message was sent by the current user, the preview uses a blue treatment. If the replied-to message was received from the contact, the preview uses a white treatment. The same styling is used in the composer reply preview before sending and in the final message bubble after sending.
 
@@ -188,18 +209,83 @@ Mobile interaction:
 - Swipe either left or right on a message to select it as the reply target.
 - Long press still opens the message actions for touch/pen users.
 
+## Message Edit And Delete
+
+Direct and group messages sent by the current user expose edit and delete icon buttons for 15 minutes after the message was created. The UI checks `action_expires_at` before opening the action modal and the backend checks again before accepting the edit/delete request.
+
+Direct action order beside a message is edit, delete, reactions, reply. Group action order is edit, delete, info, reactions, reply. The group info action opens message details such as reactions and member delivery/read status.
+
+Edit flow:
+
+- opens an edit modal with the current decrypted text when the message can be edited
+- shows a timeout message when the 15-minute window has expired
+- submits with a `Send` button
+- renders an edited indicator for both sender and receiver/group members
+- resets sent/delivered/read state after the backend accepts the edit
+
+Delete flow:
+
+- opens a confirmation modal when the message can be deleted for everyone
+- direct chat confirmation names the receiver/contact
+- group confirmation names the group
+- replaces the message with a deleted-message notice
+- removes reactions and encrypted attachment references from the UI after the backend tombstone event
+
+Deleted messages cannot be replied to, reacted to, edited, or deleted again.
+
+## Group Messaging
+
+Groups are created from saved contacts. The creator supplies a group name, selects members, and can optionally upload a group picture. Group messages use group E2EE helpers, encrypted Cloudinary upload intents, replies, reactions, voice notes, inline media playback, edit/delete actions, and per-member receipt tracking.
+
+Group settings support:
+
+- updating the group name and picture
+- adding saved contacts as members
+- removing members
+- promoting or removing sub-admins
+- transferring admin
+- leaving the group
+- deleting the group
+
+Admins can transfer admin and delete the group. Admins and sub-admins can update group details and manage normal members. When a group is deleted, the conversation stays visible but becomes read-only.
+
+## Stories
+
+The stories panel supports encrypted text, image, and video stories. Story media is encrypted in the browser, uploaded through Messenger-signed Cloudinary upload intents, and decrypted only in the viewer's browser.
+
+Story creation supports:
+
+- media stories with one encrypted image or video
+- optional media caption text
+- text stories with selectable themes
+- expiry choices of 6, 12, or 24 hours
+- all-contacts or specific-contact visibility
+- saved story settings for future stories
+
+Story viewing supports:
+
+- automatic viewed state updates
+- owner viewers list
+- story deletion by owner
+- story replies that become direct messages with story context
+- story reactions using the same five message reactions
+
+Parent block/ghost policy is applied through Messenger before story audiences and story view visibility are shown.
+
 ## Encrypted Attachments
 
 React encrypts attachments in the browser before upload. For each queued message with files or voice notes, React asks Messenger for signed Cloudinary upload intents bound to the authenticated sender, recipient account, and `client_message_id`. It then uploads the encrypted blobs directly to Cloudinary as `raw` resources, completes each intent with Messenger, and sends the completed intent ids with the encrypted message envelope.
 
 Cloudinary API secrets stay only on Messenger. React receives only short-lived signed params for server-generated public ids, and pending/local blob previews are not stored in the UI cache. Voice-note duration, waveform, and media presentation hints live in the frontend-encrypted payload, not in Messenger-readable fields.
 
+Group attachments and story media use the same direct-to-Cloudinary principle with group/story-specific upload-intent endpoints.
+
 ## Realtime Updates
 
 React keeps two Messenger websocket paths active while logged in:
 
-- inbox socket: room list updates, delivery receipts, read receipts, message reaction updates, presence, device, and recovery events
-- room socket: open-conversation messages, message status updates, message reaction updates, and typing events
+- inbox socket: room list updates, delivery receipts, read receipts, message edit/delete/reaction updates, group events, story events, presence, device, and recovery events
+- room socket: open-conversation messages, message status updates, message edit/delete/reaction updates, group message updates, and typing events
 
 The room socket sends periodic pings to stay alive behind proxies. The open conversation also listens to inbox message/status events as a fallback, so messages and ticks can update while the room socket is reconnecting.
 
@@ -209,6 +295,7 @@ The messenger UI cache is separate from E2EE private-key storage. It is scoped p
 
 - contacts and saved aliases
 - room list previews, unread counts, and selected room/contact
+- group room profile, member, and preview data returned with rooms
 - conversation header peer profile lookup results
 - decrypted message text and safe attachment metadata for fetched conversation pages
 
@@ -231,7 +318,7 @@ Logout cleanup follows the device role:
 
 - obtains a short-lived Messenger JWT from Parent
 - rejects stored Messenger tokens belonging to a different current Parent user
-- calls room/message/E2EE APIs
+- calls direct room/message, group, story, and E2EE APIs
 - builds Messenger WebSocket URLs
 
 ## Build Notes

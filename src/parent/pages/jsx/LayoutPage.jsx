@@ -802,15 +802,20 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       );
       const isSelectedRoom = Number(selectedRoom?.id) === roomId;
       const isIncoming = Number(message.sender_user_id) !== currentUserId;
+      const isDeleted = Boolean(message.is_deleted || message.deleted_at);
       const baseRoom = existingRoom || room || { id: roomId };
-      const unreadCount = isSelectedRoom || !isIncoming
+      const unreadCount = isSelectedRoom || !isIncoming || isDeleted
         ? 0
         : Number(baseRoom.unread_count || 0) + 1;
       const nextRoom = {
         ...baseRoom,
         ...(room || {}),
         id: baseRoom.id || roomId,
-        updated_at: message.created_at || room?.updated_at || baseRoom.updated_at,
+        updated_at:
+          message.updated_at ||
+          message.created_at ||
+          room?.updated_at ||
+          baseRoom.updated_at,
         last_message: message,
         unread_count: unreadCount,
         has_unread: unreadCount > 0,
@@ -1196,11 +1201,19 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     const handleInboxEvent = (event) => {
       const eventPayload = event.detail;
 
-      if (eventPayload?.type === "message.sent") {
+      if (
+        eventPayload?.type === "message.sent" ||
+        eventPayload?.type === "message.edited" ||
+        eventPayload?.type === "message.deleted"
+      ) {
         handleMaybeEncryptedRoomMessage(eventPayload.room, eventPayload.message);
       }
 
-      if (eventPayload?.type === "group.message.sent") {
+      if (
+        eventPayload?.type === "group.message.sent" ||
+        eventPayload?.type === "group.message.edited" ||
+        eventPayload?.type === "group.message.deleted"
+      ) {
         handleMaybeEncryptedGroupRoomMessage(
           eventPayload.room,
           eventPayload.message,

@@ -2047,7 +2047,7 @@
 
 .parent-layout-page__message.is-mine .parent-layout-page__message-actions {
   order: -1;
-  flex-direction: row-reverse;
+  flex-direction: row;
 }
 
 .parent-layout-page__message:focus-within .parent-layout-page__message-actions,
@@ -2079,7 +2079,9 @@
 }
 
 .parent-layout-page__message-reply-action,
-.parent-layout-page__message-info-action {
+.parent-layout-page__message-info-action,
+.parent-layout-page__message-edit-action,
+.parent-layout-page__message-delete-action {
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
@@ -2102,14 +2104,25 @@
 .parent-layout-page__message-reply-action:hover,
 .parent-layout-page__message-reply-action:focus-visible,
 .parent-layout-page__message-info-action:hover,
-.parent-layout-page__message-info-action:focus-visible {
+.parent-layout-page__message-info-action:focus-visible,
+.parent-layout-page__message-edit-action:hover,
+.parent-layout-page__message-edit-action:focus-visible {
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-blue), var(--layout-purple));
   transform: translateY(-1px);
 }
 
+.parent-layout-page__message-delete-action:hover,
+.parent-layout-page__message-delete-action:focus-visible {
+  color: #ffffff;
+  background: linear-gradient(135deg, #ef4444, #b42318);
+  transform: translateY(-1px);
+}
+
 .parent-layout-page__message-reply-action svg,
-.parent-layout-page__message-info-action svg {
+.parent-layout-page__message-info-action svg,
+.parent-layout-page__message-edit-action svg,
+.parent-layout-page__message-delete-action svg {
   display: block;
   stroke-width: 2.6;
 }
@@ -2500,6 +2513,61 @@
   font-weight: 760;
 }
 
+.parent-layout-page__message-action-modal {
+  width: min(420px, calc(100vw - 32px));
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 70px rgba(67, 39, 110, 0.2);
+}
+
+.parent-layout-page__message-action-header {
+  margin: 0 44px 0 0;
+}
+
+.parent-layout-page__message-action-header h2 {
+  font-size: 20px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.parent-layout-page__message-action-textarea {
+  width: 100%;
+  min-height: 120px;
+  max-height: min(260px, calc(100svh - 240px));
+  resize: vertical;
+  padding: 11px 12px;
+  border: 1px solid rgba(124, 60, 255, 0.16);
+  border-radius: 12px;
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  outline: none;
+}
+
+.parent-layout-page__message-action-textarea:focus {
+  border-color: rgba(63, 140, 255, 0.52);
+  box-shadow: 0 0 0 3px rgba(63, 140, 255, 0.12);
+}
+
+.parent-layout-page__message-action-copy {
+  margin: 0;
+  color: var(--layout-muted);
+  font-size: 13px;
+  font-weight: 720;
+  line-height: 1.35;
+}
+
+.parent-layout-page__message-action-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .parent-layout-page__message-read-row {
   min-width: 0;
   min-height: 38px;
@@ -2635,6 +2703,24 @@
   font-size: 14px;
   line-height: 1.38;
   font-weight: 650;
+}
+
+.parent-layout-page__message-deleted {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--layout-muted);
+  font-style: italic;
+  font-weight: 760;
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__message-deleted {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.parent-layout-page__message-deleted svg {
+  flex: 0 0 auto;
+  stroke-width: 2.5;
 }
 
 .parent-layout-page__message-text a {
@@ -2854,6 +2940,21 @@
 .parent-layout-page__message-blocked-marker svg {
   display: block;
   stroke-width: 2.6;
+}
+
+.parent-layout-page__message-edited-marker {
+  width: 16px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 16px;
+  color: currentColor;
+  opacity: 0.86;
+}
+
+.parent-layout-page__message-edited-marker svg {
+  display: block;
+  stroke-width: 2.7;
 }
 
 .parent-layout-page__message-status.is-delivered {
@@ -6854,7 +6955,7 @@ video.parent-layout-page__attachment-modal-media {
 
   right: auto;
   left: auto;
-  flex-direction: row-reverse;
+  flex-direction: row;
   transform-origin: right center;
 }
 
@@ -6884,7 +6985,9 @@ video.parent-layout-page__attachment-modal-media {
 }
 
 .parent-layout-page__message-reply-action,
-.parent-layout-page__message-info-action {
+.parent-layout-page__message-info-action,
+.parent-layout-page__message-edit-action,
+.parent-layout-page__message-delete-action {
   width: 26px;
   height: 26px;
   flex-basis: 26px;

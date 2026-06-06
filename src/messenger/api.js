@@ -231,6 +231,12 @@ export const reactToMessengerMessage = (messageId, reaction) =>
     { reaction },
   );
 
+export const editMessengerMessage = (messageId, data) =>
+  messengerAxios.post(`/messages/${encodeURIComponent(messageId)}/edit/`, data);
+
+export const deleteMessengerMessage = (messageId) =>
+  messengerAxios.post(`/messages/${encodeURIComponent(messageId)}/delete/`, {});
+
 export const registerMessengerCryptoDevice = (data) =>
   messengerAxios.post("/crypto/devices/", data);
 

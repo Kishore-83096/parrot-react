@@ -157,6 +157,28 @@ export function getLastMessagePreviewDetails(
     }
 
     if (message) {
+      if (message.is_deleted || message.deleted_at) {
+        const currentUserId = getCurrentUserId(currentUser);
+        const sender = (room?.participants || []).find(
+          (participant) =>
+            Number(participant?.user_id) === Number(message.sender_user_id),
+        );
+        const senderAccountNumber =
+          message.sender_account_number || sender?.account_number || "";
+        const senderName =
+          getSavedContactName(contactNamesByAccountNumber, senderAccountNumber) ||
+          senderAccountNumber ||
+          "A member";
+
+        return {
+          icon: "",
+          text:
+            currentUserId && Number(message.sender_user_id) === currentUserId
+              ? "You deleted this message"
+              : `${senderName} deleted this message`,
+        };
+      }
+
       const messageText = getGroupMessagePreviewLabel(message);
       const attachments = Array.isArray(message.decrypted_attachments)
         ? message.decrypted_attachments
@@ -227,6 +249,18 @@ export function getLastMessagePreviewDetails(
     return {
       icon: "",
       text: latestLog?.text || "No messages yet.",
+    };
+  }
+
+  if (message.is_deleted || message.deleted_at) {
+    const currentUserId = getCurrentUserId(currentUser);
+
+    return {
+      icon: "",
+      text:
+        currentUserId && Number(message.sender_user_id) === currentUserId
+          ? "You deleted this message"
+          : "This message was deleted",
     };
   }
 

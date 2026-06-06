@@ -140,9 +140,15 @@ function MessengerInboxListener() {
 
           emitInboxEvent(eventPayload);
 
-          if (eventPayload.type === "message.sent") {
+          if (
+            eventPayload.type === "message.sent" ||
+            eventPayload.type === "message.edited"
+          ) {
             markIncomingMessageDelivered(eventPayload.message);
-          } else if (eventPayload.type === "group.message.sent") {
+          } else if (
+            eventPayload.type === "group.message.sent" ||
+            eventPayload.type === "group.message.edited"
+          ) {
             markIncomingGroupMessageDelivered(eventPayload.message);
           }
         };

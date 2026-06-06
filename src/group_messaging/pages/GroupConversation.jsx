@@ -50,6 +50,8 @@ import {
   MESSENGER_INBOX_EVENT_NAME,
 } from "../../messenger/api.js";
 import {
+  deleteGroupMessage,
+  editGroupMessage,
   getGroupRoomMessages,
   markGroupRoomRead,
   prewarmGroupReceiptVisibility,
@@ -102,6 +104,7 @@ const TYPING_REFRESH_INTERVAL_MS = 3000;
 const TYPING_STOP_DELAY_MS = 1600;
 const TYPING_REMOTE_TIMEOUT_MS = 8000;
 const ROOM_SOCKET_PING_INTERVAL_MS = 25000;
+const MESSAGE_EDIT_DELETE_WINDOW_MS = 15 * 60 * 1000;
 const MESSAGE_ACTION_LONG_PRESS_MS = 420;
 const MESSAGE_ACTION_LONG_PRESS_MOVE_TOLERANCE = 10;
 const MAX_VISIBLE_REACTION_MARKS = 5;
@@ -2732,6 +2735,46 @@ function mergeMessagePage(currentMessages, pageMessages) {
   });
 }
 
+function getMessageActionDeadline(message) {
+  const explicitDeadline = Date.parse(message?.action_expires_at || "");
+
+  if (Number.isFinite(explicitDeadline)) {
+    return explicitDeadline;
+  }
+
+  const createdAt = Date.parse(message?.created_at || "");
+
+  return Number.isFinite(createdAt)
+    ? createdAt + MESSAGE_EDIT_DELETE_WINDOW_MS
+    : 0;
+}
+
+function isMessageActionWindowOpen(message) {
+  const deadline = getMessageActionDeadline(message);
+
+  return deadline > 0 && Date.now() < deadline;
+}
+
+function getGroupDeletedMessageText({
+  contactNamesByAccountNumber,
+  currentUserId,
+  message,
+  participantNamesByUserId,
+}) {
+  if (Number(message?.sender_user_id) === Number(currentUserId)) {
+    return "You deleted this message";
+  }
+
+  const senderName = getMessageSenderLabel(
+    message,
+    currentUserId,
+    participantNamesByUserId,
+    contactNamesByAccountNumber,
+  );
+
+  return `${senderName || "A member"} deleted this message`;
+}
+
 function MessageReactionSummary({
   message,
   onOpenInfo,
@@ -2817,6 +2860,114 @@ function MessageReactionPicker({ message, onSelect }) {
       ))}
     </div>
   );
+}
+
+function MessageActionModal({
+  actionState,
+  groupName,
+  onClose,
+  onDraftChange,
+  onSubmit,
+}) {
+  if (!actionState?.mode || !actionState?.message) {
+    return null;
+  }
+
+  const isEdit = actionState.mode === "edit";
+  const isExpired =
+    actionState.expired || !isMessageActionWindowOpen(actionState.message);
+  const title = isEdit ? "Edit message" : "Delete message";
+  const timeoutMessage =
+    "This message can only be edited or deleted for everyone within 15 minutes.";
+  const blockedReason = actionState.blockedReason || "";
+  const modalError = actionState.error || blockedReason;
+  const isSubmitDisabled =
+    actionState.isSubmitting ||
+    isExpired ||
+    Boolean(blockedReason) ||
+    (isEdit && !actionState.draft.trim());
+  const modal = (
+    <div
+      className="parent-layout-page__modal-backdrop"
+      onMouseDown={onClose}
+    >
+      <form
+        className="parent-layout-page__modal parent-layout-page__message-action-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="group-message-action-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onSubmit={onSubmit}
+      >
+        <button
+          type="button"
+          className="parent-layout-page__modal-close"
+          onClick={onClose}
+          aria-label={`Close ${title.toLowerCase()}`}
+        >
+          <X size={18} aria-hidden="true" />
+        </button>
+        <header className="parent-layout-page__modal-header parent-layout-page__message-action-header">
+          <h2 id="group-message-action-title">{title}</h2>
+          <p>
+            {isExpired
+              ? timeoutMessage
+              : isEdit
+                ? "Update this message for everyone."
+                : `Confirm delete for all members of ${groupName || "this group"}.`}
+          </p>
+        </header>
+        {modalError ? (
+          <p className="parent-layout-page__modal-error">{modalError}</p>
+        ) : null}
+        {!isExpired && isEdit ? (
+          <textarea
+            className="parent-layout-page__message-action-textarea"
+            value={actionState.draft}
+            onChange={(event) => onDraftChange(event.target.value)}
+            rows={5}
+            maxLength={5000}
+            autoFocus
+          />
+        ) : null}
+        {!isExpired && !isEdit ? (
+          <p className="parent-layout-page__message-action-copy">
+            The message content will be replaced with a deleted-message notice.
+          </p>
+        ) : null}
+        {!isExpired ? (
+          <div className="parent-layout-page__message-action-controls">
+            <button
+              type="button"
+              className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
+              onClick={onClose}
+              disabled={actionState.isSubmitting}
+            >
+              <span>Cancel</span>
+            </button>
+            <button
+              type="submit"
+              className={`parent-layout-page__modal-submit${
+                isEdit ? "" : " parent-layout-page__modal-submit--danger"
+              }`}
+              disabled={isSubmitDisabled}
+            >
+              {actionState.isSubmitting ? (
+                <LoaderCircle size={16} aria-hidden="true" />
+              ) : isEdit ? (
+                <Send size={16} aria-hidden="true" />
+              ) : (
+                <Trash2 size={16} aria-hidden="true" />
+              )}
+              <span>{isEdit ? "Send" : "Delete"}</span>
+            </button>
+          </div>
+        ) : null}
+      </form>
+    </div>
+  );
+
+  return createPortal(modal, document.body);
 }
 
 function MessageInfoModal({
@@ -3033,6 +3184,15 @@ function GroupConversation({
     offsetX: 0,
   });
   const [activeMessageActionsId, setActiveMessageActionsId] = useState(null);
+  const [messageActionModal, setMessageActionModal] = useState({
+    blockedReason: "",
+    draft: "",
+    error: "",
+    expired: false,
+    isSubmitting: false,
+    message: null,
+    mode: null,
+  });
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
   const [messageInfoModal, setMessageInfoModal] = useState({
     initialTab: "reactions",
@@ -3092,6 +3252,15 @@ function GroupConversation({
       initialTab: "reactions",
       messageId: null,
     });
+    setMessageActionModal({
+      blockedReason: "",
+      draft: "",
+      error: "",
+      expired: false,
+      isSubmitting: false,
+      message: null,
+      mode: null,
+    });
   }, [selectedRoom?.id]);
 
   const focusMessageDraft = useCallback(() => {
@@ -3124,6 +3293,8 @@ function GroupConversation({
     selectedRoom?.is_group && selectedRoom?.id ? String(selectedRoom.id) : "";
   const hasActiveConversation = Boolean(selectedGroupRoomId);
   const isGroupDeleted = Boolean(selectedRoom?.is_deleted || selectedRoom?.deleted_at);
+  const messageActionGroupName =
+    selectedRoom?.title || selectedRoom?.name || `Group ${selectedRoom?.id || ""}`.trim();
   const prewarmGroupMessaging = useCallback(() => {
     if (!selectedGroupRoomId || isGroupDeleted) {
       return;
@@ -4024,6 +4195,30 @@ function GroupConversation({
           }
 
           if (
+            (eventPayload.type === "group.message.edited" ||
+              eventPayload.type === "group.message.deleted") &&
+            Number(eventPayload.message?.room_id) === Number(roomId)
+          ) {
+            const nextMessage = await decryptGroupMessageForUser(
+              eventPayload.message,
+              user,
+            );
+            if (!isMounted) {
+              return;
+            }
+            setRoomMessages((currentMessages) =>
+              upsertMessage(currentMessages, nextMessage),
+            );
+            onRoomMessage(eventPayload.room, nextMessage, {
+              selectRoom: true,
+            });
+            if (eventPayload.type === "group.message.edited") {
+              markIncomingRoomMessageRead(roomId, nextMessage);
+            }
+            return;
+          }
+
+          if (
             (eventPayload.type === "group.message.read" ||
               eventPayload.type === "group.message.delivered") &&
             Number(eventPayload.room_id) === Number(roomId)
@@ -4147,6 +4342,45 @@ function GroupConversation({
             selectRoom: true,
           });
           markIncomingRoomMessageRead(roomId, eventPayload.message);
+        }
+        return;
+      }
+
+      if (
+        (eventPayload?.type === "group.message.edited" ||
+          eventPayload?.type === "group.message.deleted") &&
+        Number(eventPayload.message?.room_id) === Number(roomId)
+      ) {
+        try {
+          const nextMessage = await decryptGroupMessageForUser(
+            eventPayload.message,
+            user,
+          );
+          if (Number(activeConversationRef.current.roomId) !== Number(roomId)) {
+            return;
+          }
+          setRoomMessages((currentMessages) =>
+            upsertMessage(currentMessages, nextMessage),
+          );
+          onRoomMessage(eventPayload.room, nextMessage, {
+            selectRoom: true,
+          });
+          if (eventPayload.type === "group.message.edited") {
+            markIncomingRoomMessageRead(roomId, nextMessage);
+          }
+        } catch {
+          if (Number(activeConversationRef.current.roomId) !== Number(roomId)) {
+            return;
+          }
+          setRoomMessages((currentMessages) =>
+            upsertMessage(currentMessages, eventPayload.message),
+          );
+          onRoomMessage(eventPayload.room, eventPayload.message, {
+            selectRoom: true,
+          });
+          if (eventPayload.type === "group.message.edited") {
+            markIncomingRoomMessageRead(roomId, eventPayload.message);
+          }
         }
         return;
       }
@@ -4350,7 +4584,7 @@ function GroupConversation({
 
   const handleSelectReplyTarget = useCallback(
     (message) => {
-      if (!message?.id) {
+      if (!message?.id || message.is_deleted || message.deleted_at) {
         return;
       }
 
@@ -4364,6 +4598,164 @@ function GroupConversation({
       focusMessageDraft();
     },
     [focusMessageDraft],
+  );
+
+  const closeMessageActionModal = useCallback(() => {
+    setMessageActionModal({
+      blockedReason: "",
+      draft: "",
+      error: "",
+      expired: false,
+      isSubmitting: false,
+      message: null,
+      mode: null,
+    });
+  }, []);
+
+  const openMessageActionModal = useCallback(
+    (message, mode) => {
+      if (
+        !message?.id ||
+        Number(message.sender_user_id) !== currentUserId ||
+        message.is_deleted ||
+        message.deleted_at
+      ) {
+        return;
+      }
+
+      const isExpired = !isMessageActionWindowOpen(message);
+      const isEncryptedButUnavailable =
+        mode === "edit" &&
+        message.is_encrypted &&
+        message.decryption_status !== "ok";
+
+      setActiveMessageActionsId(null);
+      setReactionPickerMessageId(null);
+      setMessageInfoModal({
+        initialTab: "reactions",
+        messageId: null,
+      });
+      setMessageActionModal({
+        blockedReason: isEncryptedButUnavailable
+          ? "This encrypted message must be decrypted before it can be edited."
+          : "",
+        draft: mode === "edit" ? getRenderableMessageText(message) : "",
+        error: "",
+        expired: isExpired,
+        isSubmitting: false,
+        message,
+        mode,
+      });
+    },
+    [currentUserId],
+  );
+
+  const updateMessageActionDraft = useCallback((draft) => {
+    setMessageActionModal((currentModal) => ({
+      ...currentModal,
+      draft,
+      error: "",
+    }));
+  }, []);
+
+  const applyMessageActionResult = useCallback(
+    async (result) => {
+      const nextMessage = result?.message
+        ? await decryptGroupMessageForUser(result.message, user)
+        : null;
+
+      if (!nextMessage) {
+        return;
+      }
+
+      setRoomMessages((currentMessages) =>
+        upsertMessage(currentMessages, nextMessage),
+      );
+      onRoomMessage(result.room, nextMessage, {
+        selectRoom: true,
+      });
+    },
+    [onRoomMessage, user],
+  );
+
+  const handleSubmitMessageAction = useCallback(
+    async (event) => {
+      event.preventDefault();
+
+      const { draft, message, mode } = messageActionModal;
+      if (!message?.id || !mode || !selectedRoom?.id) {
+        return;
+      }
+
+      if (!isMessageActionWindowOpen(message)) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          expired: true,
+          error:
+            "This message can only be edited or deleted for everyone within 15 minutes.",
+        }));
+        return;
+      }
+
+      const nextText = draft.trim();
+      if (mode === "edit" && !nextText) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: "Message text is required.",
+        }));
+        return;
+      }
+
+      setMessageActionModal((currentModal) => ({
+        ...currentModal,
+        error: "",
+        isSubmitting: true,
+      }));
+
+      try {
+        let response;
+        if (mode === "edit") {
+          const text = message.is_encrypted
+            ? await encryptGroupMessageText({
+                roomId: selectedRoom.id,
+                text: nextText,
+                user,
+              })
+            : nextText;
+
+          response = await editGroupMessage(selectedRoom.id, message.id, { text });
+        } else {
+          response = await deleteGroupMessage(selectedRoom.id, message.id);
+        }
+
+        const result = response.data?.result || response.data;
+        await applyMessageActionResult(result);
+        closeMessageActionModal();
+      } catch (error) {
+        const responseResult = error.response?.data?.result;
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: getMessengerErrorMessage(
+            error,
+            mode === "edit"
+              ? "Unable to edit message."
+              : "Unable to delete message.",
+          ),
+          expired:
+            currentModal.expired ||
+            responseResult?.status === "timeout" ||
+            error.response?.status === 403,
+          isSubmitting: false,
+        }));
+      }
+    },
+    [
+      applyMessageActionResult,
+      closeMessageActionModal,
+      messageActionModal,
+      selectedRoom?.id,
+      user,
+    ],
   );
 
   const handleOpenMessageInfo = useCallback((message, initialTab = "reactions") => {
@@ -4389,7 +4781,12 @@ function GroupConversation({
   }, []);
 
   const handleMessageBubbleMouseEnter = useCallback((message) => {
-    if (!message?.id || !supportsFineHoverPointer()) {
+    if (
+      !message?.id ||
+      message.is_deleted ||
+      message.deleted_at ||
+      !supportsFineHoverPointer()
+    ) {
       return;
     }
 
@@ -4420,6 +4817,8 @@ function GroupConversation({
 
     if (
       !messageId ||
+      message?.is_deleted ||
+      message?.deleted_at ||
       !supportsMobileMessageTap() ||
       event.defaultPrevented ||
       event.target?.closest?.(
@@ -4460,6 +4859,8 @@ function GroupConversation({
         messageId < 0 ||
         !selectedRoom?.id ||
         isGroupDeleted ||
+        message?.is_deleted ||
+        message?.deleted_at ||
         !MESSAGE_REACTION_KEYS.includes(reactionKey)
       ) {
         if (isGroupDeleted) {
@@ -5397,6 +5798,8 @@ function GroupConversation({
             }
 
             const isMine = Number(message.sender_user_id) === currentUserId;
+            const isDeleted = Boolean(message.is_deleted || message.deleted_at);
+            const wasEdited = Boolean(message.edited_at) && !isDeleted;
             const senderLabel = getMessageSenderLabel(
               message,
               currentUserId,
@@ -5445,6 +5848,12 @@ function GroupConversation({
             const messageStyle = isReplyDragging
               ? { "--message-reply-drag-x": `${replyDrag.offsetX}px` }
               : undefined;
+            const deletedMessageText = getGroupDeletedMessageText({
+              contactNamesByAccountNumber,
+              currentUserId,
+              message,
+              participantNamesByUserId,
+            });
 
             return (
               <Fragment key={message.id}>
@@ -5464,7 +5873,7 @@ function GroupConversation({
                   data-message-id={message.id}
                   style={messageStyle}
                   onPointerDown={(event) =>
-                    !isGroupDeleted && handleReplyDragStart(event, message)
+                    !isGroupDeleted && !isDeleted && handleReplyDragStart(event, message)
                   }
                   onPointerMove={handleReplyDragMove}
                   onPointerUp={handleReplyDragEnd}
@@ -5481,7 +5890,7 @@ function GroupConversation({
                     onMouseEnter={() => handleMessageBubbleMouseEnter(message)}
                     onClick={(event) => handleMessageBubbleClick(event, message)}
                   >
-                    {!isMine ? (
+                    {!isMine && !isDeleted ? (
                       <span
                         className="parent-layout-page__message-sender"
                         title={senderLabel}
@@ -5490,6 +5899,13 @@ function GroupConversation({
                       </span>
                     ) : null}
 
+                    {isDeleted ? (
+                      <p className="parent-layout-page__message-deleted">
+                        <Trash2 size={14} aria-hidden="true" />
+                        <span>{deletedMessageText}</span>
+                      </p>
+                    ) : (
+                      <>
                     {replyPreview ? (
                       <button
                         type="button"
@@ -5541,6 +5957,8 @@ function GroupConversation({
                         text={messageText}
                       />
                     ) : null}
+                      </>
+                    )}
 
                     <footer>
                       <time dateTime={message.created_at}>
@@ -5555,7 +5973,16 @@ function GroupConversation({
                           <Ban size={13} aria-hidden="true" />
                         </span>
                       ) : null}
-                      {isMine ? (
+                      {wasEdited ? (
+                        <span
+                          className="parent-layout-page__message-edited-marker"
+                          aria-label="Edited"
+                          title="Edited"
+                        >
+                          <Pencil size={12} aria-hidden="true" />
+                        </span>
+                      ) : null}
+                      {isMine && !isDeleted ? (
                         <span
                           className={`parent-layout-page__message-status is-${
                             message.status || "sent"
@@ -5572,41 +5999,71 @@ function GroupConversation({
                         </span>
                       ) : null}
                     </footer>
-                    <MessageReactionSummary
-                      message={message}
-                      onOpenInfo={handleOpenMessageInfo}
-                    />
+                    {!isDeleted ? (
+                      <MessageReactionSummary
+                        message={message}
+                        onOpenInfo={handleOpenMessageInfo}
+                      />
+                    ) : null}
                   </div>
                   <div
                     className="parent-layout-page__message-actions"
                     data-reaction-picker-root="true"
                   >
-                    {isMine ? (
-                      <button
-                        type="button"
-                        className="parent-layout-page__message-info-action"
-                        onClick={() => handleOpenMessageInfo(message, "read_status")}
-                        aria-label="Message info"
-                        title="Message info"
-                      >
-                        <Info size={15} aria-hidden="true" />
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="parent-layout-page__message-reply-action"
-                      onClick={() => handleSelectReplyTarget(message)}
-                      disabled={isGroupDeleted}
-                      aria-label="Reply to message"
-                      title={isGroupDeleted ? "Group deleted" : "Reply"}
-                    >
-                      <Reply size={15} aria-hidden="true" />
-                    </button>
-                    {!isGroupDeleted ? (
-                      <MessageReactionPicker
-                        message={message}
-                        onSelect={handleSelectMessageReaction}
-                      />
+                    {!isDeleted ? (
+                      <>
+                        {isMine ? (
+                          <>
+                            {!isGroupDeleted ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="parent-layout-page__message-edit-action"
+                                  onClick={() => openMessageActionModal(message, "edit")}
+                                  aria-label="Edit message"
+                                  title="Edit"
+                                >
+                                  <Pencil size={15} aria-hidden="true" />
+                                </button>
+                                <button
+                                  type="button"
+                                  className="parent-layout-page__message-delete-action"
+                                  onClick={() => openMessageActionModal(message, "delete")}
+                                  aria-label="Delete message for everyone"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={15} aria-hidden="true" />
+                                </button>
+                              </>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="parent-layout-page__message-info-action"
+                              onClick={() => handleOpenMessageInfo(message, "read_status")}
+                              aria-label="Message info"
+                              title="Message info"
+                            >
+                              <Info size={15} aria-hidden="true" />
+                            </button>
+                          </>
+                        ) : null}
+                        {!isGroupDeleted ? (
+                          <MessageReactionPicker
+                            message={message}
+                            onSelect={handleSelectMessageReaction}
+                          />
+                        ) : null}
+                        <button
+                          type="button"
+                          className="parent-layout-page__message-reply-action"
+                          onClick={() => handleSelectReplyTarget(message)}
+                          disabled={isGroupDeleted}
+                          aria-label="Reply to message"
+                          title={isGroupDeleted ? "Group deleted" : "Reply"}
+                        >
+                          <Reply size={15} aria-hidden="true" />
+                        </button>
+                      </>
                     ) : null}
                   </div>
                 </article>
@@ -5841,6 +6298,13 @@ function GroupConversation({
           participantNamesByUserId={participantNamesByUserId}
         />
       ) : null}
+      <MessageActionModal
+        actionState={messageActionModal}
+        groupName={messageActionGroupName}
+        onClose={closeMessageActionModal}
+        onDraftChange={updateMessageActionDraft}
+        onSubmit={handleSubmitMessageAction}
+      />
     </section>
   );
 }
