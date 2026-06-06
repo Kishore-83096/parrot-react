@@ -231,6 +231,7 @@ export function isEncryptedMessageText(text) {
 
 export async function encryptMessageText({
   attachments = [],
+  edit = null,
   recipientAccountNumber,
   text,
   user,
@@ -274,6 +275,7 @@ export async function encryptMessageText({
     JSON.stringify({
       text: plaintext,
       attachments: encryptedAttachments,
+      edit: normalizeEditMetadata(edit),
     }),
   );
   const ciphertext = sodium.crypto_aead_xchacha20poly1305_ietf_encrypt(
@@ -390,6 +392,8 @@ export async function decryptMessageForUser(message, user, decryptionContext) {
             .map(normalizeDecryptedAttachment)
             .filter(Boolean)
         : [],
+      edit_metadata: normalizeEditMetadata(plaintextPayload?.edit),
+      edit_change_type: normalizeEditMetadata(plaintextPayload?.edit).change_type,
       decryption_status: "ok",
       is_encrypted: true,
     };
@@ -402,6 +406,21 @@ export async function decryptMessageForUser(message, user, decryptionContext) {
       is_encrypted: true,
     };
   }
+}
+
+function normalizeEditMetadata(edit) {
+  if (!edit || typeof edit !== "object") {
+    return {};
+  }
+
+  const changeType = String(edit.change_type || "");
+  if (!["text", "attachments", "text_attachments"].includes(changeType)) {
+    return {};
+  }
+
+  return {
+    change_type: changeType,
+  };
 }
 
 function normalizeDecryptedAttachment(attachment, index) {

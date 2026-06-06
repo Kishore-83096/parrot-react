@@ -101,6 +101,77 @@ function StoryTabIcon({ size = 24 }) {
   );
 }
 
+function mergeGroupRoomLogs(previousLogs, nextLogs) {
+  const logsById = new Map();
+
+  [...(previousLogs || []), ...(nextLogs || [])].forEach((log) => {
+    if (log?.id) {
+      logsById.set(Number(log.id), log);
+    }
+  });
+
+  return Array.from(logsById.values()).sort(
+    (first, second) =>
+      new Date(first.created_at || 0).getTime() -
+      new Date(second.created_at || 0).getTime(),
+  );
+}
+
+function shouldKeepDecryptedLastMessage(previousMessage, nextMessage) {
+  if (!previousMessage || !nextMessage) {
+    return false;
+  }
+
+  if (Number(previousMessage.id || 0) !== Number(nextMessage.id || 0)) {
+    return false;
+  }
+
+  return (
+    previousMessage.decryption_status === "ok" &&
+    nextMessage.decryption_status !== "ok"
+  );
+}
+
+function mergeGroupRoomState(previousRoom, nextRoom) {
+  if (!previousRoom) {
+    return nextRoom;
+  }
+
+  const mergedRoom = {
+    ...previousRoom,
+    ...nextRoom,
+  };
+
+  const previousLogs = Array.isArray(previousRoom.latest_logs)
+    ? previousRoom.latest_logs
+    : [];
+  const nextLogs = Array.isArray(nextRoom.latest_logs)
+    ? nextRoom.latest_logs
+    : [];
+
+  if (previousLogs.length > 0 || nextLogs.length > 0) {
+    mergedRoom.latest_logs = mergeGroupRoomLogs(previousLogs, nextLogs);
+  }
+
+  if (!nextRoom.last_message && previousRoom.last_message) {
+    mergedRoom.last_message = previousRoom.last_message;
+  } else if (
+    shouldKeepDecryptedLastMessage(previousRoom.last_message, nextRoom.last_message)
+  ) {
+    mergedRoom.last_message = {
+      ...nextRoom.last_message,
+      decrypted_attachments: previousRoom.last_message.decrypted_attachments,
+      decrypted_text: previousRoom.last_message.decrypted_text,
+      decryption_status: previousRoom.last_message.decryption_status,
+      edit_change_type: previousRoom.last_message.edit_change_type,
+      edit_metadata: previousRoom.last_message.edit_metadata,
+      is_encrypted: previousRoom.last_message.is_encrypted,
+    };
+  }
+
+  return mergedRoom;
+}
+
 function LayoutPage({ user, onLogout, onUserUpdate }) {
   const initialMessengerUiCacheRef = useRef(null);
 
@@ -585,8 +656,12 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     }
 
     setRooms((currentRooms) => {
+      const existingRoom = currentRooms.find(
+        (currentRoom) => Number(currentRoom.id) === Number(room.id),
+      );
+      const nextRoom = mergeGroupRoomState(existingRoom, room);
       const nextRooms = [
-        room,
+        nextRoom,
         ...currentRooms.filter(
           (currentRoom) => Number(currentRoom.id) !== Number(room.id),
         ),
@@ -608,10 +683,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         return currentRoom;
       }
 
-      return {
-        ...currentRoom,
-        ...room,
-      };
+      return mergeGroupRoomState(currentRoom, room);
     });
 
     if (selectRoom) {
@@ -619,6 +691,30 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       setActivePanelTab("chats");
     }
   }, []);
+
+  const upsertMaybeEncryptedGroupRoom = useCallback(
+    (room, options = {}) => {
+      if (!room?.last_message) {
+        upsertGroupRoom(room, options);
+        return;
+      }
+
+      decryptGroupMessageForUser(room.last_message, user)
+        .then((lastMessage) => {
+          upsertGroupRoom(
+            {
+              ...room,
+              last_message: lastMessage,
+            },
+            options,
+          );
+        })
+        .catch(() => {
+          upsertGroupRoom(room, options);
+        });
+    },
+    [upsertGroupRoom, user],
+  );
 
   const removeGroupRoom = useCallback((roomId) => {
     const numericRoomId = Number(roomId || 0);
@@ -667,24 +763,24 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       const room = eventPayload?.room;
 
       if (room?.id) {
-        upsertGroupRoom(room);
+        upsertMaybeEncryptedGroupRoom(room);
       }
     },
-    [currentUserId, removeGroupRoom, upsertGroupRoom],
+    [currentUserId, removeGroupRoom, upsertMaybeEncryptedGroupRoom],
   );
 
   const handleGroupCreated = useCallback(
     (room) => {
-      upsertGroupRoom(room, { selectRoom: true });
+      upsertMaybeEncryptedGroupRoom(room, { selectRoom: true });
     },
-    [upsertGroupRoom],
+    [upsertMaybeEncryptedGroupRoom],
   );
 
   const handleGroupUpdated = useCallback(
     (room) => {
-      upsertGroupRoom(room);
+      upsertMaybeEncryptedGroupRoom(room);
     },
-    [upsertGroupRoom],
+    [upsertMaybeEncryptedGroupRoom],
   );
 
   const handleGroupRemoved = useCallback(

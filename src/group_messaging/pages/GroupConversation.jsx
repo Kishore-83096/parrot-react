@@ -166,6 +166,25 @@ function getEmptyMessagePagination() {
     nextBeforeMessageId: null,
   };
 }
+
+function hasCachedCurrentLastMessage(cachedConversation, selectedRoom) {
+  const cachedMessages = Array.isArray(cachedConversation?.messages)
+    ? cachedConversation.messages
+    : [];
+
+  if (cachedMessages.length === 0) {
+    return false;
+  }
+
+  const lastMessageId = Number(selectedRoom?.last_message?.id || 0);
+  if (!lastMessageId) {
+    return true;
+  }
+
+  return cachedMessages.some(
+    (message) => Number(message?.id || 0) === lastMessageId,
+  );
+}
 const TEXT_DOCUMENT_EXTENSIONS = new Set(["csv", "json", "md", "rtf", "txt"]);
 const OFFICE_DOCUMENT_EXTENSIONS = new Set([
   "doc",
@@ -717,6 +736,77 @@ function getMessageAttachmentCount(message) {
   }
 
   return Number(message?.attachment_count || 0);
+}
+
+function getMessageEditChangeType(currentText, nextText, hasAttachmentReplacement) {
+  const hasTextChange =
+    String(currentText || "").trim() !== String(nextText || "").trim();
+
+  if (hasTextChange && hasAttachmentReplacement) {
+    return "text_attachments";
+  }
+
+  if (hasAttachmentReplacement) {
+    return "attachments";
+  }
+
+  return hasTextChange ? "text" : "";
+}
+
+function getMessageEditChangeTypeLabel(changeType) {
+  if (changeType === "text_attachments") {
+    return "Edited text and attachments";
+  }
+
+  if (changeType === "attachments") {
+    return "Edited attachments";
+  }
+
+  if (changeType === "text") {
+    return "Edited text";
+  }
+
+  return "Edited";
+}
+
+function createMessageActionReplacementFiles(incomingFiles, currentCount = 0) {
+  const files = Array.from(incomingFiles || []);
+  if (files.length === 0) {
+    return { error: "", files: [] };
+  }
+
+  const availableSlots = MAX_MESSAGE_ATTACHMENTS - currentCount;
+  if (availableSlots <= 0) {
+    return {
+      error: `You can select up to ${MAX_MESSAGE_ATTACHMENTS} replacement files.`,
+      files: [],
+    };
+  }
+
+  const validFiles = [];
+  let hasOversizedFile = false;
+
+  files.slice(0, availableSlots).forEach((file) => {
+    if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+      hasOversizedFile = true;
+      return;
+    }
+
+    validFiles.push({
+      id: createSelectedFileId(file),
+      file,
+      fileType: getSelectedFileType(file),
+    });
+  });
+
+  let error = "";
+  if (files.length > availableSlots) {
+    error = `Only ${availableSlots} more replacement file(s) can be selected.`;
+  } else if (hasOversizedFile) {
+    error = "One or more files exceed the 25 MB attachment limit.";
+  }
+
+  return { error, files: validFiles };
 }
 
 function createSelectedFileId(file) {
@@ -2862,11 +2952,49 @@ function MessageReactionPicker({ message, onSelect }) {
   );
 }
 
+function MessageLoadingPlaceholder() {
+  const rows = [
+    { id: "group-loading-1", side: "theirs", size: "medium", lines: 2 },
+    { id: "group-loading-2", side: "mine", size: "short", lines: 1 },
+    { id: "group-loading-3", side: "theirs", size: "wide", lines: 3 },
+    { id: "group-loading-4", side: "mine", size: "medium", lines: 2 },
+    { id: "group-loading-5", side: "theirs", size: "short", lines: 1 },
+  ];
+
+  return (
+    <div
+      className="parent-layout-page__messages-loading"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label="Loading messages"
+    >
+      {rows.map((row) => (
+        <div
+          className={`parent-layout-page__messages-loading-row is-${row.side}`}
+          key={row.id}
+        >
+          <div
+            className={`parent-layout-page__messages-loading-bubble is-${row.size}`}
+            aria-hidden="true"
+          >
+            {Array.from({ length: row.lines }, (_, index) => (
+              <i key={index} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MessageActionModal({
   actionState,
   groupName,
   onClose,
   onDraftChange,
+  onRemoveReplacementFile,
+  onReplacementFilesChange,
   onSubmit,
 }) {
   if (!actionState?.mode || !actionState?.message) {
@@ -2876,6 +3004,22 @@ function MessageActionModal({
   const isEdit = actionState.mode === "edit";
   const isExpired =
     actionState.expired || !isMessageActionWindowOpen(actionState.message);
+  const currentAttachments = isEdit
+    ? getMessageAttachments(actionState.message)
+    : [];
+  const replacementFiles = Array.isArray(actionState.replacementFiles)
+    ? actionState.replacementFiles
+    : [];
+  const currentText = isEdit
+    ? getRenderableMessageText(actionState.message).trim()
+    : "";
+  const nextText = String(actionState.draft || "").trim();
+  const hasTextChange = currentText !== nextText;
+  const hasAttachmentReplacement = replacementFiles.length > 0;
+  const hasAnyContentAfterEdit = Boolean(
+    nextText || hasAttachmentReplacement || currentAttachments.length > 0,
+  );
+  const hasEditChange = hasTextChange || hasAttachmentReplacement;
   const title = isEdit ? "Edit message" : "Delete message";
   const timeoutMessage =
     "This message can only be edited or deleted for everyone within 15 minutes.";
@@ -2885,7 +3029,7 @@ function MessageActionModal({
     actionState.isSubmitting ||
     isExpired ||
     Boolean(blockedReason) ||
-    (isEdit && !actionState.draft.trim());
+    (isEdit && (!hasAnyContentAfterEdit || !hasEditChange));
   const modal = (
     <div
       className="parent-layout-page__modal-backdrop"
@@ -2921,14 +3065,75 @@ function MessageActionModal({
           <p className="parent-layout-page__modal-error">{modalError}</p>
         ) : null}
         {!isExpired && isEdit ? (
-          <textarea
-            className="parent-layout-page__message-action-textarea"
-            value={actionState.draft}
-            onChange={(event) => onDraftChange(event.target.value)}
-            rows={5}
-            maxLength={5000}
-            autoFocus
-          />
+          <>
+            <textarea
+              className="parent-layout-page__message-action-textarea"
+              value={actionState.draft}
+              onChange={(event) => onDraftChange(event.target.value)}
+              rows={5}
+              maxLength={5000}
+              autoFocus
+            />
+            <div className="parent-layout-page__message-action-attachments">
+              {currentAttachments.length > 0 ? (
+                <div className="parent-layout-page__message-action-attachment-group">
+                  <span>Current attachments</span>
+                  <ul className="parent-layout-page__message-action-attachment-list">
+                    {currentAttachments.map((attachment, index) => (
+                      <li
+                        key={getAttachmentKey(attachment) || index}
+                        className="parent-layout-page__message-action-attachment-item"
+                      >
+                        <AttachmentIcon
+                          fileType={getAttachmentKind(attachment)}
+                          size={14}
+                        />
+                        <span>{getAttachmentLabel(attachment)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <div className="parent-layout-page__message-action-attachment-group">
+                <label className="parent-layout-page__message-action-file-button">
+                  <Paperclip size={15} aria-hidden="true" />
+                  <span>Select replacement files</span>
+                  <input
+                    className="parent-layout-page__message-action-file-input"
+                    type="file"
+                    multiple
+                    onChange={onReplacementFilesChange}
+                    disabled={actionState.isSubmitting}
+                  />
+                </label>
+                {replacementFiles.length > 0 ? (
+                  <ul className="parent-layout-page__message-action-attachment-list">
+                    {replacementFiles.map((selectedFile) => (
+                      <li
+                        key={selectedFile.id}
+                        className="parent-layout-page__message-action-attachment-item"
+                      >
+                        <AttachmentIcon
+                          fileType={selectedFile.fileType}
+                          size={14}
+                        />
+                        <span>{selectedFile.file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => onRemoveReplacementFile(selectedFile.id)}
+                          disabled={actionState.isSubmitting}
+                          aria-label={`Remove ${selectedFile.file.name}`}
+                          title="Remove"
+                        >
+                          <X size={13} aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            </div>
+          </>
         ) : null}
         {!isExpired && !isEdit ? (
           <p className="parent-layout-page__message-action-copy">
@@ -3192,6 +3397,7 @@ function GroupConversation({
     isSubmitting: false,
     message: null,
     mode: null,
+    replacementFiles: [],
   });
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
   const [messageInfoModal, setMessageInfoModal] = useState({
@@ -3236,6 +3442,7 @@ function GroupConversation({
   const isTypingSentRef = useRef(false);
   const lastTypingStartedAtRef = useRef(0);
   const cachedConversationRef = useRef(cachedConversation || null);
+  const logsRoomIdRef = useRef(selectedRoom?.id || null);
   cachedConversationRef.current = cachedConversation || null;
   const isAttachmentViewerOpen = attachmentViewer.attachments.length > 0;
   const isVoiceRecording =
@@ -3244,7 +3451,25 @@ function GroupConversation({
   const isVoiceRecordingFinishing = voiceRecording.status === "finishing";
 
   useEffect(() => {
-    setLogs(Array.isArray(selectedRoom?.latest_logs) ? selectedRoom.latest_logs : []);
+    const nextRoomId = selectedRoom?.id || null;
+    const nextLogs = Array.isArray(selectedRoom?.latest_logs)
+      ? selectedRoom.latest_logs
+      : [];
+
+    setLogs((currentLogs) => {
+      if (!nextRoomId) {
+        logsRoomIdRef.current = null;
+        return [];
+      }
+
+      const isSameRoom =
+        String(logsRoomIdRef.current || "") === String(nextRoomId);
+      logsRoomIdRef.current = nextRoomId;
+
+      return isSameRoom
+        ? mergeLogs(currentLogs, nextLogs)
+        : mergeLogs([], nextLogs);
+    });
   }, [selectedRoom?.id, selectedRoom?.latest_logs]);
 
   useEffect(() => {
@@ -3260,6 +3485,7 @@ function GroupConversation({
       isSubmitting: false,
       message: null,
       mode: null,
+      replacementFiles: [],
     });
   }, [selectedRoom?.id]);
 
@@ -3890,7 +4116,7 @@ function GroupConversation({
     [markRoomReadForMessages, user],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sendTypingStopped();
     resetVoiceRecordingState();
     clearRemoteTypingUsers();
@@ -3922,10 +4148,14 @@ function GroupConversation({
       ? cachedRoomConversation.messages
       : [];
     const cachedPagination = cachedRoomConversation?.pagination;
+    const canUseCachedConversation = hasCachedCurrentLastMessage(
+      cachedRoomConversation,
+      selectedRoom,
+    );
 
     setRoomMessagesCacheRoomId(selectedRoom.id);
 
-    if (cachedMessages.length > 0 || cachedPagination) {
+    if (canUseCachedConversation) {
       setRoomMessages(cachedMessages);
       setMessagePagination({
         hasMore: Boolean(cachedPagination?.hasMore),
@@ -3939,6 +4169,7 @@ function GroupConversation({
       return;
     }
 
+    setRoomMessages([]);
     loadRoomMessages(selectedRoom.id);
   }, [
     clearRemoteTypingUsers,
@@ -4418,7 +4649,7 @@ function GroupConversation({
     user,
   ]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hasActiveConversation || isRoomMessagesLoading) {
       return;
     }
@@ -4609,6 +4840,7 @@ function GroupConversation({
       isSubmitting: false,
       message: null,
       mode: null,
+      replacementFiles: [],
     });
   }, []);
 
@@ -4645,6 +4877,7 @@ function GroupConversation({
         isSubmitting: false,
         message,
         mode,
+        replacementFiles: [],
       });
     },
     [currentUserId],
@@ -4655,6 +4888,38 @@ function GroupConversation({
       ...currentModal,
       draft,
       error: "",
+    }));
+  }, []);
+
+  const handleMessageActionReplacementFilesChange = useCallback((event) => {
+    const incomingFiles = Array.from(event.target.files || []);
+
+    setMessageActionModal((currentModal) => {
+      const currentFiles = Array.isArray(currentModal.replacementFiles)
+        ? currentModal.replacementFiles
+        : [];
+      const { error, files } = createMessageActionReplacementFiles(
+        incomingFiles,
+        currentFiles.length,
+      );
+
+      return {
+        ...currentModal,
+        error,
+        replacementFiles: [...currentFiles, ...files],
+      };
+    });
+
+    event.target.value = "";
+  }, []);
+
+  const handleRemoveMessageActionReplacementFile = useCallback((fileId) => {
+    setMessageActionModal((currentModal) => ({
+      ...currentModal,
+      error: "",
+      replacementFiles: (currentModal.replacementFiles || []).filter(
+        (selectedFile) => selectedFile.id !== fileId,
+      ),
     }));
   }, []);
 
@@ -4698,10 +4963,53 @@ function GroupConversation({
       }
 
       const nextText = draft.trim();
-      if (mode === "edit" && !nextText) {
+      const existingAttachments =
+        mode === "edit" ? getMessageAttachments(message) : [];
+      const replacementFiles =
+        mode === "edit" && Array.isArray(messageActionModal.replacementFiles)
+          ? messageActionModal.replacementFiles
+          : [];
+      const hasAttachmentReplacement = replacementFiles.length > 0;
+      const editChangeType =
+        mode === "edit"
+          ? getMessageEditChangeType(
+              getRenderableMessageText(message),
+              nextText,
+              hasAttachmentReplacement,
+            )
+          : "";
+      const hasAnyContentAfterEdit = Boolean(
+        nextText || hasAttachmentReplacement || existingAttachments.length > 0,
+      );
+
+      if (mode === "edit" && !hasAnyContentAfterEdit) {
         setMessageActionModal((currentModal) => ({
           ...currentModal,
-          error: "Message text is required.",
+          error: "Message text or attachment is required.",
+        }));
+        return;
+      }
+
+      if (mode === "edit" && !editChangeType) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: "No changes to send.",
+        }));
+        return;
+      }
+
+      if (mode === "edit" && hasAttachmentReplacement && !message.is_encrypted) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: "Attachment replacement is available for encrypted messages only.",
+        }));
+        return;
+      }
+
+      if (mode === "edit" && hasAttachmentReplacement && !message.client_message_id) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: "Cannot replace attachments for this message.",
         }));
         return;
       }
@@ -4715,15 +5023,37 @@ function GroupConversation({
       try {
         let response;
         if (mode === "edit") {
-          const text = message.is_encrypted
-            ? await encryptGroupMessageText({
-                roomId: selectedRoom.id,
-                text: nextText,
-                user,
-              })
-            : nextText;
+          if (message.is_encrypted) {
+            const encryptedAttachments = hasAttachmentReplacement
+              ? await encryptSelectedFilesForGroupMessage(replacementFiles, {
+                  clientMessageId: message.client_message_id,
+                  roomId: selectedRoom.id,
+                })
+              : existingAttachments;
+            const text = await encryptGroupMessageText({
+              attachments: encryptedAttachments,
+              edit: { change_type: editChangeType },
+              roomId: selectedRoom.id,
+              text: nextText,
+              user,
+            });
+            const payload = {
+              text,
+            };
 
-          response = await editGroupMessage(selectedRoom.id, message.id, { text });
+            if (hasAttachmentReplacement) {
+              payload.client_message_id = message.client_message_id;
+              payload.encrypted_upload_intent_ids = encryptedAttachments
+                .map((attachment) => attachment.upload_intent_id)
+                .filter(Boolean);
+            }
+
+            response = await editGroupMessage(selectedRoom.id, message.id, payload);
+          } else {
+            response = await editGroupMessage(selectedRoom.id, message.id, {
+              text: nextText,
+            });
+          }
         } else {
           response = await deleteGroupMessage(selectedRoom.id, message.id);
         }
@@ -5065,7 +5395,7 @@ function GroupConversation({
     messageElement.classList.add("is-highlighted");
     globalThis.setTimeout(() => {
       messageElement.classList.remove("is-highlighted");
-    }, 1400);
+    }, 5000);
 
     return true;
   }, []);
@@ -5691,6 +6021,11 @@ function GroupConversation({
   const hasComposedMessage = Boolean(
     messageDraft.trim() || selectedFiles.length > 0,
   );
+  const isInitialRoomMessagesLoading = Boolean(
+    selectedRoom?.id &&
+      (isRoomMessagesLoading ||
+        String(roomMessagesCacheRoomId || "") !== String(selectedRoom.id)),
+  );
 
   if (!hasActiveConversation) {
     return (
@@ -5726,12 +6061,8 @@ function GroupConversation({
         onScroll={handleMessagesScroll}
         aria-live="polite"
       >
-        {isRoomMessagesLoading ? (
-          <div className="parent-layout-page__messages-loading">
-            <span />
-            <span />
-            <span />
-          </div>
+        {isInitialRoomMessagesLoading ? (
+          <MessageLoadingPlaceholder />
         ) : groupedTimelineItems.length === 0 ? (
           <div className="parent-layout-page__messages-empty">
             <MessageCircle size={30} aria-hidden="true" />
@@ -5800,6 +6131,9 @@ function GroupConversation({
             const isMine = Number(message.sender_user_id) === currentUserId;
             const isDeleted = Boolean(message.is_deleted || message.deleted_at);
             const wasEdited = Boolean(message.edited_at) && !isDeleted;
+            const editedLabel = getMessageEditChangeTypeLabel(
+              message.edit_change_type,
+            );
             const senderLabel = getMessageSenderLabel(
               message,
               currentUserId,
@@ -5976,8 +6310,8 @@ function GroupConversation({
                       {wasEdited ? (
                         <span
                           className="parent-layout-page__message-edited-marker"
-                          aria-label="Edited"
-                          title="Edited"
+                          aria-label={editedLabel}
+                          title={editedLabel}
                         >
                           <Pencil size={12} aria-hidden="true" />
                         </span>
@@ -6303,6 +6637,8 @@ function GroupConversation({
         groupName={messageActionGroupName}
         onClose={closeMessageActionModal}
         onDraftChange={updateMessageActionDraft}
+        onRemoveReplacementFile={handleRemoveMessageActionReplacementFile}
+        onReplacementFilesChange={handleMessageActionReplacementFilesChange}
         onSubmit={handleSubmitMessageAction}
       />
     </section>

@@ -198,7 +198,9 @@ export function getLastMessagePreviewDetails(
       }
 
       if (!preview && isGroupEncryptedMessageText(message.text)) {
-        preview = "Encrypted group message";
+        preview = "Message";
+      } else if (hasEncryptedPlaceholder && preview === messageText) {
+        preview = "Message";
       }
 
       if (!preview) {
