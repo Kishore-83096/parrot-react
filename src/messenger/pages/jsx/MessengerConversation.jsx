@@ -129,6 +129,16 @@ const VOICE_NOTE_MIME_TYPE_CANDIDATES = [
   "audio/ogg;codecs=opus",
   "audio/mp4",
 ];
+
+function ConversationStartMarker({ children }) {
+  return (
+    <div className="parent-layout-page__timeline-start" role="status">
+      <MessageCircle size={15} aria-hidden="true" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
 const DEFAULT_VOICE_NOTE_WAVEFORM = [
   0.24, 0.48, 0.34, 0.72, 0.42, 0.58, 0.88, 0.36, 0.52, 0.76,
   0.3, 0.64, 0.44, 0.82, 0.56, 0.38, 0.7, 0.5, 0.9, 0.46,
@@ -4070,6 +4080,8 @@ function MessengerConversation({
       };
     });
   }, [roomMessages]);
+  const shouldShowConversationStart =
+    roomMessages.length > 0 && !messagePagination.hasMore;
 
   const messagesById = useMemo(() => {
     const nextMessagesById = new Map();
@@ -5382,6 +5394,12 @@ function MessengerConversation({
                   </span>
                 </div>
               </div>
+            ) : null}
+
+            {shouldShowConversationStart ? (
+              <ConversationStartMarker>
+                You have reached the beginning. This is where your conversation started.
+              </ConversationStartMarker>
             ) : null}
 
             {groupedMessages.map(

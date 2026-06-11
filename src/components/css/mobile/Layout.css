@@ -1841,6 +1841,37 @@
   white-space: nowrap;
 }
 
+.parent-layout-page__timeline-start {
+  justify-self: center;
+  max-width: min(100%, 460px);
+  min-height: 34px;
+  margin: 2px auto 6px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(48, 64, 80, 0.13);
+  border-radius: 999px;
+  color: #3d4858;
+  background: rgba(250, 252, 255, 0.92);
+  box-shadow: 0 8px 22px rgba(26, 39, 58, 0.06);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 760;
+  text-align: center;
+}
+
+.parent-layout-page__timeline-start svg {
+  flex: 0 0 auto;
+  color: #667085;
+}
+
+.parent-layout-page__timeline-start span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .parent-layout-page__messages-end {
   width: 1px;
   height: 1px;
@@ -9552,7 +9583,6 @@ video.parent-layout-page__attachment-modal-media {
     min-height: 38px;
   }
 }
-
 
 
 
