@@ -3,6 +3,7 @@ const MAX_CACHED_CONTACTS = 500;
 const MAX_CACHED_ROOMS = 250;
 const MAX_CACHED_CONVERSATIONS = 80;
 const MAX_CACHED_MESSAGES_PER_ROOM = 350;
+const MAX_CACHED_LOGS_PER_ROOM = 200;
 
 function getEmptyMessengerUiCache() {
   return {
@@ -134,6 +135,37 @@ function sanitizeMessagesForCache(messages) {
     .slice(-MAX_CACHED_MESSAGES_PER_ROOM);
 }
 
+function sanitizeLogForCache(log) {
+  if (!log || typeof log !== "object") {
+    return null;
+  }
+
+  const nextLog = cloneSerializable(log, null);
+
+  if (!nextLog || typeof nextLog !== "object" || !nextLog.id) {
+    return null;
+  }
+
+  return nextLog;
+}
+
+function sanitizeLogsForCache(logs) {
+  return (Array.isArray(logs) ? logs : [])
+    .map(sanitizeLogForCache)
+    .filter(Boolean)
+    .sort((first, second) => {
+      const firstTime = new Date(first.created_at || 0).getTime();
+      const secondTime = new Date(second.created_at || 0).getTime();
+
+      if (firstTime === secondTime) {
+        return Number(first.id || 0) - Number(second.id || 0);
+      }
+
+      return firstTime - secondTime;
+    })
+    .slice(-MAX_CACHED_LOGS_PER_ROOM);
+}
+
 function sanitizePaginationForCache(pagination) {
   return {
     hasMore: Boolean(pagination?.hasMore),
@@ -143,6 +175,7 @@ function sanitizePaginationForCache(pagination) {
 
 export function sanitizeConversationForCache(conversation) {
   return {
+    logs: sanitizeLogsForCache(conversation?.logs),
     messages: sanitizeMessagesForCache(conversation?.messages),
     pagination: sanitizePaginationForCache(conversation?.pagination),
     updatedAt: conversation?.updatedAt || new Date().toISOString(),

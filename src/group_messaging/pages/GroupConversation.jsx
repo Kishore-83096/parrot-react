@@ -3365,7 +3365,7 @@ function GroupConversation({
 }) {
   const [roomMessages, setRoomMessages] = useState([]);
   const [logs, setLogs] = useState(() =>
-    Array.isArray(selectedRoom?.latest_logs) ? selectedRoom.latest_logs : [],
+    Array.isArray(cachedConversation?.logs) ? cachedConversation.logs : [],
   );
   const [roomMessagesCacheRoomId, setRoomMessagesCacheRoomId] = useState(null);
   const [roomMessage, setRoomMessage] = useState("");
@@ -3452,9 +3452,6 @@ function GroupConversation({
 
   useEffect(() => {
     const nextRoomId = selectedRoom?.id || null;
-    const nextLogs = Array.isArray(selectedRoom?.latest_logs)
-      ? selectedRoom.latest_logs
-      : [];
 
     setLogs((currentLogs) => {
       if (!nextRoomId) {
@@ -3466,11 +3463,9 @@ function GroupConversation({
         String(logsRoomIdRef.current || "") === String(nextRoomId);
       logsRoomIdRef.current = nextRoomId;
 
-      return isSameRoom
-        ? mergeLogs(currentLogs, nextLogs)
-        : mergeLogs([], nextLogs);
+      return isSameRoom ? currentLogs : [];
     });
-  }, [selectedRoom?.id, selectedRoom?.latest_logs]);
+  }, [selectedRoom?.id]);
 
   useEffect(() => {
     setMessageInfoModal({
@@ -4072,9 +4067,9 @@ function GroupConversation({
 
         setRoomMessagesCacheRoomId(roomId);
         setLogs((currentLogs) =>
-          mode === "replace"
-            ? mergeLogs([], nextLogs)
-            : mergeLogs(currentLogs, nextLogs),
+          mode === "prepend"
+            ? mergeLogs(currentLogs, nextLogs)
+            : mergeLogs([], nextLogs),
         );
         setRoomMessages((currentMessages) =>
           mode === "prepend" || mode === "merge"
@@ -4157,6 +4152,11 @@ function GroupConversation({
 
     if (canUseCachedConversation) {
       setRoomMessages(cachedMessages);
+      setLogs(
+        Array.isArray(cachedRoomConversation?.logs)
+          ? mergeLogs([], cachedRoomConversation.logs)
+          : [],
+      );
       setMessagePagination({
         hasMore: Boolean(cachedPagination?.hasMore),
         nextBeforeMessageId: cachedPagination?.nextBeforeMessageId || null,
@@ -4188,10 +4188,12 @@ function GroupConversation({
     }
 
     onConversationCacheChange?.(selectedRoom.id, {
+      logs,
       messages: roomMessages,
       pagination: messagePagination,
     });
   }, [
+    logs,
     messagePagination,
     onConversationCacheChange,
     roomMessages,
