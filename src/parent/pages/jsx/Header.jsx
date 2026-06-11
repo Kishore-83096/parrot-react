@@ -20,6 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
+import SmartAvatar from "../../../components/SmartAvatar.jsx";
 import {
   getMessengerErrorMessage,
   getMessengerUserCryptoDevices,
@@ -357,6 +358,7 @@ function Header({
   const [activeLinkedDevicesTab, setActiveLinkedDevicesTab] = useState("devices");
   const [profile, setProfile] = useState(null);
   const [profileForm, setProfileForm] = useState(() => getProfileForm(user));
+  const [profilePicturePreviewUrl, setProfilePicturePreviewUrl] = useState("");
   const [accountForm, setAccountForm] = useState(() => getEmptyAccountForm());
   const [blockManagementContacts, setBlockManagementContacts] = useState(
     () => contacts,
@@ -456,6 +458,18 @@ function Header({
   const email =
     accountDisplay?.email || user?.email || (username ? `${username}@epost.com` : "");
   const profilePicture = displayProfile?.profile_picture;
+  useEffect(() => {
+    const file = profileForm.profile_picture_file;
+    if (!file || typeof URL === "undefined") {
+      setProfilePicturePreviewUrl("");
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    setProfilePicturePreviewUrl(previewUrl);
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [profileForm.profile_picture_file]);
   const currentCryptoDevice = cryptoDevices.find(
     (device) => device.device_id === currentCryptoDeviceId,
   );
@@ -2007,16 +2021,14 @@ function Header({
               ) : (
                 <>
                   <div className="parent-layout-page__profile-identity">
-                    <span
+                    <SmartAvatar
                       className="parent-layout-page__profile-picture"
-                      aria-hidden="true"
-                    >
-                      {profilePicture ? (
-                        <img src={profilePicture} alt="" />
-                      ) : (
-                        <UserRound size={24} />
-                      )}
-                    </span>
+                      src={profilePicture}
+                      firstName={displayProfile?.first_name}
+                      lastName={displayProfile?.last_name}
+                      username={username}
+                      fallback="P"
+                    />
                     <div>
                       <strong>{getProfileName(displayProfile, username)}</strong>
                       <small>
@@ -2087,6 +2099,21 @@ function Header({
                   <span className="parent-layout-page__field-label">
                     Profile Picture
                   </span>
+                  <div className="parent-layout-page__profile-picture-preview">
+                    <SmartAvatar
+                      className="parent-layout-page__profile-picture"
+                      src={profilePicturePreviewUrl || profilePicture}
+                      firstName={profileForm.first_name || displayProfile?.first_name}
+                      lastName={profileForm.last_name || displayProfile?.last_name}
+                      username={username}
+                      fallback="P"
+                    />
+                    <small>
+                      {profilePicturePreviewUrl
+                        ? "Selected image preview"
+                        : "Profile picture preview"}
+                    </small>
+                  </div>
                   <input
                     name="profile_picture_file"
                     type="file"
@@ -2820,16 +2847,16 @@ function Header({
                     }`}
                     key={contact.account_number}
                   >
-                    <span
+                    <SmartAvatar
                       className="parent-layout-page__contact-avatar"
-                      aria-hidden="true"
-                    >
-                      {contact.profile_picture ? (
-                        <img src={contact.profile_picture} alt="" />
-                      ) : (
-                        getContactInitials(contact)
-                      )}
-                    </span>
+                      src={contact.profile_picture}
+                      initials={getContactInitials(contact)}
+                      firstName={contact.first_name}
+                      lastName={contact.last_name}
+                      name={getContactName(contact)}
+                      username={contact.username}
+                      fallback="P"
+                    />
 
                     <span className="parent-layout-page__contact-text">
                       <strong>{getContactName(contact)}</strong>
@@ -2972,16 +2999,16 @@ function Header({
                     }`}
                     key={contact.account_number}
                   >
-                    <span
+                    <SmartAvatar
                       className="parent-layout-page__contact-avatar"
-                      aria-hidden="true"
-                    >
-                      {contact.profile_picture ? (
-                        <img src={contact.profile_picture} alt="" />
-                      ) : (
-                        getContactInitials(contact)
-                      )}
-                    </span>
+                      src={contact.profile_picture}
+                      initials={getContactInitials(contact)}
+                      firstName={contact.first_name}
+                      lastName={contact.last_name}
+                      name={getContactName(contact)}
+                      username={contact.username}
+                      fallback="P"
+                    />
 
                     <span className="parent-layout-page__contact-text">
                       <strong>{getContactName(contact)}</strong>
@@ -3428,13 +3455,14 @@ function Header({
       {isMenuOpen ? (
         <div className="parent-header__menu" role="menu">
           <div className="parent-header__menu-title">
-            <span className="parent-header__avatar" aria-hidden="true">
-              {profilePicture ? (
-                <img src={profilePicture} alt="" />
-              ) : (
-                <UserRound size={20} />
-              )}
-            </span>
+            <SmartAvatar
+              className="parent-header__avatar"
+              src={profilePicture}
+              firstName={displayProfile?.first_name}
+              lastName={displayProfile?.last_name}
+              username={username}
+              fallback="P"
+            />
             <div>
               <h1>{displayName}</h1>
             </div>

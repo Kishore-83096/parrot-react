@@ -2,6 +2,7 @@ import { Check, ImagePlus, LoaderCircle, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
+import SmartAvatar from "../../components/SmartAvatar.jsx";
 import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import {
@@ -204,16 +205,16 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
                       onClick={() => toggleContact(accountNumber)}
                       disabled={isSubmitting}
                     >
-                      <span
+                      <SmartAvatar
                         className="parent-layout-page__contact-avatar"
-                        aria-hidden="true"
-                      >
-                        {contact.profile_picture ? (
-                          <img src={contact.profile_picture} alt="" />
-                        ) : (
-                          getContactInitials(contact)
-                        )}
-                      </span>
+                        src={contact.profile_picture}
+                        initials={getContactInitials(contact)}
+                        firstName={contact.first_name}
+                        lastName={contact.last_name}
+                        name={getContactName(contact)}
+                        username={contact.username}
+                        fallback="P"
+                      />
                       <span>
                         <strong>{getContactName(contact)}</strong>
                         <small>{accountNumber}</small>

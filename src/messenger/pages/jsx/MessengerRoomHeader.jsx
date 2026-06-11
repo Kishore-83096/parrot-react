@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
+import SmartAvatar from "../../../components/SmartAvatar.jsx";
 import {
   markMessengerRoomRead,
   refreshMessengerPresenceVisibility,
@@ -575,16 +576,16 @@ function MessengerRoomHeader({
   return (
     <>
       <div className="parent-layout-page__conversation-header">
-        <span
+        <SmartAvatar
           className="parent-layout-page__conversation-avatar"
-          aria-hidden="true"
-        >
-          {selectedConversationAvatar ? (
-            <img src={selectedConversationAvatar} alt="" />
-          ) : (
-            getInitials(selectedConversationName)
-          )}
-        </span>
+          src={selectedConversationAvatar}
+          initials={getInitials(selectedConversationName)}
+          firstName={peerProfile?.first_name}
+          lastName={peerProfile?.last_name}
+          name={selectedConversationName}
+          username={peerProfile?.username}
+          fallback="P"
+        />
 
         <div className="parent-layout-page__conversation-title">
           <div className="parent-layout-page__conversation-title-row">

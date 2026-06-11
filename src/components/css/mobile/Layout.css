@@ -234,6 +234,8 @@
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-purple), var(--layout-blue));
   box-shadow: 0 14px 26px rgba(122, 53, 245, 0.22);
+  font-size: 14px;
+  font-weight: 850;
   overflow: hidden;
 }
 
@@ -246,6 +248,21 @@
   object-fit: cover;
   object-position: center;
   border-radius: inherit;
+}
+
+.parent-avatar-fallback {
+  min-width: 0;
+  display: block;
+  padding: 0 2px;
+  overflow: hidden;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: 1;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .parent-header h1 {
@@ -3399,7 +3416,10 @@
   inset: 0;
   display: grid;
   place-items: center;
+  align-content: center;
+  gap: 8px;
   pointer-events: none;
+  text-align: center;
 }
 
 .parent-layout-page__message-attachment-image-fallback {
@@ -3415,6 +3435,15 @@
 .parent-layout-page__attachment-image-fallback--stage {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.12);
+}
+
+.parent-layout-page__image-fallback-text {
+  max-width: min(210px, calc(100% - 22px));
+  color: currentColor;
+  font-size: 11px;
+  line-height: 1.25;
+  font-weight: 820;
+  overflow-wrap: anywhere;
 }
 
 .parent-layout-page__message-attachment-pdf-thumb {
@@ -5821,6 +5850,8 @@ video.parent-layout-page__attachment-modal-media {
   border-radius: 18px;
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-blue), var(--layout-purple));
+  font-size: 16px;
+  font-weight: 850;
   overflow: hidden;
   box-shadow: 0 14px 28px rgba(122, 53, 245, 0.18);
 }
@@ -5834,6 +5865,26 @@ video.parent-layout-page__attachment-modal-media {
   object-fit: cover;
   object-position: center;
   border-radius: inherit;
+}
+
+.parent-layout-page__profile-picture-preview {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.parent-layout-page__profile-picture-preview .parent-layout-page__profile-picture {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+}
+
+.parent-layout-page__profile-picture-preview small {
+  min-width: 0;
+  color: var(--layout-muted);
+  font-size: 12px;
+  font-weight: 720;
 }
 
 .parent-layout-page__profile-identity div {
@@ -9583,6 +9634,3 @@ video.parent-layout-page__attachment-modal-media {
     min-height: 38px;
   }
 }
-
-
-

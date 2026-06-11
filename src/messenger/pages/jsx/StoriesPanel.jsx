@@ -23,6 +23,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import SmartAvatar, {
+  IMAGE_CLOUD_ERROR_MESSAGE,
+} from "../../../components/SmartAvatar.jsx";
 import {
   createMessengerClientMessageId,
   createMessengerStory,
@@ -347,20 +350,47 @@ function StoryAvatar({ accountNumber, contacts, contact, hasRing = false }) {
       : null;
 
   return (
-    <span
+    <SmartAvatar
       className={`parent-layout-page__story-avatar${hasRing ? " has-ring" : ""}`}
-      aria-hidden="true"
-    >
-      {displayContact?.profile_picture ? (
-        <img src={displayContact.profile_picture} alt="" />
-      ) : (
-        getStoryContactInitials({
-          accountNumber,
-          contacts,
-          fallbackContact: displayContact,
-        })
-      )}
-    </span>
+      src={displayContact?.profile_picture}
+      initials={getStoryContactInitials({
+        accountNumber,
+        contacts,
+        fallbackContact: displayContact,
+      })}
+      firstName={displayContact?.first_name}
+      lastName={displayContact?.last_name}
+      name={displayContact?.alias_name || displayContact?.username}
+      username={displayContact?.username}
+      fallback="P"
+    />
+  );
+}
+
+function StoryMediaImage({ src }) {
+  const [imageStatus, setImageStatus] = useState(src ? "loading" : "error");
+
+  useEffect(() => {
+    setImageStatus(src ? "loading" : "error");
+  }, [src]);
+
+  if (imageStatus === "error") {
+    return (
+      <div className="parent-layout-page__story-stage-message">
+        <ImageIcon size={28} aria-hidden="true" />
+        <span>{IMAGE_CLOUD_ERROR_MESSAGE}</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      className={imageStatus === "ready" ? undefined : "parent-layout-page__image-loading"}
+      src={src}
+      alt=""
+      onLoad={() => setImageStatus("ready")}
+      onError={() => setImageStatus("error")}
+    />
   );
 }
 
@@ -2683,7 +2713,7 @@ function StoryViewer({
                   </button>
                 </>
               ) : (
-                <img src={mediaUrl} alt="" />
+                <StoryMediaImage src={mediaUrl} />
               )}
               {mediaStoryCaption ? (
                 <p className="parent-layout-page__story-media-text-overlay">

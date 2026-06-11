@@ -1,6 +1,7 @@
 import { Crown, MoreVertical, Shield, X } from "lucide-react";
 import { useState } from "react";
 
+import SmartAvatar from "../../components/SmartAvatar.jsx";
 import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getInitials } from "../../messenger/pages/jsx/roomHelpers.js";
 import GroupSettingsModal from "./GroupSettingsModal.jsx";
@@ -45,9 +46,13 @@ function GroupRoomHeader({
 
   return (
     <div className="parent-layout-page__conversation-header parent-layout-page__group-header">
-      <span className="parent-layout-page__conversation-avatar" aria-hidden="true">
-        {avatarUrl ? <img src={avatarUrl} alt="" /> : getInitials(groupName)}
-      </span>
+      <SmartAvatar
+        className="parent-layout-page__conversation-avatar"
+        src={avatarUrl}
+        initials={getInitials(groupName)}
+        name={groupName}
+        fallback="G"
+      />
 
       <div className="parent-layout-page__conversation-title">
         <div className="parent-layout-page__conversation-title-row">

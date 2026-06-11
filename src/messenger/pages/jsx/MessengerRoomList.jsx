@@ -15,6 +15,7 @@ import {
   getMessengerErrorMessage,
   getMessengerRooms,
 } from "../../api.js";
+import SmartAvatar from "../../../components/SmartAvatar.jsx";
 import CreateGroupModal from "../../../group_messaging/pages/CreateGroupModal.jsx";
 import GroupPeopleIcon from "../../../components/icons/GroupPeopleIcon.jsx";
 import { decryptGroupRoomsForUser } from "../../../group_messaging/e2ee/messages.js";
@@ -269,23 +270,22 @@ function MessengerRoomList({
                 key={room.id}
                 onClick={() => onSelectRoom(room, contact)}
               >
-                <span
+                <SmartAvatar
                   className={`parent-layout-page__contact-avatar${
                     isPeerOnline ? " is-online" : ""
                   }`}
-                  aria-hidden="true"
+                  src={isGroup ? room.avatar_url : contact?.profile_picture}
+                  initials={getRoomInitials(room, contact, peer)}
+                  firstName={contact?.first_name || peer?.first_name}
+                  lastName={contact?.last_name || peer?.last_name}
+                  name={isGroup ? room.title : getContactName(contact || peer)}
+                  username={contact?.username || peer?.username}
+                  fallback={isGroup ? "G" : "P"}
                 >
-                  {isGroup && room.avatar_url ? (
-                    <img src={room.avatar_url} alt="" />
-                  ) : contact?.profile_picture ? (
-                    <img src={contact.profile_picture} alt="" />
-                  ) : (
-                    getRoomInitials(room, contact, peer)
-                  )}
                   {isPeerOnline ? (
                     <span className="parent-layout-page__presence-dot" />
                   ) : null}
-                </span>
+                </SmartAvatar>
 
                 <span className="parent-layout-page__contact-text">
                   <strong

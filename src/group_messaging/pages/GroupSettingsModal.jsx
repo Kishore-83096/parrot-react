@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import SmartAvatar from "../../components/SmartAvatar.jsx";
 import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import { getInitials } from "../../messenger/pages/jsx/roomHelpers.js";
@@ -430,9 +431,13 @@ function GroupSettingsModal({
         </button>
 
         <div className="parent-layout-page__modal-header parent-layout-page__group-settings-header">
-          <span className="parent-layout-page__group-settings-avatar" aria-hidden="true">
-            {room?.avatar_url ? <img src={room.avatar_url} alt="" /> : getInitials(groupName)}
-          </span>
+          <SmartAvatar
+            className="parent-layout-page__group-settings-avatar"
+            src={room?.avatar_url}
+            initials={getInitials(groupName)}
+            name={groupName}
+            fallback="G"
+          />
           <div className="parent-layout-page__group-settings-title">
             <div className="parent-layout-page__group-settings-title-row">
               <h2 id="group-settings-title">{groupName}</h2>
@@ -553,13 +558,16 @@ function GroupSettingsModal({
                           onClick={() => toggleContact(accountNumber)}
                           disabled={isBusy}
                         >
-                          <span className="parent-layout-page__contact-avatar" aria-hidden="true">
-                            {contact.profile_picture ? (
-                              <img src={contact.profile_picture} alt="" />
-                            ) : (
-                              getContactInitials(contact)
-                            )}
-                          </span>
+                          <SmartAvatar
+                            className="parent-layout-page__contact-avatar"
+                            src={contact.profile_picture}
+                            initials={getContactInitials(contact)}
+                            firstName={contact.first_name}
+                            lastName={contact.last_name}
+                            name={getContactName(contact)}
+                            username={contact.username}
+                            fallback="P"
+                          />
                           <span>
                             <strong>{getContactName(contact)}</strong>
                             <small>{accountNumber}</small>
@@ -612,9 +620,12 @@ function GroupSettingsModal({
                   }`}
                   key={participant.user_id}
                 >
-                  <span className="parent-layout-page__contact-avatar" aria-hidden="true">
-                    {getInitials(participantName)}
-                  </span>
+                  <SmartAvatar
+                    className="parent-layout-page__contact-avatar"
+                    initials={getInitials(participantName)}
+                    name={participantName}
+                    fallback="P"
+                  />
                   <span>
                     <strong>{participantName}</strong>
                     <small>{participant.account_number}</small>

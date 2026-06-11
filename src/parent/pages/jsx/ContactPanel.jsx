@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
+import SmartAvatar from "../../../components/SmartAvatar.jsx";
 import {
   getParentContacts,
   saveParentContact,
@@ -469,16 +470,16 @@ function ContactPanel({
                   key={contact.account_number}
                   onClick={() => onSelectContact(contact)}
                 >
-                  <span
+                  <SmartAvatar
                     className="parent-layout-page__contact-avatar"
-                    aria-hidden="true"
-                  >
-                    {contact.profile_picture ? (
-                      <img src={contact.profile_picture} alt="" />
-                    ) : (
-                      getContactInitials(contact)
-                    )}
-                  </span>
+                    src={contact.profile_picture}
+                    initials={getContactInitials(contact)}
+                    firstName={contact.first_name}
+                    lastName={contact.last_name}
+                    name={getContactName(contact)}
+                    username={contact.username}
+                    fallback="P"
+                  />
 
                   <span className="parent-layout-page__contact-text">
                     <strong>{getContactName(contact)}</strong>

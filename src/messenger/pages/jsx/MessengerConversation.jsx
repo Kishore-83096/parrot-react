@@ -35,6 +35,7 @@ import {
   useState,
 } from "react";
 
+import { IMAGE_CLOUD_ERROR_MESSAGE } from "../../../components/SmartAvatar.jsx";
 import {
   createMessengerClientMessageId,
   deleteMessengerMessage,
@@ -1189,10 +1190,13 @@ function getMediaResourceTransfer(mediaResource) {
   return null;
 }
 
+const IMAGE_LOAD_TIMEOUT_MS = 10000;
+
 function CachedImage({
   alt,
   fallbackClassName,
   fallbackSize = 24,
+  showErrorText = false,
   src,
 }) {
   const [imageStatus, setImageStatus] = useState(src ? "loading" : "error");
@@ -1200,6 +1204,20 @@ function CachedImage({
   useEffect(() => {
     setImageStatus(src ? "loading" : "error");
   }, [src]);
+
+  useEffect(() => {
+    if (!src || imageStatus !== "loading") {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setImageStatus((currentStatus) =>
+        currentStatus === "loading" ? "error" : currentStatus,
+      );
+    }, IMAGE_LOAD_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [imageStatus, src]);
 
   const shouldShowImage = Boolean(src) && imageStatus !== "error";
 
@@ -1219,8 +1237,17 @@ function CachedImage({
         />
       ) : null}
       {imageStatus !== "ready" ? (
-        <span className={fallbackClassName} aria-hidden="true">
+        <span
+          className={fallbackClassName}
+          aria-hidden="true"
+          title={imageStatus === "error" ? IMAGE_CLOUD_ERROR_MESSAGE : undefined}
+        >
           <ImageIcon size={fallbackSize} />
+          {imageStatus === "error" && showErrorText ? (
+            <span className="parent-layout-page__image-fallback-text">
+              {IMAGE_CLOUD_ERROR_MESSAGE}
+            </span>
+          ) : null}
         </span>
       ) : null}
     </>
@@ -2182,6 +2209,7 @@ function AttachmentDocumentPreview({ attachment, initialPlayback = null }) {
           alt={label}
           fallbackClassName="parent-layout-page__attachment-image-fallback parent-layout-page__attachment-image-fallback--stage"
           fallbackSize={42}
+          showErrorText
         />
       </div>
     );
