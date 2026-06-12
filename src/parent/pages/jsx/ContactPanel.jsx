@@ -13,6 +13,8 @@ import { createPortal } from "react-dom";
 
 import parrotIcon from "../../../assets/favicon.svg";
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
+import GroupPeopleIcon from "../../../components/icons/GroupPeopleIcon.jsx";
+import CreateGroupModal from "../../../group_messaging/pages/CreateGroupModal.jsx";
 import {
   getParentContacts,
   saveParentContact,
@@ -60,12 +62,14 @@ function ContactPanel({
   contacts,
   selectedContact,
   onContactsChange,
+  onGroupCreated,
   onSelectContact,
 }) {
   const [contactsMessage, setContactsMessage] = useState("");
   const [isContactsLoading, setIsContactsLoading] = useState(false);
   const [contactSearch, setContactSearch] = useState("");
   const [isAddContactModalOpen, setIsAddContactModalOpen] = useState(false);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [addContactForm, setAddContactForm] = useState(addContactInitialForm);
   const [searchedContact, setSearchedContact] = useState(null);
   const [addContactMessage, setAddContactMessage] = useState(null);
@@ -424,14 +428,25 @@ function ContactPanel({
           />
         </div>
 
-        <button
-          className="parent-layout-page__add-contact-button"
-          type="button"
-          onClick={openAddContactModal}
-        >
-          <UserPlus size={18} aria-hidden="true" />
-          <span>Add Contact</span>
-        </button>
+        <div className="parent-layout-page__contacts-actions">
+          <button
+            className="parent-layout-page__add-contact-button"
+            type="button"
+            onClick={openAddContactModal}
+          >
+            <UserPlus size={18} aria-hidden="true" />
+            <span>Add Contact</span>
+          </button>
+
+          <button
+            className="parent-layout-page__create-group-button"
+            type="button"
+            onClick={() => setIsCreateGroupOpen(true)}
+          >
+            <GroupPeopleIcon size={18} aria-hidden="true" />
+            <span>Create Group</span>
+          </button>
+        </div>
 
         {contactsMessage ? (
           <p className="parent-layout-page__contacts-message" role="alert">
@@ -499,6 +514,15 @@ function ContactPanel({
       </div>
 
       {addContactModal ? createPortal(addContactModal, document.body) : null}
+      {isCreateGroupOpen ? (
+        <CreateGroupModal
+          contacts={contacts}
+          onClose={() => setIsCreateGroupOpen(false)}
+          onGroupCreated={(room) => {
+            onGroupCreated?.(room);
+          }}
+        />
+      ) : null}
     </>
   );
 }

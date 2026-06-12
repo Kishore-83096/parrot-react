@@ -1,4 +1,4 @@
-import { MessagesSquare, UsersRound } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Layout from "../../../components/Layout.jsx";
@@ -187,6 +187,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       : "chats";
   });
   const activePanelTabRef = useRef(activePanelTab);
+  const [accountPanelHost, setAccountPanelHost] = useState(null);
+  const [isAccountPanelOpen, setIsAccountPanelOpen] = useState(false);
   const [contacts, setContacts] = useState(
     () => initialMessengerUiCache.contacts,
   );
@@ -602,6 +604,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     setToast(null);
   }, []);
 
+  const handleAccountPanelHost = useCallback((node) => {
+    setAccountPanelHost(node);
+  }, []);
+
   useEffect(() => {
     activePanelTabRef.current = activePanelTab;
 
@@ -611,6 +617,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   }, [activePanelTab]);
 
   const changePanelTab = (nextTab) => {
+    if (isAccountPanelOpen) {
+      setIsAccountPanelOpen(false);
+    }
+
     if (activePanelTab === nextTab) {
       return;
     }
@@ -621,6 +631,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
     setActivePanelTab(nextTab);
     pushLoggedInHistoryView({ panelTab: nextTab });
+  };
+
+  const toggleAccountPanel = () => {
+    setIsAccountPanelOpen((currentValue) => !currentValue);
   };
 
   const handleContactsChange = useCallback((nextContacts) => {
@@ -1459,7 +1473,12 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   });
 
   const contactPanelContent =
-    activePanelTab === "stories" ? (
+    isAccountPanelOpen ? (
+      <div
+        className="parent-layout-page__account-panel-host"
+        ref={handleAccountPanelHost}
+      />
+    ) : activePanelTab === "stories" ? (
       <StoriesListPanel
         contacts={contacts}
         controller={storiesController}
@@ -1470,6 +1489,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         contacts={contacts}
         selectedContact={selectedContact}
         onContactsChange={handleContactsChange}
+        onGroupCreated={handleGroupCreated}
         onSelectContact={handleSelectContact}
       />
     ) : (
@@ -1481,7 +1501,6 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         onlineUserIds={onlineUserIds}
         e2eeRecoveryVersion={e2eeRecoveryVersion}
         onContactsChange={handleContactsChange}
-        onGroupCreated={handleGroupCreated}
         onRoomsChange={handleRoomsChange}
         onSelectRoom={handleSelectRoom}
       />
@@ -1517,15 +1536,6 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
           </span>
         ) : null}
       </button>
-      <button
-        className={activePanelTab === "contacts" ? "is-active" : ""}
-        type="button"
-        onClick={() => changePanelTab("contacts")}
-        aria-label="Contacts"
-        title="Contacts"
-      >
-        <UsersRound size={22} aria-hidden="true" />
-      </button>
     </nav>
   );
 
@@ -1536,12 +1546,16 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       <Layout
         contactHeader={
           <Header
+            accountPanelHost={accountPanelHost}
             contacts={contacts}
             user={user}
             defaultDevicePromptVersion={defaultDevicePromptVersion}
+            isAccountPanelActive={isAccountPanelOpen}
             onContactsChange={handleContactsChange}
             onContactUpdated={handleHeaderContactUpdated}
             onDefaultDeviceChanged={handleDefaultDeviceChanged}
+            onOpenContactsPanel={() => changePanelTab("contacts")}
+            onToggleAccountPanel={toggleAccountPanel}
             onRecoveryKeyRequested={handleRecoveryKeyRequested}
             onLogout={handleLogout}
             onUserUpdate={onUserUpdate}

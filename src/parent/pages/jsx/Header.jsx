@@ -8,6 +8,7 @@ import {
   LogOut,
   Menu,
   Pencil,
+  Plus,
   Save,
   Search,
   ShieldCheck,
@@ -332,18 +333,21 @@ function getHeaderProfileHydrationKey(user) {
 }
 
 function Header({
+  accountPanelHost = null,
   contacts = [],
   user,
   defaultDevicePromptVersion = 0,
+  isAccountPanelActive = false,
   onContactsChange,
   onDefaultDeviceChanged,
   onContactUpdated,
+  onOpenContactsPanel,
+  onToggleAccountPanel,
   onRecoveryKeyRequested,
   onLogout,
   onUserUpdate,
   onToast,
 }) {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isLinkedDevicesModalOpen, setIsLinkedDevicesModalOpen] = useState(false);
@@ -449,10 +453,9 @@ function Header({
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
   const username = accountDisplay?.username || user?.username || "parrot_user";
-  const displayName =
-    [displayProfile?.first_name, displayProfile?.last_name]
-      .filter(Boolean)
-      .join(" ") || username;
+  const savedProfileName = [displayProfile?.first_name, displayProfile?.last_name]
+    .filter(Boolean)
+    .join(" ");
   const accountNumber =
     accountDisplay?.account_number || user?.account_number || "Account pending";
   const email =
@@ -701,7 +704,6 @@ function Header({
 
   const openProfileModal = () => {
     pushLoggedInHistoryView({ modal: "profile", profileTab: "view" });
-    setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
     setActiveProfileTab("view");
@@ -711,7 +713,6 @@ function Header({
 
   const openAccountModal = () => {
     pushLoggedInHistoryView({ modal: "account", accountTab: "password" });
-    setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
     setActiveAccountTab("password");
@@ -722,7 +723,6 @@ function Header({
 
   const openLinkedDevicesModal = () => {
     pushLoggedInHistoryView({ modal: "linkedDevices" });
-    setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
     setIsDefaultDeviceSelectionRequired(false);
@@ -735,7 +735,6 @@ function Header({
 
   const openBlockManagementModal = () => {
     pushLoggedInHistoryView({ modal: "blockManagement" });
-    setIsMenuOpen(false);
     setIsProfileModalOpen(false);
     setIsAccountModalOpen(false);
     setIsLinkedDevicesModalOpen(false);
@@ -748,7 +747,6 @@ function Header({
 
   const openGhostManagementModal = () => {
     pushLoggedInHistoryView({ modal: "ghostManagement" });
-    setIsMenuOpen(false);
     setIsProfileModalOpen(false);
     setIsAccountModalOpen(false);
     setIsLinkedDevicesModalOpen(false);
@@ -769,7 +767,6 @@ function Header({
     }
 
     handledDefaultDevicePromptVersionRef.current = defaultDevicePromptVersion;
-    setIsMenuOpen(false);
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
     setIsDefaultDeviceSelectionRequired(true);
@@ -3434,6 +3431,106 @@ function Header({
     </div>
   ) : null;
 
+  const accountPanel = isAccountPanelActive ? (
+    <div className="parent-header__menu parent-header__menu--panel">
+      <section className="parent-header__id-card" aria-label="Account identity">
+        <div className="parent-header__id-card-header">
+          <span>Account number</span>
+          <strong>{accountNumber}</strong>
+        </div>
+        <div className="parent-header__id-card-main">
+          <div className="parent-header__id-card-copy">
+            <dl className="parent-header__id-details">
+              {savedProfileName ? (
+                <div className="parent-header__id-row parent-header__id-row--name">
+                  <dt>Name</dt>
+                  <dd>{savedProfileName}</dd>
+                </div>
+              ) : null}
+              <div className="parent-header__id-row">
+                <dt>Username</dt>
+                <dd>@{username}</dd>
+              </div>
+              <div className="parent-header__id-row">
+                <dt>Email</dt>
+                <dd>{email}</dd>
+              </div>
+            </dl>
+          </div>
+          <div className="parent-header__id-card-media">
+            <SmartAvatar
+              className="parent-header__avatar parent-header__avatar--id-card"
+              src={profilePicture}
+              firstName={displayProfile?.first_name}
+              lastName={displayProfile?.last_name}
+              username={username}
+              fallback="P"
+            />
+            <div className="parent-header__id-card-actions">
+              <button
+                className="parent-header__profile-button parent-header__profile-button--id-card"
+                type="button"
+                onClick={openProfileModal}
+              >
+                <UserRound size={13} aria-hidden="true" />
+                <span>Profile</span>
+              </button>
+              {onLogout ? (
+                <button
+                  className="parent-header__logout parent-header__logout--id-card"
+                  type="button"
+                  onClick={onLogout}
+                >
+                  <LogOut size={13} aria-hidden="true" />
+                  <span>Logout</span>
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="parent-header__menu-actions">
+        <button
+          className="parent-header__account-button"
+          type="button"
+          onClick={openAccountModal}
+        >
+          <ShieldCheck size={16} aria-hidden="true" />
+          <span>Account</span>
+        </button>
+
+        <button
+          className="parent-header__account-button"
+          type="button"
+          onClick={openBlockManagementModal}
+        >
+          <Ban size={16} aria-hidden="true" />
+          <span>Block Management</span>
+        </button>
+
+        <button
+          className="parent-header__account-button"
+          type="button"
+          onClick={openGhostManagementModal}
+        >
+          <EyeOff size={16} aria-hidden="true" />
+          <span>Ghost Management</span>
+        </button>
+
+        <button
+          className="parent-header__account-button"
+          type="button"
+          onClick={openLinkedDevicesModal}
+        >
+          <ShieldCheck size={16} aria-hidden="true" />
+          <span>Linked devices</span>
+        </button>
+
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="parent-header">
       <div className="parent-header__brand">
@@ -3441,115 +3538,33 @@ function Header({
         <span>Parrot</span>
       </div>
 
-      <button
-        className="parent-header__menu-button"
-        type="button"
-        onClick={() => setIsMenuOpen((currentValue) => !currentValue)}
-        aria-expanded={isMenuOpen}
-        aria-label="Account menu"
-        title="Account menu"
-      >
-        <Menu size={22} aria-hidden="true" />
-      </button>
+      <div className="parent-header__actions">
+        <button
+          className="parent-header__menu-button parent-header__contacts-button"
+          type="button"
+          onClick={onOpenContactsPanel}
+          aria-label="Open contacts"
+          title="Open contacts"
+        >
+          <Plus size={22} aria-hidden="true" />
+        </button>
 
-      {isMenuOpen ? (
-        <div className="parent-header__menu" role="menu">
-          <div className="parent-header__menu-title">
-            <SmartAvatar
-              className="parent-header__avatar"
-              src={profilePicture}
-              firstName={displayProfile?.first_name}
-              lastName={displayProfile?.last_name}
-              username={username}
-              fallback="P"
-            />
-            <div>
-              <h1>{displayName}</h1>
-            </div>
-          </div>
-
-          <table className="parent-header__account-table">
-            <tbody>
-              <tr>
-                <th scope="row">Username</th>
-                <td>{username}</td>
-              </tr>
-              <tr>
-                <th scope="row">Account</th>
-                <td>{accountNumber}</td>
-              </tr>
-              <tr>
-                <th scope="row">Email</th>
-                <td>{email}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div className="parent-header__menu-actions">
-            <button
-              className="parent-header__profile-button"
-              type="button"
-              onClick={openProfileModal}
-              role="menuitem"
-            >
-              <UserRound size={16} aria-hidden="true" />
-              <span>Profile</span>
-            </button>
-
-            <button
-              className="parent-header__account-button"
-              type="button"
-              onClick={openAccountModal}
-              role="menuitem"
-            >
-              <ShieldCheck size={16} aria-hidden="true" />
-              <span>Account</span>
-            </button>
-
-            <button
-              className="parent-header__account-button"
-              type="button"
-              onClick={openBlockManagementModal}
-              role="menuitem"
-            >
-              <Ban size={16} aria-hidden="true" />
-              <span>Block Management</span>
-            </button>
-
-            <button
-              className="parent-header__account-button"
-              type="button"
-              onClick={openGhostManagementModal}
-              role="menuitem"
-            >
-              <EyeOff size={16} aria-hidden="true" />
-              <span>Ghost Management</span>
-            </button>
-
-            <button
-              className="parent-header__account-button"
-              type="button"
-              onClick={openLinkedDevicesModal}
-              role="menuitem"
-            >
-              <ShieldCheck size={16} aria-hidden="true" />
-              <span>Linked devices</span>
-            </button>
-
-            {onLogout ? (
-              <button
-                className="parent-header__logout"
-                type="button"
-                onClick={onLogout}
-                role="menuitem"
-              >
-                <LogOut size={16} aria-hidden="true" />
-                <span>Logout</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+        <button
+          className="parent-header__menu-button"
+          type="button"
+          onClick={onToggleAccountPanel}
+          aria-expanded={isAccountPanelActive}
+          aria-pressed={isAccountPanelActive}
+          aria-label={isAccountPanelActive ? "Close account menu" : "Account menu"}
+          title={isAccountPanelActive ? "Close account menu" : "Account menu"}
+        >
+          {isAccountPanelActive ? (
+            <X size={22} aria-hidden="true" />
+          ) : (
+            <Menu size={22} aria-hidden="true" />
+          )}
+        </button>
+      </div>
 
       {profileModal ? createPortal(profileModal, document.body) : null}
       {accountModal ? createPortal(accountModal, document.body) : null}
@@ -3565,6 +3580,9 @@ function Header({
         : null}
       {defaultDevicePasswordUpdateModal
         ? createPortal(defaultDevicePasswordUpdateModal, document.body)
+        : null}
+      {accountPanel && accountPanelHost
+        ? createPortal(accountPanel, accountPanelHost)
         : null}
     </div>
   );

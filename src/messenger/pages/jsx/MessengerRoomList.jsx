@@ -16,7 +16,6 @@ import {
   getMessengerRooms,
 } from "../../api.js";
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
-import CreateGroupModal from "../../../group_messaging/pages/CreateGroupModal.jsx";
 import GroupPeopleIcon from "../../../components/icons/GroupPeopleIcon.jsx";
 import { decryptGroupRoomsForUser } from "../../../group_messaging/e2ee/messages.js";
 import { decryptRoomsForUser } from "../../e2ee/messages.js";
@@ -73,7 +72,6 @@ function MessengerRoomList({
   onlineUserIds,
   e2eeRecoveryVersion,
   onContactsChange,
-  onGroupCreated,
   onRoomsChange,
   onSelectRoom,
 }) {
@@ -81,7 +79,6 @@ function MessengerRoomList({
   const [isRoomsLoading, setIsRoomsLoading] = useState(false);
   const [roomSearch, setRoomSearch] = useState("");
   const [hasLoadedContactMap, setHasLoadedContactMap] = useState(false);
-  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const roomsRef = useRef(rooms);
 
   useEffect(() => {
@@ -199,15 +196,6 @@ function MessengerRoomList({
           placeholder="Search chats"
           aria-label="Search chats"
         />
-        <button
-          className="parent-layout-page__create-group-button"
-          type="button"
-          onClick={() => setIsCreateGroupOpen(true)}
-          aria-label="Create group"
-          title="Create group"
-        >
-          <GroupPeopleIcon size={20} aria-hidden="true" />
-        </button>
       </div>
 
       {roomsMessage ? (
@@ -343,15 +331,6 @@ function MessengerRoomList({
         </div>
       )}
 
-      {isCreateGroupOpen ? (
-        <CreateGroupModal
-          contacts={contacts}
-          onClose={() => setIsCreateGroupOpen(false)}
-          onGroupCreated={(room) => {
-            onGroupCreated?.(room);
-          }}
-        />
-      ) : null}
     </div>
   );
 }
