@@ -586,7 +586,11 @@ function GroupSettingsPanel({
         ) : null}
 
         <section className="parent-layout-page__group-settings-section">
-          <div className="parent-layout-page__group-settings-member-list">
+          <div
+            className={`parent-layout-page__group-settings-member-list${
+              canManageGroup ? "" : " is-member-view"
+            }`}
+          >
             {participants.length === 0 ? (
               <p className="parent-layout-page__group-member-empty">
                 No current members.

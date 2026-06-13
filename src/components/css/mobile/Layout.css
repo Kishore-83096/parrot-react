@@ -6080,6 +6080,11 @@ video.parent-layout-page__attachment-modal-media {
   scrollbar-width: none;
 }
 
+.parent-layout-page__group-settings-member-list.is-member-view {
+  min-height: min(360px, 48svh);
+  max-height: min(560px, 58svh);
+}
+
 .parent-layout-page__group-settings-member-list::-webkit-scrollbar {
   width: 0;
   height: 0;

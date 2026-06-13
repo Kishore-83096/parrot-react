@@ -11,7 +11,7 @@ import {
   UserPlus,
   Video,
 } from "@/components/icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import ParrotToast from "../../../components/ParrotToast.jsx";
 import { loginParent, registerParent } from "../../api.js";
@@ -57,6 +57,14 @@ const loginInitialForm = {
   password: "",
 };
 
+const SPLASH_DURATION_MS = 1000;
+
+function waitForSplashDuration() {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, SPLASH_DURATION_MS);
+  });
+}
+
 function getApiErrorMessage(error, fallbackMessage) {
   const errors = error.response?.data?.errors;
 
@@ -84,6 +92,8 @@ function getAccountToastDetails(user, fallbackUsername) {
 
 function WelcomePage({ onLoginSuccess }) {
   const [activeModal, setActiveModal] = useState(null);
+  const [isLandingSplashVisible, setIsLandingSplashVisible] = useState(true);
+  const [isLoginSplashVisible, setIsLoginSplashVisible] = useState(false);
   const [registerForm, setRegisterForm] = useState(registerInitialForm);
   const [registerMessage, setRegisterMessage] = useState(null);
   const [loginForm, setLoginForm] = useState(loginInitialForm);
@@ -91,6 +101,7 @@ function WelcomePage({ onLoginSuccess }) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [toast, setToast] = useState(null);
+  const isMountedRef = useRef(false);
 
   const closeModal = useCallback(() => {
     setActiveModal(null);
@@ -102,6 +113,19 @@ function WelcomePage({ onLoginSuccess }) {
 
   const closeToast = useCallback(() => {
     setToast(null);
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    const splashTimerId = window.setTimeout(() => {
+      setIsLandingSplashVisible(false);
+    }, SPLASH_DURATION_MS);
+
+    return () => {
+      isMountedRef.current = false;
+      window.clearTimeout(splashTimerId);
+    };
   }, []);
 
   useEffect(() => {
@@ -219,7 +243,14 @@ function WelcomePage({ onLoginSuccess }) {
       };
       const response = await loginParent(payload);
       const user = response.data?.user || {};
+      setIsLoginSplashVisible(true);
+      await waitForSplashDuration();
 
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setIsLoginSplashVisible(false);
       setLoginMessage({
         type: "success",
         text: "Login successful.",
@@ -230,8 +261,13 @@ function WelcomePage({ onLoginSuccess }) {
         message: "Your session is active.",
         details: getAccountToastDetails(user, payload.username),
       });
+      setIsLoggingIn(false);
       onLoginSuccess?.(user);
     } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
       const errorMessage = getApiErrorMessage(
         error,
         "Login failed. Check your username and password.",
@@ -246,13 +282,19 @@ function WelcomePage({ onLoginSuccess }) {
         title: "Login failed",
         message: errorMessage,
       });
-    } finally {
       setIsLoggingIn(false);
     }
   };
 
   return (
     <main className="parent-welcome">
+      {isLandingSplashVisible || isLoginSplashVisible ? (
+        <div className="parent-welcome__splash" aria-hidden="true">
+          <ParrotIcon className="parent-welcome__splash-icon" />
+          <span className="parent-welcome__splash-label">PARROT</span>
+        </div>
+      ) : null}
+
       <header className="parent-welcome__header">
         <a className="parent-welcome__brand" href="/" aria-label="Parrot home">
           <ParrotIcon />
