@@ -8,7 +8,7 @@ import {
   Paperclip,
   Search,
   Video,
-} from "lucide-react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -16,7 +16,7 @@ import {
   getMessengerRooms,
 } from "../../api.js";
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
-import GroupPeopleIcon from "../../../components/icons/GroupPeopleIcon.jsx";
+import { GroupPeopleIcon } from "@/components/icons";
 import { decryptGroupRoomsForUser } from "../../../group_messaging/e2ee/messages.js";
 import { decryptRoomsForUser } from "../../e2ee/messages.js";
 import { getParentContacts } from "../../../parent/api.js";

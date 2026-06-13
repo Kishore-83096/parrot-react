@@ -5,17 +5,17 @@ import {
   Eye,
   EyeOff,
   MoreVertical,
+  ParrotIcon,
   Pencil,
   Save,
   Trash2,
   Unlock,
   UserPlus,
   X,
-} from "lucide-react";
+} from "@/components/icons";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import parrotIcon from "../../../assets/favicon.svg";
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
 import {
   markMessengerRoomRead,
@@ -514,7 +514,7 @@ function MessengerRoomHeader({
         </button>
 
         <div className="parent-layout-page__modal-header">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <div>
             <h2 id="parent-edit-contact-title">Edit Contact</h2>
           </div>

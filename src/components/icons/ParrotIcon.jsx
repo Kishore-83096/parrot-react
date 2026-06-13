@@ -1,10 +1,10 @@
-const PARROT_ICON_SRC = "/favicon.svg?v=8";
+import parrotIcon from "./ParrotIcon.svg";
 
 function ParrotIcon({ className = "" }) {
   return (
     <img
       className={className}
-      src={PARROT_ICON_SRC}
+      src={parrotIcon}
       alt=""
       aria-hidden="true"
       draggable="false"

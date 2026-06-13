@@ -1,19 +1,19 @@
 import {
   AlertCircle,
   CheckCircle2,
+  GroupPeopleIcon,
+  ParrotIcon,
   Save,
   Search,
   ShieldAlert,
   UserPlus,
   UsersRound,
   X,
-} from "lucide-react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import parrotIcon from "../../../assets/favicon.svg";
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
-import GroupPeopleIcon from "../../../components/icons/GroupPeopleIcon.jsx";
 import CreateGroupModal from "../../../group_messaging/pages/CreateGroupModal.jsx";
 import {
   getParentContacts,
@@ -308,7 +308,7 @@ function ContactPanel({
         </button>
 
         <div className="parent-layout-page__modal-header">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <div>
             <h2 id="parent-add-contact-title">Add Contact</h2>
           </div>

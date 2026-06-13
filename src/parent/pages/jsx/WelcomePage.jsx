@@ -6,15 +6,15 @@ import {
   Mail,
   MessageCircle,
   Mic,
+  ParrotIcon,
   PhoneCall,
   UserPlus,
   Video,
-} from "lucide-react";
+} from "@/components/icons";
 import { useCallback, useEffect, useState } from "react";
 
 import ParrotToast from "../../../components/ParrotToast.jsx";
 import { loginParent, registerParent } from "../../api.js";
-import parrotIcon from "../../../assets/favicon.svg";
 import "../css/WelcomePage.css";
 
 const featureCards = [
@@ -255,7 +255,7 @@ function WelcomePage({ onLoginSuccess }) {
     <main className="parent-welcome">
       <header className="parent-welcome__header">
         <a className="parent-welcome__brand" href="/" aria-label="Parrot home">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <span>Parrot</span>
         </a>
 
@@ -297,7 +297,7 @@ function WelcomePage({ onLoginSuccess }) {
         <div className="parent-welcome__preview" aria-hidden="true">
           <div className="parent-welcome__phone">
             <div className="parent-welcome__phone-top">
-              <img src={parrotIcon} alt="" />
+              <ParrotIcon />
               <strong>Today</strong>
             </div>
 
@@ -355,7 +355,7 @@ function WelcomePage({ onLoginSuccess }) {
             </button>
 
             <div className="parent-welcome__modal-header">
-              <img src={parrotIcon} alt="" aria-hidden="true" />
+              <ParrotIcon />
               <div>
                 <p>Login</p>
                 <h2 id="parent-login-title">Welcome Back</h2>
@@ -442,7 +442,7 @@ function WelcomePage({ onLoginSuccess }) {
             </button>
 
             <div className="parent-welcome__modal-header">
-              <img src={parrotIcon} alt="" aria-hidden="true" />
+              <ParrotIcon />
               <div>
                 <p>Create Account</p>
                 <h2 id="parent-register-title">Join Parrot</h2>

@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Info } from "lucide-react";
+import { AlertCircle, CheckCircle2, Info } from "@/components/icons";
 import { useEffect } from "react";
 
 import "./ParrotToast.css";

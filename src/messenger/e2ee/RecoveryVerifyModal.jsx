@@ -1,4 +1,4 @@
-import { Eye, EyeOff, KeyRound, LoaderCircle, X } from "lucide-react";
+import { Eye, EyeOff, KeyRound, LoaderCircle, X } from "@/components/icons";
 import { useState } from "react";
 
 import { verifyRecoveryKeyBackup } from "./recovery.js";

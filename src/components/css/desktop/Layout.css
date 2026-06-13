@@ -2844,9 +2844,12 @@
 
 .parent-layout-page__message-action-modal {
   width: min(420px, calc(100vw - 32px));
+  max-height: calc(100svh - 32px);
   padding: 18px;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
+  overflow: hidden;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 24px 70px rgba(67, 39, 110, 0.2);
@@ -2889,6 +2892,25 @@
   font-size: 13px;
   font-weight: 720;
   line-height: 1.35;
+}
+
+.parent-layout-page__message-action-body {
+  min-height: 0;
+  padding-right: 4px;
+  display: grid;
+  gap: 12px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 60, 255, 0.22) transparent;
+}
+
+.parent-layout-page__message-action-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.parent-layout-page__message-action-body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(124, 60, 255, 0.22);
 }
 
 .parent-layout-page__message-action-attachments {
@@ -2982,6 +3004,82 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.parent-layout-page__message-action-controls.is-delete {
+  justify-content: flex-end;
+}
+
+.parent-layout-page__message-action-controls.is-composer {
+  min-width: 0;
+  min-height: 52px;
+  padding-top: 10px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: end;
+  gap: 9px;
+  border-top: 1px solid rgba(124, 60, 255, 0.12);
+}
+
+.parent-layout-page__message-action-compose-attach,
+.parent-layout-page__message-action-compose-submit {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.parent-layout-page__message-action-compose-attach {
+  color: var(--layout-purple-deep);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 10px 20px rgba(95, 52, 167, 0.08);
+}
+
+.parent-layout-page__message-action-compose-submit {
+  color: #ffffff;
+  background: linear-gradient(135deg, #7c3cff, #3f8cff);
+  box-shadow: 0 12px 24px rgba(63, 140, 255, 0.2);
+}
+
+.parent-layout-page__message-action-compose-submit:disabled,
+.parent-layout-page__message-action-compose-attach:has(input:disabled) {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.parent-layout-page__message-action-compose-input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  max-height: 112px;
+  padding: 11px 13px;
+  resize: none;
+  overflow: auto;
+  border: 1px solid rgba(124, 60, 255, 0.14);
+  border-radius: 15px;
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.56);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 650;
+  outline: none;
+  scrollbar-width: none;
+}
+
+.parent-layout-page__message-action-compose-input::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.parent-layout-page__message-action-compose-input:focus {
+  border-color: rgba(63, 140, 255, 0.42);
+  box-shadow: 0 0 0 4px rgba(63, 140, 255, 0.1);
 }
 
 .parent-layout-page__message-read-row {
@@ -4407,6 +4505,232 @@
   background: rgba(232, 255, 248, 0.86);
 }
 
+.parent-layout-page__attachment-preview-list {
+  min-width: 0;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(124, 60, 255, 0.22) transparent;
+}
+
+.parent-layout-page__attachment-preview-list.is-composer {
+  grid-area: files;
+}
+
+.parent-layout-page__attachment-preview-list::-webkit-scrollbar {
+  height: 6px;
+}
+
+.parent-layout-page__attachment-preview-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(124, 60, 255, 0.22);
+}
+
+.parent-layout-page__attachment-preview-card,
+.parent-layout-page__edit-attachment-card {
+  min-width: 0;
+  position: relative;
+  display: grid;
+  grid-template-rows: 68px minmax(0, 1fr);
+  gap: 6px;
+  padding: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(84, 94, 120, 0.16);
+  border-radius: 8px;
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 10px 22px rgba(68, 74, 98, 0.08);
+}
+
+.parent-layout-page__attachment-preview-card {
+  width: 104px;
+  min-height: 116px;
+  flex: 0 0 104px;
+}
+
+.parent-layout-page__attachment-preview-list.is-composer .parent-layout-page__attachment-preview-card {
+  width: 98px;
+  min-height: 108px;
+  flex-basis: 98px;
+  grid-template-rows: 60px minmax(0, 1fr);
+}
+
+.parent-layout-page__attachment-preview-visual {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 7px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(232, 238, 247, 0.9));
+}
+
+.parent-layout-page__attachment-preview-visual img,
+.parent-layout-page__attachment-preview-visual video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.parent-layout-page__attachment-preview-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #36506f;
+  background: rgba(54, 80, 111, 0.1);
+}
+
+.parent-layout-page__attachment-preview-icon.is-pdf,
+.parent-layout-page__attachment-preview-card.is-pdf .parent-layout-page__attachment-preview-icon {
+  color: #b42318;
+  background: rgba(180, 35, 24, 0.1);
+}
+
+.parent-layout-page__attachment-preview-icon.is-audio,
+.parent-layout-page__attachment-preview-card.is-audio .parent-layout-page__attachment-preview-icon {
+  color: #0f6f58;
+  background: rgba(15, 159, 122, 0.12);
+}
+
+.parent-layout-page__attachment-preview-icon.is-video,
+.parent-layout-page__attachment-preview-card.is-video .parent-layout-page__attachment-preview-icon {
+  color: #1f5fbf;
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.parent-layout-page__attachment-preview-meta {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  align-content: start;
+}
+
+.parent-layout-page__attachment-preview-meta strong,
+.parent-layout-page__attachment-preview-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.parent-layout-page__attachment-preview-meta strong {
+  color: var(--layout-text);
+  font-size: 11px;
+  line-height: 1.15;
+  font-weight: 800;
+}
+
+.parent-layout-page__attachment-preview-meta span {
+  color: var(--layout-muted);
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 720;
+}
+
+.parent-layout-page__attachment-preview-remove {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(23, 31, 46, 0.7);
+  box-shadow: 0 6px 14px rgba(23, 31, 46, 0.18);
+  cursor: pointer;
+}
+
+.parent-layout-page__attachment-preview-remove:hover,
+.parent-layout-page__attachment-preview-remove:focus-visible {
+  background: rgba(180, 35, 24, 0.92);
+}
+
+.parent-layout-page__edit-attachment-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+
+.parent-layout-page__edit-attachment-card {
+  min-height: 120px;
+}
+
+.parent-layout-page__edit-attachment-card.is-removed {
+  border-style: dashed;
+  background: rgba(248, 250, 252, 0.62);
+}
+
+.parent-layout-page__edit-attachment-card.is-removed .parent-layout-page__attachment-preview-visual {
+  opacity: 0.38;
+  filter: grayscale(0.7);
+}
+
+.parent-layout-page__edit-attachment-card.is-replaced {
+  border-color: rgba(15, 159, 122, 0.34);
+  box-shadow: 0 10px 22px rgba(15, 159, 122, 0.12);
+}
+
+.parent-layout-page__edit-attachment-actions {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  display: flex;
+  gap: 5px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.parent-layout-page__edit-attachment-card:hover .parent-layout-page__edit-attachment-actions,
+.parent-layout-page__edit-attachment-card:focus-within .parent-layout-page__edit-attachment-actions,
+.parent-layout-page__edit-attachment-card.is-removed .parent-layout-page__edit-attachment-actions,
+.parent-layout-page__edit-attachment-card.is-replaced .parent-layout-page__edit-attachment-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.parent-layout-page__edit-attachment-actions button,
+.parent-layout-page__edit-attachment-actions label {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.84);
+  border-radius: 999px;
+  color: #ffffff;
+  background: rgba(23, 31, 46, 0.74);
+  box-shadow: 0 8px 16px rgba(23, 31, 46, 0.18);
+  cursor: pointer;
+}
+
+.parent-layout-page__edit-attachment-actions button:hover,
+.parent-layout-page__edit-attachment-actions button:focus-visible,
+.parent-layout-page__edit-attachment-actions label:hover,
+.parent-layout-page__edit-attachment-actions label:focus-within {
+  background: rgba(37, 99, 235, 0.94);
+}
+
+.parent-layout-page__edit-attachment-actions button:disabled,
+.parent-layout-page__edit-attachment-actions label:has(input:disabled) {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.parent-layout-page__edit-attachment-actions input {
+  display: none;
+}
+
 .parent-layout-page__message-form textarea::-webkit-scrollbar {
   width: 0;
   height: 0;
@@ -5562,56 +5886,84 @@ video.parent-layout-page__attachment-modal-media {
   background: linear-gradient(135deg, var(--layout-purple), var(--layout-purple-deep));
 }
 
-.parent-layout-page__group-settings-modal {
-  width: min(680px, calc(100vw - 32px));
-  display: grid;
-  gap: 14px;
-  overflow: auto;
-}
-
-.parent-layout-page__group-settings-header {
-  margin-bottom: 2px;
-}
-
-.parent-layout-page__group-settings-title {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.parent-layout-page__group-settings-title-row {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.parent-layout-page__group-settings-title-row h2 {
-  min-width: 0;
+.parent-layout-page__group-settings-tab {
+  grid-template-areas: "settings";
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.parent-layout-page__group-settings-avatar {
-  width: 48px;
-  height: 48px;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 16px;
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--layout-purple), var(--layout-blue));
-  font-size: 14px;
-  font-weight: 850;
-}
-
-.parent-layout-page__group-settings-avatar img {
+.parent-layout-page__group-settings-content {
+  grid-area: settings;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
   width: 100%;
   height: 100%;
-  display: block;
-  object-fit: cover;
+  padding: 18px 20px 20px;
+  animation: parentGroupSettingsOpen 360ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+  transform-origin: top center;
+}
+
+.parent-layout-page__group-settings-modal {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.parent-layout-page__group-settings-modal::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.parent-layout-page__group-settings-content > * {
+  animation: parentGroupSettingsItemOpen 420ms cubic-bezier(0.2, 0.82, 0.2, 1) both;
+}
+
+.parent-layout-page__group-settings-content > *:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.parent-layout-page__group-settings-content > *:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.parent-layout-page__group-settings-content > *:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+@keyframes parentGroupSettingsOpen {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.992);
+    filter: blur(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes parentGroupSettingsItemOpen {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .parent-layout-page__group-settings-content,
+  .parent-layout-page__group-settings-content > * {
+    animation: none;
+  }
 }
 
 .parent-layout-page__group-settings-section {

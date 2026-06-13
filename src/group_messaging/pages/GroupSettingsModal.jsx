@@ -9,13 +9,10 @@ import {
   Trash2,
   UserMinus,
   UserPlus,
-  X,
-} from "lucide-react";
+} from "@/components/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import SmartAvatar from "../../components/SmartAvatar.jsx";
-import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import { getInitials } from "../../messenger/pages/jsx/roomHelpers.js";
 import {
@@ -67,6 +64,18 @@ function getSavedContactName(contactNamesByAccountNumber, accountNumber) {
     : "";
 }
 
+function getSavedContact(contactsByAccountNumber, accountNumber) {
+  const normalizedAccountNumber = String(accountNumber || "");
+
+  return normalizedAccountNumber
+    ? contactsByAccountNumber?.get?.(normalizedAccountNumber) || null
+    : null;
+}
+
+function getCurrentUserProfilePicture(user) {
+  return user?.profile_picture || user?.profile?.profile_picture || "";
+}
+
 function getParticipantName(participant, contactNamesByAccountNumber, currentUserId) {
   if (currentUserId && Number(participant?.user_id) === Number(currentUserId)) {
     return "You";
@@ -96,7 +105,7 @@ function normalizeResult(response) {
   return response.data?.result || response.data || {};
 }
 
-function GroupSettingsModal({
+function GroupSettingsPanel({
   contacts,
   selectedRoom,
   user,
@@ -130,6 +139,19 @@ function GroupSettingsModal({
   const canManageGroup =
     !isGroupDeleted && (currentRole === "admin" || currentRole === "sub_admin");
   const isAdmin = currentRole === "admin";
+  const savedContactsByAccountNumber = useMemo(() => {
+    const contactsByAccountNumber = new Map();
+
+    (Array.isArray(contacts) ? contacts : []).forEach((contact) => {
+      const accountNumber = String(contact?.account_number || "");
+
+      if (accountNumber) {
+        contactsByAccountNumber.set(accountNumber, contact);
+      }
+    });
+
+    return contactsByAccountNumber;
+  }, [contacts]);
   const contactNamesByAccountNumber = useMemo(() => {
     const namesByAccountNumber = new Map();
 
@@ -175,7 +197,6 @@ function GroupSettingsModal({
   }, [availableContacts, memberSearch]);
   const selectedCount = selectedAccounts.size;
   const isBusy = Boolean(loadingAction);
-  const groupName = room?.title || `Group ${room?.id || ""}`.trim();
 
   useEffect(() => {
     setRoom(selectedRoom);
@@ -412,47 +433,14 @@ function GroupSettingsModal({
   const renderActionSpinner = (actionName) =>
     loadingAction === actionName ? <LoaderCircle size={14} aria-hidden="true" /> : null;
 
-  return createPortal(
-    <div className="parent-layout-page__modal-backdrop" role="presentation">
-      <section
-        className="parent-layout-page__modal parent-layout-page__group-modal parent-layout-page__group-settings-modal"
-        aria-labelledby="group-settings-title"
-        role="dialog"
-        aria-modal="true"
+  return (
+    <section
+      className="parent-layout-page__conversation parent-layout-page__group-settings-tab"
+      aria-label="Group settings"
+    >
+      <div
+        className="parent-layout-page__group-settings-content parent-layout-page__group-settings-modal"
       >
-        <button
-          className="parent-layout-page__modal-close"
-          type="button"
-          onClick={onClose}
-          aria-label="Close group settings"
-          disabled={isBusy}
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-
-        <div className="parent-layout-page__modal-header parent-layout-page__group-settings-header">
-          <SmartAvatar
-            className="parent-layout-page__group-settings-avatar"
-            src={room?.avatar_url}
-            initials={getInitials(groupName)}
-            name={groupName}
-            fallback="G"
-          />
-          <div className="parent-layout-page__group-settings-title">
-            <div className="parent-layout-page__group-settings-title-row">
-              <h2 id="group-settings-title">{groupName}</h2>
-              <span
-                className="parent-layout-page__group-room-badge"
-                aria-label="Group chat"
-                title="Group chat"
-              >
-                <GroupPeopleIcon size={12} strokeWidth={2.2} aria-hidden="true" />
-              </span>
-            </div>
-            <p>{participants.length} member{participants.length === 1 ? "" : "s"}</p>
-          </div>
-        </div>
-
         {message ? (
           <p className="parent-layout-page__modal-error" role="alert">
             {message}
@@ -599,6 +587,11 @@ function GroupSettingsModal({
 
         <section className="parent-layout-page__group-settings-section">
           <div className="parent-layout-page__group-settings-member-list">
+            {participants.length === 0 ? (
+              <p className="parent-layout-page__group-member-empty">
+                No current members.
+              </p>
+            ) : null}
             {participants.map((participant) => {
               const role = getParticipantRole(participant);
               const isSelf = Number(participant.user_id) === currentUserId;
@@ -612,6 +605,16 @@ function GroupSettingsModal({
                 contactNamesByAccountNumber,
                 currentUserId,
               );
+              const savedContact = getSavedContact(
+                savedContactsByAccountNumber,
+                participant?.account_number,
+              );
+              const avatarProfile = isSelf ? user : savedContact;
+              const avatarSource = isSelf
+                ? getCurrentUserProfilePicture(user) ||
+                  savedContact?.profile_picture ||
+                  ""
+                : savedContact?.profile_picture || "";
 
               return (
                 <div
@@ -622,8 +625,20 @@ function GroupSettingsModal({
                 >
                   <SmartAvatar
                     className="parent-layout-page__contact-avatar"
-                    initials={getInitials(participantName)}
-                    name={participantName}
+                    src={avatarSource}
+                    initials={
+                      !isSelf && savedContact
+                        ? getContactInitials(savedContact)
+                        : getInitials(participantName)
+                    }
+                    firstName={avatarProfile?.first_name}
+                    lastName={avatarProfile?.last_name}
+                    name={
+                      !isSelf && savedContact
+                        ? getContactName(savedContact)
+                        : participantName
+                    }
+                    username={avatarProfile?.username}
                     fallback="P"
                   />
                   <span>
@@ -719,10 +734,9 @@ function GroupSettingsModal({
             </button>
           ) : null}
         </section>
-      </section>
-    </div>,
-    document.body,
+      </div>
+    </section>
   );
 }
 
-export default GroupSettingsModal;
+export default GroupSettingsPanel;

@@ -7,6 +7,7 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  ParrotIcon,
   Pencil,
   Plus,
   Save,
@@ -16,11 +17,10 @@ import {
   Unlock,
   UserRound,
   X,
-} from "lucide-react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import parrotIcon from "../../../assets/favicon.svg";
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
 import {
   getMessengerErrorMessage,
@@ -1950,7 +1950,7 @@ function Header({
         </button>
 
         <div className="parent-layout-page__modal-header">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <div>
             <h2 id="parent-profile-title">Profile</h2>
           </div>
@@ -2154,7 +2154,7 @@ function Header({
         </button>
 
         <div className="parent-layout-page__modal-header">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <div>
             <h2 id="parent-account-title">Account</h2>
           </div>
@@ -2394,7 +2394,7 @@ function Header({
         </button>
 
         <div className="parent-layout-page__modal-header">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <div>
             <h2 id="parent-default-device-password-title">
               {isCreatingDefaultDevicePassword
@@ -2565,7 +2565,7 @@ function Header({
         </button>
 
         <div className="parent-layout-page__modal-header">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <div>
             <h2 id="parent-default-device-password-update-title">
               Update default password
@@ -3072,7 +3072,7 @@ function Header({
         )}
 
         <div className="parent-layout-page__modal-header">
-          <img src={parrotIcon} alt="" aria-hidden="true" />
+          <ParrotIcon />
           <div>
             <h2 id="parent-linked-devices-title">Linked devices</h2>
           </div>
@@ -3534,7 +3534,7 @@ function Header({
   return (
     <div className="parent-header">
       <div className="parent-header__brand">
-        <img src={parrotIcon} alt="" aria-hidden="true" />
+        <ParrotIcon />
         <span>Parrot</span>
       </div>
 

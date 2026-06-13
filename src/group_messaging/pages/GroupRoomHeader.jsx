@@ -1,10 +1,8 @@
-import { Crown, MoreVertical, Shield, X } from "lucide-react";
-import { useState } from "react";
+import { Crown, MoreVertical, Shield, X } from "@/components/icons";
 
 import SmartAvatar from "../../components/SmartAvatar.jsx";
-import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
+import { GroupPeopleIcon } from "@/components/icons";
 import { getInitials } from "../../messenger/pages/jsx/roomHelpers.js";
-import GroupSettingsModal from "./GroupSettingsModal.jsx";
 
 function getCurrentUserId(user) {
   return Number(user?.id || user?.user_id || 0);
@@ -19,16 +17,13 @@ function getCurrentUserGroupRole(room, user) {
 }
 
 function GroupRoomHeader({
-  contacts,
+  isSettingsOpen = false,
   selectedRoom,
   user,
   onCloseConversation,
-  onGroupRemoved,
-  onGroupUpdated,
-  onToast,
+  onOpenMessages,
+  onOpenSettings,
 }) {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
   const groupName = selectedRoom?.title || `Group ${selectedRoom?.id || ""}`.trim();
   const avatarUrl = selectedRoom?.avatar_url || "";
   const memberCount = Number(selectedRoom?.member_count || selectedRoom?.participants?.length || 0);
@@ -36,7 +31,11 @@ function GroupRoomHeader({
   const isGroupDeleted = Boolean(selectedRoom?.is_deleted || selectedRoom?.deleted_at);
 
   const handleCloseConversation = () => {
-    setIsSettingsOpen(false);
+    if (isSettingsOpen) {
+      onOpenMessages?.();
+      return;
+    }
+
     onCloseConversation?.();
   };
 
@@ -88,39 +87,28 @@ function GroupRoomHeader({
       </div>
 
       <div className="parent-layout-page__conversation-actions">
-        <button
-          className="parent-layout-page__conversation-menu-button"
-          type="button"
-          onClick={() => setIsSettingsOpen(true)}
-          aria-label="Group settings"
-          aria-expanded={isSettingsOpen}
-          title="Group settings"
-        >
-          <MoreVertical size={22} aria-hidden="true" />
-        </button>
+        {!isSettingsOpen ? (
+          <button
+            className="parent-layout-page__conversation-menu-button"
+            type="button"
+            onClick={onOpenSettings}
+            aria-label="Group settings"
+            title="Group settings"
+          >
+            <MoreVertical size={22} aria-hidden="true" />
+          </button>
+        ) : null}
 
         <button
           className="parent-layout-page__conversation-close-button"
           type="button"
           onClick={handleCloseConversation}
-          aria-label="Close group room"
-          title="Close group"
+          aria-label={isSettingsOpen ? "Back to group chat" : "Close group room"}
+          title={isSettingsOpen ? "Back to chat" : "Close group"}
         >
           <X size={21} aria-hidden="true" />
         </button>
       </div>
-
-      {isSettingsOpen ? (
-        <GroupSettingsModal
-          contacts={contacts}
-          selectedRoom={selectedRoom}
-          user={user}
-          onClose={() => setIsSettingsOpen(false)}
-          onGroupRemoved={onGroupRemoved}
-          onGroupUpdated={onGroupUpdated}
-          onToast={onToast}
-        />
-      ) : null}
     </div>
   );
 }

@@ -23,7 +23,7 @@
   Volume1,
   Volume2,
   X,
-} from "lucide-react";
+} from "@/components/icons";
 import { createPortal } from "react-dom";
 import {
   Fragment,
@@ -81,6 +81,13 @@ import {
   MESSAGE_REACTION_KEYS,
   MESSAGE_REACTIONS,
 } from "../../reactions.js";
+import {
+  buildAttachmentEditPlan,
+  buildFinalEncryptedAttachments,
+  EditableAttachmentGrid,
+  MESSAGE_ATTACHMENT_ACCEPT,
+  SelectedAttachmentPreviewList,
+} from "./AttachmentPreviewControls.jsx";
 
 const MESSAGE_PAGE_SIZE = 20;
 const OLDER_MESSAGES_SCROLL_THRESHOLD = 8;
@@ -391,15 +398,15 @@ function getMessageAttachmentCount(message) {
   return Number(message?.attachment_count || 0);
 }
 
-function getMessageEditChangeType(currentText, nextText, hasAttachmentReplacement) {
+function getMessageEditChangeType(currentText, nextText, hasAttachmentUpdate) {
   const hasTextChange =
     String(currentText || "").trim() !== String(nextText || "").trim();
 
-  if (hasTextChange && hasAttachmentReplacement) {
+  if (hasTextChange && hasAttachmentUpdate) {
     return "text_attachments";
   }
 
-  if (hasAttachmentReplacement) {
+  if (hasAttachmentUpdate) {
     return "attachments";
   }
 
@@ -436,10 +443,17 @@ function createMessageActionReplacementFiles(incomingFiles, currentCount = 0) {
     };
   }
 
+  if (files.length > availableSlots) {
+    return {
+      error: `Only ${availableSlots} more file(s) can be selected.`,
+      files: [],
+    };
+  }
+
   const validFiles = [];
   let hasOversizedFile = false;
 
-  files.slice(0, availableSlots).forEach((file) => {
+  files.forEach((file) => {
     if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
       hasOversizedFile = true;
       return;
@@ -453,9 +467,7 @@ function createMessageActionReplacementFiles(incomingFiles, currentCount = 0) {
   });
 
   let error = "";
-  if (files.length > availableSlots) {
-    error = `Only ${availableSlots} more replacement file(s) can be selected.`;
-  } else if (hasOversizedFile) {
+  if (hasOversizedFile) {
     error = "One or more files exceed the 25 MB attachment limit.";
   }
 
@@ -469,10 +481,6 @@ function createSelectedFileId(file) {
     file.lastModified,
     Math.random().toString(36).slice(2),
   ].join("-");
-}
-
-function isVoiceNoteSelectedFile(selectedFile) {
-  return selectedFile?.attachmentKind === VOICE_NOTE_ATTACHMENT_KIND;
 }
 
 function isVoiceNoteAttachment(attachment) {
@@ -2640,8 +2648,12 @@ function MessageActionModal({
   actionState,
   onClose,
   onDraftChange,
+  onRemoveCurrentAttachment,
   onRemoveReplacementFile,
+  onReplaceCurrentAttachment,
   onReplacementFilesChange,
+  onRestoreCurrentAttachment,
+  resolveAttachmentPreviewUrl,
   onSubmit,
   receiverName,
 }) {
@@ -2658,16 +2670,19 @@ function MessageActionModal({
   const replacementFiles = Array.isArray(actionState.replacementFiles)
     ? actionState.replacementFiles
     : [];
+  const attachmentEditPlan = buildAttachmentEditPlan(
+    currentAttachments,
+    actionState,
+  );
   const currentText = isEdit
     ? getRenderableMessageText(actionState.message).trim()
     : "";
   const nextText = String(actionState.draft || "").trim();
   const hasTextChange = currentText !== nextText;
-  const hasAttachmentReplacement = replacementFiles.length > 0;
   const hasAnyContentAfterEdit = Boolean(
-    nextText || hasAttachmentReplacement || currentAttachments.length > 0,
+    nextText || attachmentEditPlan.finalAttachmentCount > 0,
   );
-  const hasEditChange = hasTextChange || hasAttachmentReplacement;
+  const hasEditChange = hasTextChange || attachmentEditPlan.hasAttachmentChanges;
   const title = isEdit ? "Edit message" : "Delete message";
   const timeoutMessage =
     "This message can only be edited or deleted for everyone within 15 minutes.";
@@ -2678,6 +2693,22 @@ function MessageActionModal({
     isExpired ||
     Boolean(blockedReason) ||
     (isEdit && (!hasAnyContentAfterEdit || !hasEditChange));
+  const handleDraftKeyDown = (event) => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent?.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    if (isSubmitDisabled) {
+      return;
+    }
+
+    event.currentTarget.form?.requestSubmit();
+  };
   const modal = (
     <div
       className="parent-layout-page__modal-backdrop"
@@ -2709,111 +2740,110 @@ function MessageActionModal({
                 : `Confirm delete for both sides, you and ${receiverName || "contact"}.`}
           </p>
         </header>
-        {modalError ? (
-          <p className="parent-layout-page__modal-error">{modalError}</p>
-        ) : null}
-        {!isExpired && isEdit ? (
-          <>
-            <textarea
-              className="parent-layout-page__message-action-textarea"
-              value={actionState.draft}
-              onChange={(event) => onDraftChange(event.target.value)}
-              rows={5}
-              maxLength={5000}
-              autoFocus
-            />
-            <div className="parent-layout-page__message-action-attachments">
-              {currentAttachments.length > 0 ? (
-                <div className="parent-layout-page__message-action-attachment-group">
-                  <span>Current attachments</span>
-                  <ul className="parent-layout-page__message-action-attachment-list">
-                    {currentAttachments.map((attachment, index) => (
-                      <li
-                        key={getAttachmentKey(attachment) || index}
-                        className="parent-layout-page__message-action-attachment-item"
-                      >
-                        <AttachmentIcon
-                          fileType={getAttachmentKind(attachment)}
-                          size={14}
-                        />
-                        <span>{getAttachmentLabel(attachment)}</span>
-                      </li>
-                    ))}
-                  </ul>
+        <div className="parent-layout-page__message-action-body">
+          {modalError ? (
+            <p className="parent-layout-page__modal-error">{modalError}</p>
+          ) : null}
+          {!isExpired && isEdit ? (
+            <>
+              {currentAttachments.length > 0 || replacementFiles.length > 0 ? (
+                <div className="parent-layout-page__message-action-attachments">
+                {currentAttachments.length > 0 ? (
+                  <div className="parent-layout-page__message-action-attachment-group">
+                    <span>Current attachments</span>
+                    <EditableAttachmentGrid
+                      attachments={currentAttachments}
+                      disabled={actionState.isSubmitting}
+                      onRemove={onRemoveCurrentAttachment}
+                      onReplace={onReplaceCurrentAttachment}
+                      onRestore={onRestoreCurrentAttachment}
+                      removedAttachmentKeys={actionState.removedAttachmentKeys}
+                      replacements={actionState.attachmentReplacements}
+                      resolvePreviewUrl={resolveAttachmentPreviewUrl}
+                    />
+                  </div>
+                ) : null}
+                {replacementFiles.length > 0 ? (
+                  <div className="parent-layout-page__message-action-attachment-group">
+                    <span>New attachments</span>
+                  <SelectedAttachmentPreviewList
+                    files={replacementFiles}
+                    onRemove={onRemoveReplacementFile}
+                    variant="edit"
+                  />
+                  </div>
+                ) : null}
                 </div>
               ) : null}
-              <div className="parent-layout-page__message-action-attachment-group">
-                <label className="parent-layout-page__message-action-file-button">
-                  <Paperclip size={15} aria-hidden="true" />
-                  <span>Select replacement files</span>
+            </>
+          ) : null}
+          {!isExpired && !isEdit ? (
+            <p className="parent-layout-page__message-action-copy">
+              The message content will be replaced with a deleted-message notice.
+            </p>
+          ) : null}
+        </div>
+        {!isExpired ? (
+          <div
+            className={`parent-layout-page__message-action-controls${
+              isEdit ? " is-composer" : " is-delete"
+            }`}
+          >
+            {isEdit ? (
+              <>
+                <label
+                  className="parent-layout-page__message-action-compose-attach"
+                  aria-label="Attach files"
+                  title="Attach files"
+                >
+                  <Paperclip size={18} aria-hidden="true" />
                   <input
                     className="parent-layout-page__message-action-file-input"
                     type="file"
                     multiple
+                    accept={MESSAGE_ATTACHMENT_ACCEPT}
                     onChange={onReplacementFilesChange}
                     disabled={actionState.isSubmitting}
                   />
                 </label>
-                {replacementFiles.length > 0 ? (
-                  <ul className="parent-layout-page__message-action-attachment-list">
-                    {replacementFiles.map((selectedFile) => (
-                      <li
-                        key={selectedFile.id}
-                        className="parent-layout-page__message-action-attachment-item"
-                      >
-                        <AttachmentIcon
-                          fileType={selectedFile.fileType}
-                          size={14}
-                        />
-                        <span>{selectedFile.file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => onRemoveReplacementFile(selectedFile.id)}
-                          disabled={actionState.isSubmitting}
-                          aria-label={`Remove ${selectedFile.file.name}`}
-                          title="Remove"
-                        >
-                          <X size={13} aria-hidden="true" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </div>
-          </>
-        ) : null}
-        {!isExpired && !isEdit ? (
-          <p className="parent-layout-page__message-action-copy">
-            The message content will be replaced with a deleted-message notice.
-          </p>
-        ) : null}
-        {!isExpired ? (
-          <div className="parent-layout-page__message-action-controls">
-            <button
-              type="button"
-              className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
-              onClick={onClose}
-              disabled={actionState.isSubmitting}
-            >
-              <span>Cancel</span>
-            </button>
-            <button
-              type="submit"
-              className={`parent-layout-page__modal-submit${
-                isEdit ? "" : " parent-layout-page__modal-submit--danger"
-              }`}
-              disabled={isSubmitDisabled}
-            >
-              {actionState.isSubmitting ? (
-                <LoaderCircle size={16} aria-hidden="true" />
-              ) : isEdit ? (
-                <Send size={16} aria-hidden="true" />
-              ) : (
-                <Trash2 size={16} aria-hidden="true" />
-              )}
-              <span>{isEdit ? "Send" : "Delete"}</span>
-            </button>
+                <textarea
+                  className="parent-layout-page__message-action-compose-input"
+                  value={actionState.draft}
+                  onChange={(event) => onDraftChange(event.target.value)}
+                  onKeyDown={handleDraftKeyDown}
+                  placeholder="Message"
+                  rows={1}
+                  maxLength={5000}
+                  autoFocus={currentAttachments.length === 0}
+                />
+                <button
+                  type="submit"
+                  className="parent-layout-page__message-action-compose-submit"
+                  disabled={isSubmitDisabled}
+                  aria-label="Send edited message"
+                  title="Send"
+                >
+                  {actionState.isSubmitting ? (
+                    <LoaderCircle size={18} aria-hidden="true" />
+                  ) : (
+                    <Send size={19} aria-hidden="true" />
+                  )}
+                </button>
+              </>
+            ) : (
+              <button
+                type="submit"
+                className="parent-layout-page__modal-submit parent-layout-page__modal-submit--danger"
+                disabled={isSubmitDisabled}
+              >
+                {actionState.isSubmitting ? (
+                  <LoaderCircle size={16} aria-hidden="true" />
+                ) : (
+                  <Trash2 size={16} aria-hidden="true" />
+                )}
+                <span>Delete</span>
+              </button>
+            )}
           </div>
         ) : null}
       </form>
@@ -2866,6 +2896,8 @@ function MessengerConversation({
     isSubmitting: false,
     message: null,
     mode: null,
+    attachmentReplacements: {},
+    removedAttachmentKeys: [],
     replacementFiles: [],
   });
   const [reactionPickerMessageId, setReactionPickerMessageId] = useState(null);
@@ -3573,6 +3605,7 @@ function MessengerConversation({
     setReplyTarget(null);
     setActiveMessageActionsId(null);
     setMessageActionModal({
+      attachmentReplacements: {},
       blockedReason: "",
       draft: "",
       error: "",
@@ -3580,6 +3613,7 @@ function MessengerConversation({
       isSubmitting: false,
       message: null,
       mode: null,
+      removedAttachmentKeys: [],
       replacementFiles: [],
     });
     setReactionPickerMessageId(null);
@@ -4215,6 +4249,8 @@ function MessengerConversation({
       isSubmitting: false,
       message: null,
       mode: null,
+      attachmentReplacements: {},
+      removedAttachmentKeys: [],
       replacementFiles: [],
     });
   }, []);
@@ -4248,6 +4284,8 @@ function MessengerConversation({
         isSubmitting: false,
         message,
         mode,
+        attachmentReplacements: {},
+        removedAttachmentKeys: [],
         replacementFiles: [],
       });
     },
@@ -4262,26 +4300,122 @@ function MessengerConversation({
     }));
   }, []);
 
+  const resolveMessageActionAttachmentPreviewUrl = useCallback(async (attachment) => {
+    if (!attachment) {
+      return "";
+    }
+
+    if (!isEncryptedAttachment(attachment)) {
+      return attachment.file_url || "";
+    }
+
+    const blob = await decryptEncryptedAttachmentBlob(attachment);
+    return URL.createObjectURL(blob);
+  }, []);
+
   const handleMessageActionReplacementFilesChange = useCallback((event) => {
     const incomingFiles = Array.from(event.target.files || []);
 
     setMessageActionModal((currentModal) => {
-      const currentFiles = Array.isArray(currentModal.replacementFiles)
-        ? currentModal.replacementFiles
-        : [];
+      const currentAttachments = getMessageAttachments(currentModal.message);
+      const editPlan = buildAttachmentEditPlan(currentAttachments, currentModal);
       const { error, files } = createMessageActionReplacementFiles(
         incomingFiles,
-        currentFiles.length,
+        editPlan.finalAttachmentCount,
       );
 
       return {
         ...currentModal,
         error,
-        replacementFiles: [...currentFiles, ...files],
+        replacementFiles: [
+          ...(Array.isArray(currentModal.replacementFiles)
+            ? currentModal.replacementFiles
+            : []),
+          ...files,
+        ],
       };
     });
 
     event.target.value = "";
+  }, []);
+
+  const handleReplaceMessageActionAttachment = useCallback((attachmentKey, event) => {
+    const incomingFiles = Array.from(event.target.files || []);
+
+    setMessageActionModal((currentModal) => {
+      const currentAttachments = getMessageAttachments(currentModal.message);
+      const editPlan = buildAttachmentEditPlan(currentAttachments, currentModal);
+      const isCurrentlyRemoved = editPlan.removedAttachmentKeys.has(attachmentKey);
+      const currentCount = isCurrentlyRemoved
+        ? editPlan.finalAttachmentCount
+        : MAX_MESSAGE_ATTACHMENTS - 1;
+      const { error, files } = createMessageActionReplacementFiles(
+        incomingFiles.slice(0, 1),
+        currentCount,
+      );
+
+      if (incomingFiles.length > 1) {
+        return {
+          ...currentModal,
+          error: "Select one replacement file for this attachment.",
+        };
+      }
+
+      if (error || files.length === 0) {
+        return {
+          ...currentModal,
+          error: error || "Select a replacement file.",
+        };
+      }
+
+      const nextReplacements = {
+        ...(currentModal.attachmentReplacements || {}),
+        [attachmentKey]: files[0],
+      };
+
+      return {
+        ...currentModal,
+        attachmentReplacements: nextReplacements,
+        error: "",
+        removedAttachmentKeys: (currentModal.removedAttachmentKeys || []).filter(
+          (currentKey) => currentKey !== attachmentKey,
+        ),
+      };
+    });
+
+    event.target.value = "";
+  }, []);
+
+  const handleRemoveMessageActionCurrentAttachment = useCallback((attachmentKey) => {
+    setMessageActionModal((currentModal) => {
+      const nextReplacements = { ...(currentModal.attachmentReplacements || {}) };
+      delete nextReplacements[attachmentKey];
+
+      return {
+        ...currentModal,
+        attachmentReplacements: nextReplacements,
+        error: "",
+        removedAttachmentKeys: Array.from(
+          new Set([...(currentModal.removedAttachmentKeys || []), attachmentKey]),
+        ),
+      };
+    });
+  }, []);
+
+  const handleRestoreMessageActionCurrentAttachment = useCallback((attachmentKey) => {
+    setMessageActionModal((currentModal) => {
+      const nextReplacements = { ...(currentModal.attachmentReplacements || {}) };
+      delete nextReplacements[attachmentKey];
+
+      return {
+        ...currentModal,
+        attachmentReplacements: nextReplacements,
+        error: "",
+        removedAttachmentKeys: (currentModal.removedAttachmentKeys || []).filter(
+          (currentKey) => currentKey !== attachmentKey,
+        ),
+      };
+    });
   }, []);
 
   const handleRemoveMessageActionReplacementFile = useCallback((fileId) => {
@@ -4336,21 +4470,21 @@ function MessengerConversation({
       const nextText = draft.trim();
       const existingAttachments =
         mode === "edit" ? getMessageAttachments(message) : [];
-      const replacementFiles =
-        mode === "edit" && Array.isArray(messageActionModal.replacementFiles)
-          ? messageActionModal.replacementFiles
-          : [];
-      const hasAttachmentReplacement = replacementFiles.length > 0;
+      const attachmentEditPlan =
+        mode === "edit"
+          ? buildAttachmentEditPlan(existingAttachments, messageActionModal)
+          : buildAttachmentEditPlan([], {});
+      const hasAttachmentUpdate = attachmentEditPlan.hasAttachmentChanges;
       const editChangeType =
         mode === "edit"
           ? getMessageEditChangeType(
               getRenderableMessageText(message),
               nextText,
-              hasAttachmentReplacement,
+              hasAttachmentUpdate,
             )
           : "";
       const hasAnyContentAfterEdit = Boolean(
-        nextText || hasAttachmentReplacement || existingAttachments.length > 0,
+        nextText || attachmentEditPlan.finalAttachmentCount > 0,
       );
 
       if (mode === "edit" && !hasAnyContentAfterEdit) {
@@ -4369,18 +4503,29 @@ function MessengerConversation({
         return;
       }
 
-      if (mode === "edit" && hasAttachmentReplacement && !message.is_encrypted) {
+      if (
+        mode === "edit" &&
+        attachmentEditPlan.finalAttachmentCount > MAX_MESSAGE_ATTACHMENTS
+      ) {
         setMessageActionModal((currentModal) => ({
           ...currentModal,
-          error: "Attachment replacement is available for encrypted messages only.",
+          error: `A message can include up to ${MAX_MESSAGE_ATTACHMENTS} attachments.`,
         }));
         return;
       }
 
-      if (mode === "edit" && hasAttachmentReplacement && !message.client_message_id) {
+      if (mode === "edit" && hasAttachmentUpdate && !message.is_encrypted) {
         setMessageActionModal((currentModal) => ({
           ...currentModal,
-          error: "Cannot replace attachments for this message.",
+          error: "Attachment editing is available for encrypted messages only.",
+        }));
+        return;
+      }
+
+      if (mode === "edit" && hasAttachmentUpdate && !message.client_message_id) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: "Cannot edit attachments for this message.",
         }));
         return;
       }
@@ -4395,11 +4540,18 @@ function MessengerConversation({
         let response;
         if (mode === "edit") {
           if (message.is_encrypted) {
-            const encryptedAttachments = hasAttachmentReplacement
-              ? await encryptSelectedFilesForMessage(replacementFiles, {
+            const encryptedUploadAttachments =
+              attachmentEditPlan.uploadFiles.length > 0
+                ? await encryptSelectedFilesForMessage(attachmentEditPlan.uploadFiles, {
                   clientMessageId: message.client_message_id,
                   recipientAccountNumber: selectedPeerAccountNumber,
                 })
+                : [];
+            const encryptedAttachments = hasAttachmentUpdate
+              ? buildFinalEncryptedAttachments(
+                  attachmentEditPlan,
+                  encryptedUploadAttachments,
+                )
               : existingAttachments;
             const text = await encryptMessageText({
               attachments: encryptedAttachments,
@@ -4412,11 +4564,14 @@ function MessengerConversation({
               text,
             };
 
-            if (hasAttachmentReplacement) {
+            if (hasAttachmentUpdate) {
               payload.client_message_id = message.client_message_id;
-              payload.encrypted_upload_intent_ids = encryptedAttachments
+              payload.attachment_update = true;
+              payload.encrypted_upload_intent_ids = encryptedUploadAttachments
                 .map((attachment) => attachment.upload_intent_id)
                 .filter(Boolean);
+              payload.retained_encrypted_upload_intent_ids =
+                attachmentEditPlan.retainedUploadIntentIds;
             }
 
             response = await editMessengerMessage(message.id, payload);
@@ -4609,10 +4764,15 @@ function MessengerConversation({
         return currentFiles;
       }
 
+      if (incomingFiles.length > availableSlots) {
+        setRoomMessage(`Only ${availableSlots} more file(s) can be attached.`);
+        return currentFiles;
+      }
+
       const validFiles = [];
       const rejectedFiles = [];
 
-      incomingFiles.slice(0, availableSlots).forEach((file) => {
+      incomingFiles.forEach((file) => {
         if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
           rejectedFiles.push(file.name);
           return;
@@ -4625,9 +4785,7 @@ function MessengerConversation({
         });
       });
 
-      if (incomingFiles.length > availableSlots) {
-        setRoomMessage(`Only ${availableSlots} more file(s) can be attached.`);
-      } else if (rejectedFiles.length > 0) {
+      if (rejectedFiles.length > 0) {
         setRoomMessage("One or more files exceed the 25 MB attachment limit.");
       }
 
@@ -5162,6 +5320,11 @@ function MessengerConversation({
         (!normalizedText && safeFilesToSend.length === 0) ||
         !selectedPeerAccountNumber
       ) {
+        return false;
+      }
+
+      if (safeFilesToSend.length > MAX_MESSAGE_ATTACHMENTS) {
+        setRoomMessage(`You can attach up to ${MAX_MESSAGE_ATTACHMENTS} files.`);
         return false;
       }
 
@@ -5734,33 +5897,10 @@ function MessengerConversation({
           </div>
         ) : null}
         {selectedFiles.length > 0 && !isVoiceRecording ? (
-          <div className="parent-layout-page__message-file-list">
-            {selectedFiles.map((selectedFile) => (
-              <span
-                className={`parent-layout-page__message-file-chip${
-                  isVoiceNoteSelectedFile(selectedFile) ? " is-voice-note" : ""
-                }`}
-                key={selectedFile.id}
-              >
-                <AttachmentIcon fileType={selectedFile.fileType} />
-                <span>
-                  {isVoiceNoteSelectedFile(selectedFile)
-                    ? `Voice note ${formatMediaTime(
-                        selectedFile.durationSeconds,
-                      )}`
-                    : selectedFile.file.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveSelectedFile(selectedFile.id)}
-                  aria-label={`Remove ${selectedFile.file.name}`}
-                  title="Remove file"
-                >
-                  <Trash2 size={13} aria-hidden="true" />
-                </button>
-              </span>
-            ))}
-          </div>
+          <SelectedAttachmentPreviewList
+            files={selectedFiles}
+            onRemove={handleRemoveSelectedFile}
+          />
         ) : null}
         {isVoiceRecording ? (
           <>
@@ -5829,7 +5969,7 @@ function MessengerConversation({
               type="file"
               multiple
               onChange={handleFileInputChange}
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.rtf,.md,.json"
+              accept={MESSAGE_ATTACHMENT_ACCEPT}
             />
             <textarea
               ref={messageDraftRef}
@@ -5884,8 +6024,12 @@ function MessengerConversation({
         receiverName={messageActionReceiverName}
         onClose={closeMessageActionModal}
         onDraftChange={updateMessageActionDraft}
+        onRemoveCurrentAttachment={handleRemoveMessageActionCurrentAttachment}
         onRemoveReplacementFile={handleRemoveMessageActionReplacementFile}
+        onReplaceCurrentAttachment={handleReplaceMessageActionAttachment}
         onReplacementFilesChange={handleMessageActionReplacementFilesChange}
+        onRestoreCurrentAttachment={handleRestoreMessageActionCurrentAttachment}
+        resolveAttachmentPreviewUrl={resolveMessageActionAttachmentPreviewUrl}
         onSubmit={handleSubmitMessageAction}
       />
     </section>

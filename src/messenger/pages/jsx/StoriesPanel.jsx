@@ -19,7 +19,7 @@ import {
   Volume2,
   VolumeX,
   X,
-} from "lucide-react";
+} from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 

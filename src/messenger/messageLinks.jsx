@@ -1,4 +1,4 @@
-import { ExternalLink, Link2 } from "lucide-react";
+import { ExternalLink, Link2 } from "@/components/icons";
 
 const URL_PATTERN =
   /((?:https?:\/\/|www\.)[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:com|org|net|edu|gov|io|co|ai|app|dev|me|in|uk|us|info|biz|xyz|site|online|tech|store|cloud|link|ly|tv)(?:\/[^\s<>"']*)?)/gi;

@@ -1,4 +1,4 @@
-import { MessagesSquare } from "lucide-react";
+import { MessagesSquare, StoryTabIcon } from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Layout from "../../../components/Layout.jsx";
@@ -13,6 +13,7 @@ import {
 import GroupConversation from "../../../group_messaging/pages/GroupConversation.jsx";
 import GroupRoomHeader from "../../../group_messaging/pages/GroupRoomHeader.jsx";
 import { decryptGroupMessageForUser } from "../../../group_messaging/e2ee/messages.js";
+import GroupSettingsPanel from "../../../group_messaging/pages/GroupSettingsModal.jsx";
 import {
   clearStoredMessengerDeviceIdentity,
   ensureMessengerDeviceKey,
@@ -74,30 +75,6 @@ function pushLoggedInHistoryView(nextView) {
     },
     "",
     window.location.href,
-  );
-}
-
-function StoryTabIcon({ size = 24 }) {
-  return (
-    <svg
-      className="parent-layout-page__story-tab-icon"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        className="parent-layout-page__story-tab-icon-orbit"
-        d="M18.9 9.1a8 8 0 1 1-5.5-4.9"
-      />
-      <path
-        className="parent-layout-page__story-tab-icon-inner"
-        d="M8.2 8.5a6.3 6.3 0 0 0-1.1 6.6M9.5 17.2a6.2 6.2 0 0 0 5 .1"
-      />
-      <circle className="parent-layout-page__story-tab-icon-play-ring" cx="16.7" cy="7.2" r="4.2" />
-      <path className="parent-layout-page__story-tab-icon-play" d="M15.6 5.4v3.6l3-1.8-3-1.8Z" />
-    </svg>
   );
 }
 
@@ -199,6 +176,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [selectedRoom, setSelectedRoom] = useState(
     () => initialMessengerUiCache.selectedRoom,
   );
+  const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
   const [conversationCache, setConversationCache] = useState(
     () => initialMessengerUiCache.conversations,
   );
@@ -616,6 +594,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     }
   }, [activePanelTab]);
 
+  useEffect(() => {
+    setIsGroupSettingsOpen(false);
+  }, [selectedRoom?.id, selectedRoom?.is_group]);
+
   const changePanelTab = (nextTab) => {
     if (isAccountPanelOpen) {
       setIsAccountPanelOpen(false);
@@ -854,6 +836,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         user,
       );
 
+      setIsGroupSettingsOpen(false);
       setSelectedContact(contact);
       setSelectedRoom(matchingRoom);
     },
@@ -861,13 +844,23 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   );
 
   const handleSelectRoom = useCallback((room, contact) => {
+    setIsGroupSettingsOpen(false);
     setSelectedRoom(room);
     setSelectedContact(contact || null);
   }, []);
 
   const handleCloseConversation = useCallback(() => {
+    setIsGroupSettingsOpen(false);
     setSelectedRoom(null);
     setSelectedContact(null);
+  }, []);
+
+  const handleOpenGroupMessages = useCallback(() => {
+    setIsGroupSettingsOpen(false);
+  }, []);
+
+  const handleOpenGroupSettings = useCallback(() => {
+    setIsGroupSettingsOpen(true);
   }, []);
 
   const handleContactUpdated = useCallback((updatedContact) => {
@@ -1567,13 +1560,12 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         roomHeader={
           selectedRoom?.is_group ? (
             <GroupRoomHeader
-              contacts={contacts}
+              isSettingsOpen={isGroupSettingsOpen}
               selectedRoom={selectedRoom}
               user={user}
               onCloseConversation={handleCloseConversation}
-              onGroupRemoved={handleGroupRemoved}
-              onGroupUpdated={handleGroupUpdated}
-              onToast={setToast}
+              onOpenMessages={handleOpenGroupMessages}
+              onOpenSettings={handleOpenGroupSettings}
             />
           ) : (
             <MessengerRoomHeader
@@ -1594,20 +1586,32 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         }
         room={
           selectedRoom?.is_group ? (
-            <GroupConversation
-              contacts={contacts}
-              selectedRoom={selectedRoom}
-              user={user}
-              cachedConversation={
-                selectedRoom?.id
-                  ? conversationCache[String(selectedRoom.id)] || null
-                  : null
-              }
-              onGroupEvent={handleGroupEvent}
-              onRoomMessage={handleRoomMessage}
-              onRoomRead={handleRoomRead}
-              onConversationCacheChange={handleConversationCacheChange}
-            />
+            isGroupSettingsOpen ? (
+              <GroupSettingsPanel
+                contacts={contacts}
+                selectedRoom={selectedRoom}
+                user={user}
+                onClose={handleOpenGroupMessages}
+                onGroupRemoved={handleGroupRemoved}
+                onGroupUpdated={handleGroupUpdated}
+                onToast={setToast}
+              />
+            ) : (
+              <GroupConversation
+                contacts={contacts}
+                selectedRoom={selectedRoom}
+                user={user}
+                cachedConversation={
+                  selectedRoom?.id
+                    ? conversationCache[String(selectedRoom.id)] || null
+                    : null
+                }
+                onGroupEvent={handleGroupEvent}
+                onRoomMessage={handleRoomMessage}
+                onRoomRead={handleRoomRead}
+                onConversationCacheChange={handleConversationCacheChange}
+              />
+            )
           ) : (
             <MessengerConversation
               contacts={contacts}

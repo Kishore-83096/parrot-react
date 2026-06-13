@@ -1,9 +1,9 @@
-import { Check, ImagePlus, LoaderCircle, Search, X } from "lucide-react";
+import { Check, ImagePlus, LoaderCircle, Search, X } from "@/components/icons";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import SmartAvatar from "../../components/SmartAvatar.jsx";
-import GroupPeopleIcon from "../../components/icons/GroupPeopleIcon.jsx";
+import { GroupPeopleIcon } from "@/components/icons";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import {
   getContactInitials,
