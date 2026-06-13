@@ -1,9 +1,8 @@
 import { Check, ImagePlus, LoaderCircle, Search, X } from "@/components/icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import SmartAvatar from "../../components/SmartAvatar.jsx";
-import { GroupPeopleIcon } from "@/components/icons";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import {
   getContactInitials,
@@ -29,6 +28,7 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [search, setSearch] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -52,6 +52,19 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
   }, [savedContacts, search]);
 
   const selectedCount = selectedAccounts.size;
+  const groupNamePreview = title.trim() || "Group";
+
+  useEffect(() => {
+    if (!avatarFile || typeof URL === "undefined") {
+      setAvatarPreviewUrl("");
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreviewUrl(previewUrl);
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [avatarFile]);
 
   const toggleContact = (accountNumber) => {
     const normalizedAccountNumber = String(accountNumber || "");
@@ -138,9 +151,12 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
         </button>
 
         <div className="parent-layout-page__modal-header">
-          <span className="parent-layout-page__group-modal-icon" aria-hidden="true">
-            <GroupPeopleIcon size={30} strokeWidth={1.9} />
-          </span>
+          <SmartAvatar
+            className="parent-layout-page__group-modal-avatar"
+            src={avatarPreviewUrl}
+            name={groupNamePreview}
+            fallback="G"
+          />
           <h2 id="create-group-title">Create Group</h2>
           <p>Select saved contacts to start a private group room.</p>
         </div>

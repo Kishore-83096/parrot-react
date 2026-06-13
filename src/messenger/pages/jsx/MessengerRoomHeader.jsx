@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  LoaderCircle,
   MoreVertical,
   ParrotIcon,
   Pencil,
@@ -563,8 +564,13 @@ function MessengerRoomHeader({
               className="parent-layout-page__modal-submit"
               type="submit"
               disabled={isContactActionLoading}
+              aria-busy={isContactActionLoading}
             >
-              <Save size={18} aria-hidden="true" />
+              {isContactActionLoading ? (
+                <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+              ) : (
+                <Save size={18} aria-hidden="true" />
+              )}
               <span>{isContactActionLoading ? "Saving..." : "Save Contact"}</span>
             </button>
           </div>
@@ -731,10 +737,15 @@ function MessengerRoomHeader({
               type="button"
               onClick={handleSaveSelectedPeer}
               disabled={isContactActionLoading}
+              aria-busy={isContactActionLoading}
               aria-label={`Save ${selectedConversationName} as contact`}
               title="Save contact"
             >
-              <UserPlus size={18} aria-hidden="true" />
+              {isContactActionLoading ? (
+                <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+              ) : (
+                <UserPlus size={18} aria-hidden="true" />
+              )}
               <span>{isContactActionLoading ? "Saving..." : "Save Contact"}</span>
             </button>
           )}

@@ -9,6 +9,7 @@ import {
   Trash2,
   UserMinus,
   UserPlus,
+  X,
 } from "@/components/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -119,6 +120,8 @@ function GroupSettingsPanel({
   const [memberSearch, setMemberSearch] = useState("");
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [isAddMembersOpen, setIsAddMembersOpen] = useState(false);
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
   const [message, setMessage] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
   const avatarInputRef = useRef(null);
@@ -197,6 +200,20 @@ function GroupSettingsPanel({
   }, [availableContacts, memberSearch]);
   const selectedCount = selectedAccounts.size;
   const isBusy = Boolean(loadingAction);
+  const groupTitle = room?.title || titleDraft || "Group";
+  const groupAvatarUrl = room?.avatar_url || "";
+
+  useEffect(() => {
+    if (!avatarFile || typeof URL === "undefined") {
+      setAvatarPreviewUrl("");
+      return undefined;
+    }
+
+    const previewUrl = URL.createObjectURL(avatarFile);
+    setAvatarPreviewUrl(previewUrl);
+
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [avatarFile]);
 
   useEffect(() => {
     setRoom(selectedRoom);
@@ -204,6 +221,11 @@ function GroupSettingsPanel({
     setMemberSearch("");
     setSelectedAccounts(new Set());
     setIsAddMembersOpen(false);
+    setAvatarFile(null);
+    setAvatarPreviewUrl("");
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = "";
+    }
     setMessage("");
     setLoadingAction("");
   }, [selectedRoom]);
@@ -304,19 +326,36 @@ function GroupSettingsPanel({
   const handleAvatarChange = (event) => {
     const file = event.target.files?.[0] || null;
 
-    if (!room?.id || !file) {
+    setAvatarFile(file);
+    setMessage("");
+  };
+
+  const handleAvatarUpload = () => {
+    if (!room?.id || !avatarFile) {
       return;
     }
 
     runAction(
       "avatar",
-      () => uploadGroupRoomAvatar(room.id, file),
+      () => uploadGroupRoomAvatar(room.id, avatarFile),
       "Group picture changed.",
-    ).finally(() => {
+    ).then((didUpdate) => {
+      if (didUpdate) {
+        setAvatarFile(null);
+      }
+    }).finally(() => {
       if (avatarInputRef.current) {
         avatarInputRef.current.value = "";
       }
     });
+  };
+
+  const handleAvatarClear = () => {
+    setAvatarFile(null);
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = "";
+    }
+    setMessage("");
   };
 
   const toggleContact = (accountNumber) => {
@@ -474,19 +513,58 @@ function GroupSettingsPanel({
               </button>
             </form>
 
-            <button
-              className="parent-layout-page__group-settings-picture"
-              type="button"
-              onClick={() => avatarInputRef.current?.click()}
-              disabled={isBusy}
-            >
-              {loadingAction === "avatar" ? (
-                <LoaderCircle size={17} aria-hidden="true" />
-              ) : (
-                <Camera size={17} aria-hidden="true" />
-              )}
-              <span>Group Picture</span>
-            </button>
+            <div className="parent-layout-page__group-picture-editor">
+              <SmartAvatar
+                className="parent-layout-page__group-picture-avatar"
+                src={avatarPreviewUrl || groupAvatarUrl}
+                initials={getInitials(groupTitle)}
+                name={groupTitle}
+                fallback="G"
+              />
+              <div className="parent-layout-page__group-picture-copy">
+                <strong>
+                  {avatarPreviewUrl ? "Preview group picture" : "Group picture"}
+                </strong>
+                <small>
+                  {avatarFile?.name || "Choose a picture, preview it here, then upload."}
+                </small>
+                <div className="parent-layout-page__picture-actions">
+                  <button
+                    className="parent-layout-page__picture-action"
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={isBusy}
+                  >
+                    <Camera size={15} aria-hidden="true" />
+                    <span>Choose</span>
+                  </button>
+                  <button
+                    className="parent-layout-page__picture-action is-primary"
+                    type="button"
+                    onClick={handleAvatarUpload}
+                    disabled={isBusy || !avatarFile}
+                  >
+                    {loadingAction === "avatar" ? (
+                      <LoaderCircle size={15} aria-hidden="true" />
+                    ) : (
+                      <Check size={15} aria-hidden="true" />
+                    )}
+                    <span>{loadingAction === "avatar" ? "Uploading" : "Upload"}</span>
+                  </button>
+                  {avatarFile ? (
+                    <button
+                      className="parent-layout-page__picture-action"
+                      type="button"
+                      onClick={handleAvatarClear}
+                      disabled={isBusy}
+                    >
+                      <X size={15} aria-hidden="true" />
+                      <span>Cancel</span>
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
             <input
               ref={avatarInputRef}
               className="parent-layout-page__group-avatar-file"

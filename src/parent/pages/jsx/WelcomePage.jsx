@@ -2,6 +2,7 @@ import {
   Activity,
   AlertCircle,
   CheckCircle2,
+  LoaderCircle,
   LogIn,
   Mail,
   MessageCircle,
@@ -456,8 +457,13 @@ function WelcomePage({ onLoginSuccess }) {
                 className="parent-welcome__register-submit"
                 type="submit"
                 disabled={isLoggingIn}
+                aria-busy={isLoggingIn}
               >
-                <LogIn size={19} aria-hidden="true" />
+                {isLoggingIn ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <LogIn size={19} aria-hidden="true" />
+                )}
                 <span>{isLoggingIn ? "Logging in..." : "Login"}</span>
               </button>
             </form>
@@ -595,8 +601,13 @@ function WelcomePage({ onLoginSuccess }) {
                 className="parent-welcome__register-submit"
                 type="submit"
                 disabled={isRegistering}
+                aria-busy={isRegistering}
               >
-                <UserPlus size={19} aria-hidden="true" />
+                {isRegistering ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <UserPlus size={19} aria-hidden="true" />
+                )}
                 <span>{isRegistering ? "Creating..." : "Create Account"}</span>
               </button>
             </form>

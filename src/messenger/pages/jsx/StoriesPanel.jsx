@@ -2746,10 +2746,15 @@ function StoryViewer({
                 className="parent-layout-page__story-reply-submit"
                 type="submit"
                 disabled={isSending || !replyText.trim()}
+                aria-busy={isSending}
                 aria-label="Send story reply"
                 title="Send reply"
               >
-                <Send size={18} aria-hidden="true" />
+                {isSending ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <Send size={18} aria-hidden="true" />
+                )}
               </button>
             </form>
             <div

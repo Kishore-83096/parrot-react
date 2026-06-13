@@ -32,3 +32,18 @@ select {
 button {
   cursor: pointer;
 }
+
+.app-button-spinner,
+button svg.lucide-loader-circle,
+button svg[data-lucide="loader-circle"] {
+  width: 1em;
+  height: 1em;
+  flex: 0 0 auto;
+  animation: app-button-spinner-spin 0.85s linear infinite;
+}
+
+@keyframes app-button-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

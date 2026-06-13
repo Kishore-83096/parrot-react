@@ -2,6 +2,7 @@ import {
   AlertCircle,
   CheckCircle2,
   GroupPeopleIcon,
+  LoaderCircle,
   ParrotIcon,
   Save,
   Search,
@@ -345,12 +346,17 @@ function ContactPanel({
                   type="button"
                   onClick={handleSearchContact}
                   disabled={isSearchingContact || isSavingContact}
+                  aria-busy={isSearchingContact}
                   aria-label={
                     isSearchingContact ? "Searching contact" : "Search contact"
                   }
                   title="Search contact"
                 >
-                  <Search size={19} aria-hidden="true" />
+                  {isSearchingContact ? (
+                    <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                  ) : (
+                    <Search size={19} aria-hidden="true" />
+                  )}
                 </button>
               </div>
             </div>
@@ -403,8 +409,13 @@ function ContactPanel({
                 className="parent-layout-page__modal-submit"
                 type="submit"
                 disabled={isSearchingContact || isSavingContact}
+                aria-busy={isSavingContact}
               >
-                <Save size={18} aria-hidden="true" />
+                {isSavingContact ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <Save size={18} aria-hidden="true" />
+                )}
                 <span>{isSavingContact ? "Saving..." : "Save Contact"}</span>
               </button>
             ) : null}

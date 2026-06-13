@@ -1,10 +1,12 @@
 import {
   AlertCircle,
   Ban,
+  Camera,
   CheckCircle2,
   Eye,
   EyeOff,
   KeyRound,
+  LoaderCircle,
   LogOut,
   Menu,
   ParrotIcon,
@@ -316,9 +318,6 @@ function buildProfilePayload(form) {
       };
     }, {}),
     card_type: form.card_type || null,
-    ...(form.profile_picture_file
-      ? { profile_picture: form.profile_picture_file }
-      : {}),
   };
 }
 
@@ -423,6 +422,7 @@ function Header({
     useState(false);
   const [isDefaultDevicePasswordUpdating, setIsDefaultDevicePasswordUpdating] =
     useState(false);
+  const [isLogoutPending, setIsLogoutPending] = useState(false);
   const [revokingDeviceId, setRevokingDeviceId] = useState("");
   const [defaultingDeviceId, setDefaultingDeviceId] = useState("");
   const [isStoredRecoveryKeyVisible, setIsStoredRecoveryKeyVisible] =
@@ -450,6 +450,7 @@ function Header({
   ] = useState(false);
   const hydratedProfileUserKeyRef = useRef("");
   const handledDefaultDevicePromptVersionRef = useRef(0);
+  const profilePictureInputRef = useRef(null);
   const accountDisplay = user || {};
   const displayProfile = profile || user || {};
   const username = accountDisplay?.username || user?.username || "parrot_user";
@@ -732,6 +733,20 @@ function Header({
     setIsLinkedDevicesModalOpen(true);
     loadCryptoDevices();
   };
+
+  const handleHeaderLogout = useCallback(async () => {
+    if (!onLogout || isLogoutPending) {
+      return;
+    }
+
+    setIsLogoutPending(true);
+
+    try {
+      await onLogout();
+    } catch {
+      setIsLogoutPending(false);
+    }
+  }, [isLogoutPending, onLogout]);
 
   const openBlockManagementModal = () => {
     pushLoggedInHistoryView({ modal: "blockManagement" });
@@ -1808,8 +1823,13 @@ function Header({
                     ? "Set default password"
                     : "Make default"
                 }
+                aria-busy={isDefaulting}
               >
-                <ShieldCheck size={15} aria-hidden="true" />
+                {isDefaulting ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <ShieldCheck size={15} aria-hidden="true" />
+                )}
                 <span>
                   {isDefaulting
                     ? "Saving"
@@ -1827,8 +1847,13 @@ function Header({
                 onClick={() => handleRevokeCryptoDevice(device)}
                 disabled={isRevoking}
                 title={isCurrent ? "Log out this browser" : "Revoke device"}
+                aria-busy={isRevoking}
               >
-                <Trash2 size={15} aria-hidden="true" />
+                {isRevoking ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <Trash2 size={15} aria-hidden="true" />
+                )}
                 <span>
                   {isRevoking
                     ? isCurrent
@@ -1892,6 +1917,7 @@ function Header({
   const handleProfileSubmit = async (event) => {
     event.preventDefault();
 
+    const pendingProfilePictureFile = profileForm.profile_picture_file;
     setIsProfileSaving(true);
     setProfileMessage(null);
 
@@ -1900,7 +1926,15 @@ function Header({
       const updatedProfile = response.data || {};
 
       syncProfile(updatedProfile);
-      setActiveProfileTab("view");
+      if (pendingProfilePictureFile) {
+        setProfileForm((currentForm) => ({
+          ...currentForm,
+          profile_picture_file: pendingProfilePictureFile,
+        }));
+      }
+      if (!pendingProfilePictureFile) {
+        setActiveProfileTab("view");
+      }
       setProfileMessage({
         type: "success",
         text: "Profile updated successfully.",
@@ -1929,6 +1963,79 @@ function Header({
     } finally {
       setIsProfileSaving(false);
     }
+  };
+
+  const handleProfilePictureUpload = async () => {
+    const pictureFile = profileForm.profile_picture_file;
+
+    if (!pictureFile) {
+      return;
+    }
+
+    const preservedForm = profileForm;
+    setIsProfileSaving(true);
+    setProfileMessage(null);
+
+    try {
+      const response = await updateParentProfile({
+        profile_picture: pictureFile,
+      });
+      const updatedProfile = response.data || {};
+
+      syncProfile(updatedProfile);
+      setProfileForm({
+        ...getProfileForm(updatedProfile),
+        ...profilePayloadFields.reduce(
+          (formValues, fieldName) => ({
+            ...formValues,
+            [fieldName]: preservedForm[fieldName],
+          }),
+          {},
+        ),
+        card_type: preservedForm.card_type,
+        profile_picture_file: null,
+      });
+      if (profilePictureInputRef.current) {
+        profilePictureInputRef.current.value = "";
+      }
+      setProfileMessage({
+        type: "success",
+        text: "Profile picture uploaded successfully.",
+      });
+      onToast?.({
+        type: "success",
+        title: "Profile picture updated",
+        message: "Your new profile picture was saved.",
+      });
+    } catch (error) {
+      const errorMessage = getApiErrorMessage(
+        error,
+        "Unable to upload your profile picture.",
+      );
+
+      setProfileMessage({
+        type: "error",
+        text: errorMessage,
+      });
+      onToast?.({
+        type: "error",
+        title: "Profile picture upload failed",
+        message: errorMessage,
+      });
+    } finally {
+      setIsProfileSaving(false);
+    }
+  };
+
+  const handleProfilePictureClear = () => {
+    setProfileForm((currentForm) => ({
+      ...currentForm,
+      profile_picture_file: null,
+    }));
+    if (profilePictureInputRef.current) {
+      profilePictureInputRef.current.value = "";
+    }
+    setProfileMessage(null);
   };
 
   const profileModal = isProfileModalOpen ? (
@@ -2092,40 +2199,79 @@ function Header({
                   </select>
                 </label>
 
-                <label className="parent-layout-page__profile-field parent-layout-page__profile-field--wide">
-                  <span className="parent-layout-page__field-label">
-                    Profile Picture
-                  </span>
-                  <div className="parent-layout-page__profile-picture-preview">
-                    <SmartAvatar
-                      className="parent-layout-page__profile-picture"
-                      src={profilePicturePreviewUrl || profilePicture}
-                      firstName={profileForm.first_name || displayProfile?.first_name}
-                      lastName={profileForm.last_name || displayProfile?.last_name}
-                      username={username}
-                      fallback="P"
-                    />
-                    <small>
-                      {profilePicturePreviewUrl
-                        ? "Selected image preview"
-                        : "Profile picture preview"}
-                    </small>
-                  </div>
-                  <input
-                    name="profile_picture_file"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={handleProfileFormChange}
+                <div className="parent-layout-page__profile-picture-editor parent-layout-page__profile-field--wide">
+                  <SmartAvatar
+                    className="parent-layout-page__profile-picture"
+                    src={profilePicturePreviewUrl || profilePicture}
+                    firstName={profileForm.first_name || displayProfile?.first_name}
+                    lastName={profileForm.last_name || displayProfile?.last_name}
+                    username={username}
+                    fallback="P"
                   />
-                </label>
+                  <div className="parent-layout-page__profile-picture-editor-copy">
+                    <strong>
+                      {profilePicturePreviewUrl
+                        ? "Preview selected picture"
+                        : "Current profile picture"}
+                    </strong>
+                    <small>
+                      {profileForm.profile_picture_file?.name ||
+                        "Choose an image, preview it here, then upload."}
+                    </small>
+                    <div className="parent-layout-page__picture-actions">
+                      <label className="parent-layout-page__picture-action">
+                        <Camera size={15} aria-hidden="true" />
+                        <span>Choose</span>
+                        <input
+                          ref={profilePictureInputRef}
+                          name="profile_picture_file"
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={handleProfileFormChange}
+                          disabled={isProfileSaving}
+                        />
+                      </label>
+                      <button
+                        className="parent-layout-page__picture-action is-primary"
+                        type="button"
+                        onClick={handleProfilePictureUpload}
+                        disabled={isProfileSaving || !profileForm.profile_picture_file}
+                        aria-busy={isProfileSaving}
+                      >
+                        {isProfileSaving ? (
+                          <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                        ) : (
+                          <Save size={15} aria-hidden="true" />
+                        )}
+                        <span>{isProfileSaving ? "Uploading" : "Upload"}</span>
+                      </button>
+                      {profileForm.profile_picture_file ? (
+                        <button
+                          className="parent-layout-page__picture-action"
+                          type="button"
+                          onClick={handleProfilePictureClear}
+                          disabled={isProfileSaving}
+                        >
+                          <X size={15} aria-hidden="true" />
+                          <span>Cancel</span>
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <button
                 className="parent-layout-page__modal-submit"
                 type="submit"
                 disabled={isProfileSaving}
+                aria-busy={isProfileSaving}
               >
-                <Save size={18} aria-hidden="true" />
+                {isProfileSaving ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <Save size={18} aria-hidden="true" />
+                )}
                 <span>{isProfileSaving ? "Saving..." : "Save Profile"}</span>
               </button>
             </form>
@@ -2278,8 +2424,13 @@ function Header({
                 className="parent-layout-page__modal-submit"
                 type="submit"
                 disabled={isPasswordChanging}
+                aria-busy={isPasswordChanging}
               >
-                <KeyRound size={18} aria-hidden="true" />
+                {isPasswordChanging ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <KeyRound size={18} aria-hidden="true" />
+                )}
                 <span>
                   {isPasswordChanging ? "Changing..." : "Change Password"}
                 </span>
@@ -2349,8 +2500,13 @@ function Header({
                 className="parent-layout-page__modal-submit parent-layout-page__modal-submit--danger"
                 type="submit"
                 disabled={isAccountDeleting}
+                aria-busy={isAccountDeleting}
               >
-                <Trash2 size={18} aria-hidden="true" />
+                {isAccountDeleting ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <Trash2 size={18} aria-hidden="true" />
+                )}
                 <span>
                   {isAccountDeleting ? "Deleting..." : "Delete Account"}
                 </span>
@@ -2528,8 +2684,13 @@ function Header({
             className="parent-layout-page__modal-submit"
             type="submit"
             disabled={isDefaultDevicePasswordSaving}
+            aria-busy={isDefaultDevicePasswordSaving}
           >
-            <ShieldCheck size={18} aria-hidden="true" />
+            {isDefaultDevicePasswordSaving ? (
+              <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+            ) : (
+              <ShieldCheck size={18} aria-hidden="true" />
+            )}
             <span>
               {isDefaultDevicePasswordSaving
                 ? "Saving..."
@@ -2737,8 +2898,13 @@ function Header({
             className="parent-layout-page__modal-submit"
             type="submit"
             disabled={isDefaultDevicePasswordUpdating}
+            aria-busy={isDefaultDevicePasswordUpdating}
           >
-            <KeyRound size={18} aria-hidden="true" />
+            {isDefaultDevicePasswordUpdating ? (
+              <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+            ) : (
+              <KeyRound size={18} aria-hidden="true" />
+            )}
             <span>
               {isDefaultDevicePasswordUpdating ? "Updating..." : "Update password"}
             </span>
@@ -2875,8 +3041,11 @@ function Header({
                       type="button"
                       onClick={() => handleToggleManagedContactBlock(contact)}
                       disabled={Boolean(blockActionAccountNumber)}
+                      aria-busy={isUpdating}
                     >
-                      {isBlocked ? (
+                      {isUpdating ? (
+                        <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                      ) : isBlocked ? (
                         <Unlock size={15} aria-hidden="true" />
                       ) : (
                         <Ban size={15} aria-hidden="true" />
@@ -3027,8 +3196,11 @@ function Header({
                       type="button"
                       onClick={() => handleToggleManagedContactGhost(contact)}
                       disabled={Boolean(ghostActionAccountNumber)}
+                      aria-busy={isUpdating}
                     >
-                      {isGhosted ? (
+                      {isUpdating ? (
+                        <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                      ) : isGhosted ? (
                         <Eye size={15} aria-hidden="true" />
                       ) : (
                         <EyeOff size={15} aria-hidden="true" />
@@ -3214,7 +3386,11 @@ function Header({
                 className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
                 onClick={() => loadCryptoDevices()}
                 disabled={isDevicesLoading}
+                aria-busy={isDevicesLoading}
               >
+                {isDevicesLoading ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : null}
                 <span>
                   {isDevicesLoading ? "Refreshing" : "Refresh devices"}
                 </span>
@@ -3416,8 +3592,13 @@ function Header({
                     className="parent-layout-page__modal-submit"
                     type="submit"
                     disabled={isRecoveryKeySaving}
+                    aria-busy={isRecoveryKeySaving}
                   >
-                    <KeyRound size={18} aria-hidden="true" />
+                    {isRecoveryKeySaving ? (
+                      <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                    ) : (
+                      <KeyRound size={18} aria-hidden="true" />
+                    )}
                     <span>
                       {isRecoveryKeySaving ? "Updating..." : "Update recovery key"}
                     </span>
@@ -3477,12 +3658,20 @@ function Header({
               </button>
               {onLogout ? (
                 <button
-                  className="parent-header__logout parent-header__logout--id-card"
+                  className={`parent-header__logout parent-header__logout--id-card${
+                    isLogoutPending ? " is-loading" : ""
+                  }`}
                   type="button"
-                  onClick={onLogout}
+                  onClick={handleHeaderLogout}
+                  disabled={isLogoutPending}
+                  aria-busy={isLogoutPending}
                 >
-                  <LogOut size={13} aria-hidden="true" />
-                  <span>Logout</span>
+                  {isLogoutPending ? (
+                    <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                  ) : (
+                    <LogOut size={13} aria-hidden="true" />
+                  )}
+                  <span>{isLogoutPending ? "Logging out" : "Logout"}</span>
                 </button>
               ) : null}
             </div>

@@ -197,6 +197,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [toast, setToast] = useState(null);
   const onlineUserTimeoutsRef = useRef(new Map());
   const isLogoutInProgressRef = useRef(false);
+  const logoutPromiseRef = useRef(null);
   const currentUserId = getCurrentUserId(user);
 
   useEffect(() => {
@@ -562,11 +563,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
   const handleLogout = useCallback(() => {
     if (isLogoutInProgressRef.current) {
-      return;
+      return logoutPromiseRef.current;
     }
 
     isLogoutInProgressRef.current = true;
-    logoutCurrentMessengerDevice(user)
+    const logoutPromise = logoutCurrentMessengerDevice(user)
       .then((result) => {
         if (result.local_device_should_clear) {
           return clearLocalEncryptedDeviceState();
@@ -575,7 +576,14 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         return null;
       })
       .catch(() => {})
-      .finally(finishLogout);
+      .finally(() => {
+        isLogoutInProgressRef.current = false;
+        logoutPromiseRef.current = null;
+        finishLogout();
+      });
+
+    logoutPromiseRef.current = logoutPromise;
+    return logoutPromise;
   }, [clearLocalEncryptedDeviceState, finishLogout, user]);
 
   const closeToast = useCallback(() => {
