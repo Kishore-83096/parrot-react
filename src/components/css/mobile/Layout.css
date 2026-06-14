@@ -1068,24 +1068,21 @@
 }
 
 .parent-layout-page__group-room-badge {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 18px;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
   display: inline-grid;
   place-items: center;
-  border-radius: 999px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #2f80ff, #0969e8);
-  box-shadow:
-    0 0 0 2px rgba(255, 255, 255, 0.9),
-    0 3px 8px rgba(9, 105, 232, 0.25);
+  color: var(--layout-blue);
+  background: transparent;
+  box-shadow: none;
 }
 
 .parent-layout-page__group-room-badge svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   display: block;
-  stroke-width: 2.25;
+  stroke-width: 2.35;
 }
 
 .parent-layout-page__chat-meta {
@@ -1104,16 +1101,16 @@
 }
 
 .parent-layout-page__chat-unread {
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
   display: inline-grid;
   place-items: center;
   border-radius: 999px;
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-purple), var(--layout-blue));
   box-shadow: 0 8px 18px rgba(124, 60, 255, 0.18);
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
   font-weight: 880;
 }

@@ -902,7 +902,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   }, []);
 
   const mergeRoomMessage = useCallback(
-    (currentRooms, room, message) => {
+    (currentRooms, room, message, { forceRead = false } = {}) => {
       if (!message?.room_id) {
         return currentRooms;
       }
@@ -915,7 +915,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       const isIncoming = Number(message.sender_user_id) !== currentUserId;
       const isDeleted = Boolean(message.is_deleted || message.deleted_at);
       const baseRoom = existingRoom || room || { id: roomId };
-      const unreadCount = isSelectedRoom || !isIncoming || isDeleted
+      const unreadCount = forceRead || isSelectedRoom || !isIncoming || isDeleted
         ? 0
         : Number(baseRoom.unread_count || 0) + 1;
       const nextRoom = {
@@ -960,17 +960,21 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         return;
       }
 
-      setRooms((currentRooms) => mergeRoomMessage(currentRooms, room, message));
+      const mergeOptions = { forceRead: selectRoom };
+
+      setRooms((currentRooms) =>
+        mergeRoomMessage(currentRooms, room, message, mergeOptions),
+      );
       setSelectedRoom((currentRoom) => {
         if (!currentRoom && selectRoom) {
-          return mergeRoomMessage([], room, message)[0];
+          return mergeRoomMessage([], room, message, mergeOptions)[0];
         }
 
         if (!currentRoom || Number(currentRoom.id) !== Number(message.room_id)) {
           return currentRoom;
         }
 
-        return mergeRoomMessage([currentRoom], room, message)[0];
+        return mergeRoomMessage([currentRoom], room, message, mergeOptions)[0];
       });
 
       const matchingContact = getRoomContact(room, contacts, user);

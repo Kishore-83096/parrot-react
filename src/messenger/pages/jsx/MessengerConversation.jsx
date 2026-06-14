@@ -2924,6 +2924,7 @@ function MessengerConversation({
   const isProcessingSendQueueRef = useRef(false);
   const optimisticMessageSequenceRef = useRef(0);
   const readMarkedMessageIdsRef = useRef(new Set());
+  const selectedRoomReadSnapshotRef = useRef("");
   const activeConversationRef = useRef({
     peerAccountNumber: "",
     roomId: null,
@@ -3501,6 +3502,45 @@ function MessengerConversation({
     },
     [currentUserId, onRoomRead],
   );
+
+  useEffect(() => {
+    const roomId = selectedRoom?.id;
+    const unreadCount = Number(selectedRoom?.unread_count || 0);
+    const lastMessage = selectedRoom?.last_message || null;
+    const lastMessageId =
+      lastMessage && !lastMessage.is_deleted && !lastMessage.deleted_at
+        ? lastMessage.id
+        : null;
+
+    if (!roomId || !currentUserId || unreadCount <= 0) {
+      return;
+    }
+
+    const snapshotKey = `${roomId}:${lastMessageId || "latest"}:${unreadCount}`;
+    if (selectedRoomReadSnapshotRef.current === snapshotKey) {
+      return;
+    }
+    selectedRoomReadSnapshotRef.current = snapshotKey;
+
+    markMessengerRoomRead(
+      roomId,
+      lastMessageId ? { last_read_message_id: lastMessageId } : {},
+    )
+      .then(() => onRoomRead?.(roomId))
+      .catch(() => {
+        if (selectedRoomReadSnapshotRef.current === snapshotKey) {
+          selectedRoomReadSnapshotRef.current = "";
+        }
+      });
+  }, [
+    currentUserId,
+    onRoomRead,
+    selectedRoom?.id,
+    selectedRoom?.last_message?.deleted_at,
+    selectedRoom?.last_message?.id,
+    selectedRoom?.last_message?.is_deleted,
+    selectedRoom?.unread_count,
+  ]);
 
   const loadRoomMessages = useCallback(
     async (

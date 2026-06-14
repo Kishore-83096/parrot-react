@@ -326,6 +326,47 @@
   color: var(--theme-muted);
 }
 
+:root[data-theme="dark"] .parent-layout-page__message-info-header h2,
+:root[data-theme="dark"] .parent-layout-page__message-info-panel,
+:root[data-theme="dark"] .parent-layout-page__message-reaction-detail-row,
+:root[data-theme="dark"] .parent-layout-page__message-reaction-detail-row span,
+:root[data-theme="dark"] .parent-layout-page__message-read-row > span {
+  color: var(--theme-text);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-info-tabs button {
+  color: var(--theme-muted);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-info-tabs button:hover,
+:root[data-theme="dark"] .parent-layout-page__message-info-tabs button:focus-visible,
+:root[data-theme="dark"] .parent-layout-page__message-info-tabs button.is-active {
+  color: var(--theme-text);
+  background:
+    linear-gradient(135deg, rgba(88, 80, 180, 0.98), rgba(64, 49, 132, 0.98)),
+    rgba(64, 49, 132, 0.98);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-info-empty {
+  color: var(--theme-muted);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-read-status.is-read {
+  color: #86efac;
+  background: rgba(20, 83, 45, 0.56);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-read-status.is-delivered {
+  color: #c7d2fe;
+  background: rgba(49, 46, 129, 0.56);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-read-status.is-sent {
+  color: var(--theme-muted);
+  background: rgba(255, 255, 255, 0.08);
+}
+
 :root[data-theme="dark"] .parent-header__id-row--name dd {
   color: transparent;
   background: linear-gradient(135deg, #d8c9ff, #f0abfc 58%, #93c5fd);
