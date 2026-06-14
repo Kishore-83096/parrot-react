@@ -15,6 +15,7 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import ParrotToast from "../../../components/ParrotToast.jsx";
+import ThemeToggleButton from "../../../theme css/ThemeToggleButton.jsx";
 import { loginParent, registerParent } from "../../api.js";
 import "../css/WelcomePage.css";
 
@@ -303,6 +304,7 @@ function WelcomePage({ onLoginSuccess }) {
         </a>
 
         <nav className="parent-welcome__actions" aria-label="Account actions">
+          <ThemeToggleButton className="parent-welcome__theme-toggle" />
           <button
             className="parent-welcome__login"
             type="button"

@@ -186,8 +186,8 @@ export function getLastMessagePreviewDetails(
           ? message.attachments
           : [];
       const attachmentPreview = getAttachmentPreviewDetails(attachments);
+      const hasEncryptedPayload = isGroupEncryptedMessageText(message.text);
       const hasEncryptedPlaceholder =
-        isGroupEncryptedMessageText(message.text) ||
         messageText.toLowerCase() === "encrypted group message";
       let preview = messageText;
       let icon = "";
@@ -197,7 +197,7 @@ export function getLastMessagePreviewDetails(
         icon = attachmentPreview.icon;
       }
 
-      if (!preview && isGroupEncryptedMessageText(message.text)) {
+      if (!preview && hasEncryptedPayload) {
         preview = "Message";
       } else if (hasEncryptedPlaceholder && preview === messageText) {
         preview = "Message";
@@ -273,8 +273,8 @@ export function getLastMessagePreviewDetails(
       ? message.attachments
       : [];
   const attachmentPreview = getAttachmentPreviewDetails(attachments);
+  const hasEncryptedPayload = isEncryptedMessageText(message.text);
   const hasEncryptedPlaceholder =
-    isEncryptedMessageText(message.text) ||
     messageText.toLowerCase() === "encrypted message";
   let preview = messageText;
   let icon = "";
@@ -284,7 +284,7 @@ export function getLastMessagePreviewDetails(
     icon = attachmentPreview.icon;
   }
 
-  if (!preview && isEncryptedMessageText(message.text)) {
+  if (!preview && hasEncryptedPayload) {
     preview = "Encrypted message";
   }
 

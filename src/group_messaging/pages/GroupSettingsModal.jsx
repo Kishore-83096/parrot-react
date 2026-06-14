@@ -13,6 +13,7 @@ import {
 } from "@/components/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import ImageCropper from "../../components/ImageCropper.jsx";
 import SmartAvatar from "../../components/SmartAvatar.jsx";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import { getInitials } from "../../messenger/pages/jsx/roomHelpers.js";
@@ -121,6 +122,7 @@ function GroupSettingsPanel({
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [isAddMembersOpen, setIsAddMembersOpen] = useState(false);
   const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarCropFile, setAvatarCropFile] = useState(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
   const [message, setMessage] = useState("");
   const [loadingAction, setLoadingAction] = useState("");
@@ -222,6 +224,7 @@ function GroupSettingsPanel({
     setSelectedAccounts(new Set());
     setIsAddMembersOpen(false);
     setAvatarFile(null);
+    setAvatarCropFile(null);
     setAvatarPreviewUrl("");
     if (avatarInputRef.current) {
       avatarInputRef.current.value = "";
@@ -326,8 +329,24 @@ function GroupSettingsPanel({
   const handleAvatarChange = (event) => {
     const file = event.target.files?.[0] || null;
 
-    setAvatarFile(file);
+    if (file) {
+      setAvatarCropFile(file);
+    }
+    event.target.value = "";
     setMessage("");
+  };
+
+  const handleAvatarCrop = (croppedFile) => {
+    setAvatarFile(croppedFile);
+    setAvatarCropFile(null);
+    setMessage("");
+  };
+
+  const handleAvatarCropCancel = () => {
+    setAvatarCropFile(null);
+    if (avatarInputRef.current) {
+      avatarInputRef.current.value = "";
+    }
   };
 
   const handleAvatarUpload = () => {
@@ -352,6 +371,7 @@ function GroupSettingsPanel({
 
   const handleAvatarClear = () => {
     setAvatarFile(null);
+    setAvatarCropFile(null);
     if (avatarInputRef.current) {
       avatarInputRef.current.value = "";
     }
@@ -817,6 +837,12 @@ function GroupSettingsPanel({
           ) : null}
         </section>
       </div>
+      <ImageCropper
+        file={avatarCropFile}
+        title="Crop Group Picture"
+        onCancel={handleAvatarCropCancel}
+        onCrop={handleAvatarCrop}
+      />
     </section>
   );
 }

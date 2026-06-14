@@ -1,0 +1,59 @@
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --theme-radius-card: 18px;
+  --theme-radius-control: 14px;
+  --theme-radius-icon: 12px;
+  --theme-radius-panel: 22px;
+  --theme-radius-pill: 999px;
+
+  --theme-text: #090812;
+  --theme-muted: #6e657d;
+  --theme-purple: #7a35f5;
+  --theme-purple-deep: #6420e8;
+  --theme-blue: #3f8cff;
+  --theme-green: #18b963;
+  --theme-amber: #f5a623;
+  --theme-danger: #ef3d55;
+  --theme-card: rgba(255, 255, 255, 0.72);
+  --theme-panel: rgba(255, 255, 255, 0.58);
+  --theme-border: rgba(255, 255, 255, 0.82);
+  --theme-control-bg: rgba(255, 255, 255, 0.7);
+  --theme-control-border: rgba(25, 20, 38, 0.1);
+  --theme-page-bg: #f4efff;
+  --theme-page-background:
+    radial-gradient(circle at 9% 9%, rgba(124, 60, 255, 0.24), transparent 31%),
+    radial-gradient(circle at 87% 12%, rgba(255, 104, 209, 0.28), transparent 30%),
+    radial-gradient(circle at 82% 84%, rgba(244, 91, 210, 0.28), transparent 30%),
+    linear-gradient(135deg, #e8e0ff 0%, #f4efff 45%, #ffe2f7 100%);
+}
+
+:root[data-theme="light"] body {
+  color: var(--theme-text);
+  background: var(--theme-page-bg);
+}
+
+:root[data-theme="light"] .parent-welcome {
+  --welcome-text: var(--theme-text);
+  --welcome-muted: var(--theme-muted);
+  --welcome-purple: var(--theme-purple);
+  --welcome-purple-deep: var(--theme-purple-deep);
+  --welcome-blue: var(--theme-blue);
+  --welcome-green: var(--theme-green);
+  --welcome-amber: var(--theme-amber);
+  --welcome-card: var(--theme-card);
+  --welcome-border: var(--theme-border);
+}
+
+:root[data-theme="light"] .parrot-layout {
+  --layout-text: var(--theme-text);
+  --layout-muted: var(--theme-muted);
+  --layout-purple: var(--theme-purple);
+  --layout-purple-deep: var(--theme-purple-deep);
+  --layout-blue: var(--theme-blue);
+  --layout-green: var(--theme-green);
+  --layout-card: rgba(255, 255, 255, 0.74);
+  --layout-panel: var(--theme-panel);
+  --layout-border: var(--theme-border);
+}

@@ -2,6 +2,7 @@ import { Check, ImagePlus, LoaderCircle, Search, X } from "@/components/icons";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
+import ImageCropper from "../../components/ImageCropper.jsx";
 import SmartAvatar from "../../components/SmartAvatar.jsx";
 import { getMessengerErrorMessage } from "../../messenger/api.js";
 import {
@@ -28,6 +29,7 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
   const [selectedAccounts, setSelectedAccounts] = useState(() => new Set());
   const [search, setSearch] = useState("");
   const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarCropFile, setAvatarCropFile] = useState(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -87,7 +89,24 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
   };
 
   const handleAvatarChange = (event) => {
-    setAvatarFile(event.target.files?.[0] || null);
+    const selectedFile = event.target.files?.[0] || null;
+
+    if (selectedFile) {
+      setAvatarCropFile(selectedFile);
+      setMessage("");
+    }
+
+    event.target.value = "";
+  };
+
+  const handleAvatarCrop = (croppedFile) => {
+    setAvatarFile(croppedFile);
+    setAvatarCropFile(null);
+    setMessage("");
+  };
+
+  const handleAvatarCropCancel = () => {
+    setAvatarCropFile(null);
   };
 
   const handleSubmit = async (event) => {
@@ -265,6 +284,12 @@ function CreateGroupModal({ contacts, onClose, onGroupCreated }) {
           </button>
         </form>
       </section>
+      <ImageCropper
+        file={avatarCropFile}
+        title="Crop Group Picture"
+        onCancel={handleAvatarCropCancel}
+        onCrop={handleAvatarCrop}
+      />
     </div>,
     document.body,
   );

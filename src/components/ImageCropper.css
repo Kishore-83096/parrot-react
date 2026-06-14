@@ -1,0 +1,206 @@
+.image-cropper {
+  --image-cropper-text: var(--theme-text, #090812);
+  --image-cropper-muted: var(--theme-muted, #6e657d);
+  --image-cropper-purple: var(--theme-purple, #7a35f5);
+  --image-cropper-purple-deep: var(--theme-purple-deep, #6420e8);
+  --image-cropper-border: var(--theme-border, rgba(255, 255, 255, 0.82));
+  --image-cropper-control-bg: var(--theme-control-bg, rgba(255, 255, 255, 0.76));
+  --image-cropper-control-border: var(--theme-control-border, rgba(124, 60, 255, 0.14));
+  --image-cropper-panel-radius: var(--theme-radius-panel, 22px);
+  --image-cropper-control-radius: var(--theme-radius-control, 14px);
+
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  padding: clamp(14px, 3vw, 32px);
+  display: grid;
+  place-items: center;
+  background: rgba(8, 6, 18, 0.58);
+  backdrop-filter: blur(18px);
+  box-sizing: border-box;
+}
+
+.image-cropper *,
+.image-cropper *::before,
+.image-cropper *::after {
+  box-sizing: border-box;
+}
+
+.image-cropper__modal {
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 28px);
+  padding: 20px;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+  border: 1px solid var(--image-cropper-border);
+  border-radius: var(--image-cropper-panel-radius);
+  color: var(--image-cropper-text);
+  background:
+    radial-gradient(circle at 8% 8%, rgba(124, 60, 255, 0.16), transparent 38%),
+    radial-gradient(circle at 96% 14%, rgba(63, 140, 255, 0.12), transparent 38%),
+    var(--theme-card, rgba(255, 255, 255, 0.92));
+  box-shadow: 0 34px 90px rgba(8, 6, 18, 0.36);
+  scrollbar-width: none;
+}
+
+.image-cropper__modal::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.image-cropper__close {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(239, 61, 85, 0.22);
+  border-radius: var(--image-cropper-control-radius);
+  color: #ef3d55;
+  background: rgba(255, 235, 239, 0.96);
+}
+
+.image-cropper__header {
+  min-width: 0;
+  margin-right: 46px;
+}
+
+.image-cropper__header h2 {
+  margin: 0;
+  color: var(--image-cropper-text);
+  font-size: 24px;
+  line-height: 1.1;
+  font-weight: 860;
+  letter-spacing: 0;
+}
+
+.image-cropper__stage {
+  width: min(100%, 420px);
+  max-height: min(56dvh, 420px);
+  justify-self: center;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--image-cropper-control-border);
+  border-radius: var(--image-cropper-panel-radius);
+  background:
+    linear-gradient(45deg, rgba(124, 60, 255, 0.08) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(124, 60, 255, 0.08) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(124, 60, 255, 0.08) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(124, 60, 255, 0.08) 75%),
+    rgba(13, 10, 24, 0.1);
+  background-position:
+    0 0,
+    0 10px,
+    10px -10px,
+    -10px 0;
+  background-size: 20px 20px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.image-cropper__stage:active {
+  cursor: grabbing;
+}
+
+.image-cropper__image {
+  position: absolute;
+  display: block;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  user-select: none;
+  pointer-events: none;
+}
+
+.image-cropper__frame {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgba(255, 255, 255, 0.88);
+  border-radius: inherit;
+  box-shadow:
+    inset 0 0 0 1px rgba(18, 12, 36, 0.18),
+    inset 0 0 0 999px rgba(0, 0, 0, 0.02);
+  pointer-events: none;
+}
+
+.image-cropper__zoom {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  color: var(--image-cropper-muted);
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.image-cropper__zoom input {
+  width: 100%;
+  accent-color: var(--image-cropper-purple);
+}
+
+.image-cropper__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.image-cropper__actions button {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--image-cropper-control-border);
+  border-radius: var(--image-cropper-control-radius);
+  color: var(--image-cropper-purple);
+  background: var(--image-cropper-control-bg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.image-cropper__actions button:hover:not(:disabled),
+.image-cropper__actions button:focus-visible:not(:disabled),
+.image-cropper__apply {
+  color: #ffffff;
+  background: linear-gradient(
+    135deg,
+    var(--image-cropper-purple),
+    var(--image-cropper-purple-deep)
+  );
+  outline: none;
+}
+
+.image-cropper__actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+@media (max-width: 620px) {
+  .image-cropper {
+    padding: 10px;
+  }
+
+  .image-cropper__modal {
+    max-height: calc(100dvh - 20px);
+    padding: 16px;
+    gap: 12px;
+  }
+
+  .image-cropper__stage {
+    max-height: min(52dvh, calc(100vw - 52px));
+  }
+
+  .image-cropper__actions {
+    grid-template-columns: 1fr;
+  }
+}

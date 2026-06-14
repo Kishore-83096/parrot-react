@@ -23,7 +23,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import ImageCropper from "../../../components/ImageCropper.jsx";
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
+import ThemeToggleButton from "../../../theme css/ThemeToggleButton.jsx";
 import {
   getMessengerErrorMessage,
   getMessengerUserCryptoDevices,
@@ -448,6 +450,7 @@ function Header({
     isConfirmNewDefaultDevicePasswordVisible,
     setIsConfirmNewDefaultDevicePasswordVisible,
   ] = useState(false);
+  const [profilePictureCropFile, setProfilePictureCropFile] = useState(null);
   const hydratedProfileUserKeyRef = useRef("");
   const handledDefaultDevicePromptVersionRef = useRef(0);
   const profilePictureInputRef = useRef(null);
@@ -798,6 +801,7 @@ function Header({
     setIsProfileModalOpen(false);
     setProfileMessage(null);
     setIsProfileSaving(false);
+    setProfilePictureCropFile(null);
   }, []);
 
   const resetAccountModal = useCallback(() => {
@@ -1314,11 +1318,39 @@ function Header({
   const handleProfileFormChange = (event) => {
     const { files, name, type, value } = event.target;
 
+    if (type === "file") {
+      const selectedFile = files?.[0] || null;
+
+      if (selectedFile) {
+        setProfilePictureCropFile(selectedFile);
+        setProfileMessage(null);
+      }
+
+      event.target.value = "";
+      return;
+    }
+
     setProfileForm((currentForm) => ({
       ...currentForm,
-      [name]: type === "file" ? files?.[0] || null : value,
+      [name]: value,
     }));
     setProfileMessage(null);
+  };
+
+  const handleProfilePictureCrop = (croppedFile) => {
+    setProfileForm((currentForm) => ({
+      ...currentForm,
+      profile_picture_file: croppedFile,
+    }));
+    setProfilePictureCropFile(null);
+    setProfileMessage(null);
+  };
+
+  const handleProfilePictureCropCancel = () => {
+    setProfilePictureCropFile(null);
+    if (profilePictureInputRef.current) {
+      profilePictureInputRef.current.value = "";
+    }
   };
 
   const openEditProfileTab = () => {
@@ -2032,6 +2064,7 @@ function Header({
       ...currentForm,
       profile_picture_file: null,
     }));
+    setProfilePictureCropFile(null);
     if (profilePictureInputRef.current) {
       profilePictureInputRef.current.value = "";
     }
@@ -2278,6 +2311,12 @@ function Header({
           )}
         </div>
       </section>
+      <ImageCropper
+        file={profilePictureCropFile}
+        title="Crop Profile Picture"
+        onCancel={handleProfilePictureCropCancel}
+        onCrop={handleProfilePictureCrop}
+      />
     </div>
   ) : null;
 
@@ -3680,6 +3719,12 @@ function Header({
       </section>
 
       <div className="parent-header__menu-actions">
+        <ThemeToggleButton
+          className="parent-header__account-button parent-header__account-theme"
+          showLabel
+          size={16}
+        />
+
         <button
           className="parent-header__account-button"
           type="button"
