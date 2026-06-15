@@ -4901,6 +4901,57 @@
   font-weight: 840;
 }
 
+.parent-layout-page__voice-recording.is-edit-replacement {
+  grid-area: auto;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: 1px solid rgba(15, 159, 122, 0.2);
+  border-radius: 12px;
+  background: rgba(240, 253, 250, 0.9);
+  box-shadow: none;
+}
+
+.parent-layout-page__message-action-voice-replacement {
+  min-width: 0;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px 34px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(15, 159, 122, 0.22);
+  border-radius: 14px;
+  background: rgba(240, 253, 250, 0.56);
+}
+
+.parent-layout-page__message-action-voice-cancel,
+.parent-layout-page__message-action-voice-use {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.parent-layout-page__message-action-voice-cancel {
+  color: #b42318;
+  background: rgba(254, 242, 242, 0.92);
+}
+
+.parent-layout-page__message-action-voice-use {
+  color: #ffffff;
+  background: linear-gradient(135deg, #0f9f7a, #2563eb);
+  box-shadow: 0 10px 18px rgba(15, 159, 122, 0.22);
+}
+
+.parent-layout-page__message-action-voice-cancel:disabled,
+.parent-layout-page__message-action-voice-use:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
 .parent-layout-page__message-file-list {
   grid-area: files;
   min-width: 0;
@@ -5179,6 +5230,13 @@
 .parent-layout-page__edit-attachment-actions label:has(input:disabled) {
   cursor: default;
   opacity: 0.52;
+}
+
+.parent-layout-page__edit-attachment-actions button.is-recording,
+.parent-layout-page__edit-attachment-actions button.is-recording:disabled {
+  color: #ffffff;
+  background: rgba(15, 159, 122, 0.94);
+  opacity: 1;
 }
 
 .parent-layout-page__edit-attachment-actions input {

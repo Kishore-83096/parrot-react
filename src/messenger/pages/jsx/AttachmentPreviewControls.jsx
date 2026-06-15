@@ -1,6 +1,7 @@
 import {
   FileText,
   Image as ImageIcon,
+  Mic,
   Music,
   RefreshCw,
   RotateCcw,
@@ -63,6 +64,15 @@ function getPreviewIcon(fileType, size = 18) {
   }
 
   return <FileText size={size} aria-hidden="true" />;
+}
+
+function isVoiceNoteAttachment(attachment) {
+  return (
+    attachment?.attachment_kind === "voice_note" ||
+    attachment?.attachmentKind === "voice_note" ||
+    attachment?.kind === "voice_note" ||
+    attachment?.is_voice_note === true
+  );
 }
 
 function formatFileSize(bytes) {
@@ -342,8 +352,10 @@ export function SelectedAttachmentPreviewList({
 }
 
 export function EditableAttachmentGrid({
+  activeVoiceNoteReplacementKey = "",
   attachments,
   disabled = false,
+  onRecordVoiceNoteReplacement,
   onRemove,
   onReplace,
   onRestore,
@@ -372,6 +384,10 @@ export function EditableAttachmentGrid({
         const attachmentKey = getEditableAttachmentKey(attachment);
         const replacementFile = replacementMap[attachmentKey] || null;
         const isRemoved = removedKeys.has(attachmentKey);
+        const isVoiceNote = isVoiceNoteAttachment(attachment);
+        const isRecordingVoiceReplacement =
+          activeVoiceNoteReplacementKey &&
+          activeVoiceNoteReplacementKey === attachmentKey;
         const fileName =
           replacementFile?.file?.name || attachment?.file_name || "Attachment";
         const fileType = getDisplayFileType(
@@ -427,18 +443,37 @@ export function EditableAttachmentGrid({
                   >
                     <Trash2 size={14} aria-hidden="true" />
                   </button>
-                  <label
-                    aria-label={`Replace ${fileName}`}
-                    title="Replace"
-                  >
-                    <RefreshCw size={14} aria-hidden="true" />
-                    <input
-                      type="file"
-                      accept={MESSAGE_ATTACHMENT_ACCEPT}
-                      onChange={(event) => onReplace?.(attachmentKey, event)}
-                      disabled={disabled}
-                    />
-                  </label>
+                  {isVoiceNote && onRecordVoiceNoteReplacement ? (
+                    <button
+                      type="button"
+                      className={isRecordingVoiceReplacement ? "is-recording" : ""}
+                      onClick={() => onRecordVoiceNoteReplacement(attachmentKey)}
+                      disabled={disabled || Boolean(activeVoiceNoteReplacementKey)}
+                      aria-label={`Record replacement for ${fileName}`}
+                      title={
+                        isRecordingVoiceReplacement
+                          ? "Recording replacement"
+                          : replacementFile
+                            ? "Record again"
+                            : "Record replacement"
+                      }
+                    >
+                      <Mic size={14} aria-hidden="true" />
+                    </button>
+                  ) : (
+                    <label
+                      aria-label={`Replace ${fileName}`}
+                      title="Replace"
+                    >
+                      <RefreshCw size={14} aria-hidden="true" />
+                      <input
+                        type="file"
+                        accept={MESSAGE_ATTACHMENT_ACCEPT}
+                        onChange={(event) => onReplace?.(attachmentKey, event)}
+                        disabled={disabled}
+                      />
+                    </label>
+                  )}
                 </>
               )}
             </div>

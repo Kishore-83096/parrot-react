@@ -1210,6 +1210,35 @@ async function createVoiceNoteMetadata(blob, fallbackDuration = 0) {
   }
 }
 
+async function createVoiceNoteSelectedFile(recording) {
+  if (!recording?.blob) {
+    return null;
+  }
+
+  const voiceNoteMetadata = await createVoiceNoteMetadata(
+    recording.blob,
+    recording.durationSeconds,
+  );
+  const extension = getVoiceNoteFileExtension(recording.mimeType);
+  const file = new File(
+    [recording.blob],
+    `voice-note-${Date.now()}.${extension}`,
+    {
+      type: recording.mimeType || recording.blob.type || "audio/webm",
+    },
+  );
+
+  return {
+    id: createSelectedFileId(file),
+    attachmentKind: VOICE_NOTE_ATTACHMENT_KIND,
+    durationSeconds:
+      voiceNoteMetadata.durationSeconds || recording.durationSeconds,
+    file,
+    fileType: "audio",
+    waveform: voiceNoteMetadata.waveform,
+  };
+}
+
 function clampMediaVolume(volume) {
   return Math.min(Math.max(Number(volume) || 0, 0), 1);
 }
@@ -3055,14 +3084,18 @@ function MessageActionModal({
   actionState,
   groupName,
   onClose,
+  onCancelVoiceNoteReplacement,
   onDraftChange,
+  onRecordVoiceNoteReplacement,
   onRemoveCurrentAttachment,
   onRemoveReplacementFile,
   onReplaceCurrentAttachment,
   onReplacementFilesChange,
   onRestoreCurrentAttachment,
+  onUseVoiceNoteReplacement,
   resolveAttachmentPreviewUrl,
   onSubmit,
+  voiceNoteReplacement,
 }) {
   if (!actionState?.mode || !actionState?.message) {
     return null;
@@ -3095,10 +3128,18 @@ function MessageActionModal({
     "This message can only be edited or deleted for everyone within 15 minutes.";
   const blockedReason = actionState.blockedReason || "";
   const modalError = actionState.error || blockedReason;
+  const isVoiceNoteReplacementRecording =
+    Boolean(voiceNoteReplacement?.attachmentKey) &&
+    voiceNoteReplacement.status === "recording";
+  const isVoiceNoteReplacementFinishing =
+    Boolean(voiceNoteReplacement?.attachmentKey) &&
+    voiceNoteReplacement.status === "finishing";
   const isSubmitDisabled =
     actionState.isSubmitting ||
     isExpired ||
     Boolean(blockedReason) ||
+    isVoiceNoteReplacementRecording ||
+    isVoiceNoteReplacementFinishing ||
     (isEdit && (!hasAnyContentAfterEdit || !hasEditChange));
   const handleDraftKeyDown = (event) => {
     if (
@@ -3160,14 +3201,73 @@ function MessageActionModal({
                     <span>Current attachments</span>
                     <EditableAttachmentGrid
                       attachments={currentAttachments}
-                      disabled={actionState.isSubmitting}
+                      disabled={
+                        actionState.isSubmitting ||
+                        isVoiceNoteReplacementRecording ||
+                        isVoiceNoteReplacementFinishing
+                      }
+                      activeVoiceNoteReplacementKey={
+                        voiceNoteReplacement?.attachmentKey || ""
+                      }
                       onRemove={onRemoveCurrentAttachment}
+                      onRecordVoiceNoteReplacement={onRecordVoiceNoteReplacement}
                       onReplace={onReplaceCurrentAttachment}
                       onRestore={onRestoreCurrentAttachment}
                       removedAttachmentKeys={actionState.removedAttachmentKeys}
                       replacements={actionState.attachmentReplacements}
                       resolvePreviewUrl={resolveAttachmentPreviewUrl}
                     />
+                  </div>
+                ) : null}
+                {voiceNoteReplacement?.attachmentKey ? (
+                  <div className="parent-layout-page__message-action-voice-replacement">
+                    <div
+                      className="parent-layout-page__voice-recording is-edit-replacement"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <span
+                        className="parent-layout-page__voice-recording-dot"
+                        aria-hidden="true"
+                      />
+                      <div className="parent-layout-page__voice-recording-wave">
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                        <i />
+                      </div>
+                      <span className="parent-layout-page__voice-recording-time">
+                        {formatMediaTime(voiceNoteReplacement.durationSeconds)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="parent-layout-page__message-action-voice-cancel"
+                      onClick={onCancelVoiceNoteReplacement}
+                      disabled={isVoiceNoteReplacementFinishing}
+                      aria-label="Cancel replacement voice note"
+                      title="Cancel"
+                    >
+                      <X size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="parent-layout-page__message-action-voice-use"
+                      onClick={onUseVoiceNoteReplacement}
+                      disabled={isVoiceNoteReplacementFinishing}
+                      aria-label="Use replacement voice note"
+                      title="Use recording"
+                    >
+                      {isVoiceNoteReplacementFinishing ? (
+                        <LoaderCircle size={16} aria-hidden="true" />
+                      ) : (
+                        <Check size={16} aria-hidden="true" />
+                      )}
+                    </button>
                   </div>
                 ) : null}
                 {replacementFiles.length > 0 ? (
@@ -3210,7 +3310,11 @@ function MessageActionModal({
                     multiple
                     accept={MESSAGE_ATTACHMENT_ACCEPT}
                     onChange={onReplacementFilesChange}
-                    disabled={actionState.isSubmitting}
+                    disabled={
+                      actionState.isSubmitting ||
+                      isVoiceNoteReplacementRecording ||
+                      isVoiceNoteReplacementFinishing
+                    }
                   />
                 </label>
                 <textarea
@@ -3469,6 +3573,10 @@ function GroupConversation({
     startedAt: 0,
     status: "idle",
   });
+  const [voiceRecordingTarget, setVoiceRecordingTarget] = useState({
+    attachmentKey: "",
+    mode: "composer",
+  });
   const [pendingReplyScrollId, setPendingReplyScrollId] = useState(null);
   const [isReplyTargetLoading, setIsReplyTargetLoading] = useState(false);
   const [replyDrag, setReplyDrag] = useState({
@@ -3539,6 +3647,10 @@ function GroupConversation({
     voiceRecording.status === "recording" ||
     voiceRecording.status === "finishing";
   const isVoiceRecordingFinishing = voiceRecording.status === "finishing";
+  const isMessageActionVoiceRecording =
+    isVoiceRecording && voiceRecordingTarget.mode === "edit";
+  const isComposerVoiceRecording =
+    isVoiceRecording && !isMessageActionVoiceRecording;
 
   useEffect(() => {
     const nextRoomId = selectedRoom?.id || null;
@@ -3733,6 +3845,10 @@ function GroupConversation({
       startedAt: 0,
       status: "idle",
     });
+    setVoiceRecordingTarget({
+      attachmentKey: "",
+      mode: "composer",
+    });
   }, [clearVoiceRecordingTimer, stopVoiceRecordingStream]);
 
   useEffect(() => {
@@ -3829,16 +3945,31 @@ function GroupConversation({
     [resetVoiceRecordingState],
   );
 
-  const handleStartVoiceRecording = useCallback(async () => {
+  const handleStartVoiceRecording = useCallback(async (options = {}) => {
     if (isVoiceRecording || !hasActiveConversation || isGroupDeleted) {
       return;
     }
+
+    const isEditReplacement = options?.mode === "edit";
+    const attachmentKey = isEditReplacement
+      ? String(options?.attachmentKey || "")
+      : "";
+    const reportVoiceRecordingError = (message) => {
+      if (isEditReplacement) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: message,
+        }));
+      } else {
+        setRoomMessage(message);
+      }
+    };
 
     if (
       typeof globalThis.MediaRecorder === "undefined" ||
       !navigator.mediaDevices?.getUserMedia
     ) {
-      setRoomMessage("Voice recording is not supported in this browser.");
+      reportVoiceRecordingError("Voice recording is not supported in this browser.");
       return;
     }
 
@@ -3873,7 +4004,7 @@ function GroupConversation({
       });
       recorder.addEventListener("error", () => {
         resetVoiceRecordingState();
-        setRoomMessage("Voice recording stopped unexpectedly.");
+        reportVoiceRecordingError("Voice recording stopped unexpectedly.");
       });
 
       recorder.start(1000);
@@ -3894,12 +4025,16 @@ function GroupConversation({
         startedAt,
         status: "recording",
       });
+      setVoiceRecordingTarget({
+        attachmentKey,
+        mode: isEditReplacement ? "edit" : "composer",
+      });
       setRoomMessage("");
       sendTypingStopped();
       messageDraftRef.current?.blur();
     } catch (error) {
       resetVoiceRecordingState();
-      setRoomMessage(
+      reportVoiceRecordingError(
         error?.name === "NotAllowedError"
           ? "Microphone permission is required to record a voice note."
           : "Unable to start voice recording.",
@@ -4967,6 +5102,12 @@ function GroupConversation({
   );
 
   const closeMessageActionModal = useCallback(() => {
+    if (isMessageActionVoiceRecording) {
+      finishVoiceRecording({ discard: true }).catch(() => {
+        resetVoiceRecordingState();
+      });
+    }
+
     setMessageActionModal({
       attachmentReplacements: {},
       blockedReason: "",
@@ -4979,7 +5120,11 @@ function GroupConversation({
       removedAttachmentKeys: [],
       replacementFiles: [],
     });
-  }, []);
+  }, [
+    finishVoiceRecording,
+    isMessageActionVoiceRecording,
+    resetVoiceRecordingState,
+  ]);
 
   const openMessageActionModal = useCallback(
     (message, mode) => {
@@ -5157,6 +5302,80 @@ function GroupConversation({
       ),
     }));
   }, []);
+
+  const handleStartMessageActionVoiceReplacement = useCallback(
+    (attachmentKey) => {
+      if (!attachmentKey || messageActionModal.isSubmitting) {
+        return;
+      }
+
+      if (isVoiceRecording) {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: "Finish or cancel the current voice recording first.",
+        }));
+        return;
+      }
+
+      void handleStartVoiceRecording({
+        attachmentKey,
+        mode: "edit",
+      });
+    },
+    [handleStartVoiceRecording, isVoiceRecording, messageActionModal.isSubmitting],
+  );
+
+  const handleCancelMessageActionVoiceReplacement = useCallback(() => {
+    finishVoiceRecording({ discard: true })
+      .then(() => {
+        setMessageActionModal((currentModal) => ({
+          ...currentModal,
+          error: "",
+        }));
+      })
+      .catch(() => {
+        resetVoiceRecordingState();
+      });
+  }, [finishVoiceRecording, resetVoiceRecordingState]);
+
+  const handleUseMessageActionVoiceReplacement = useCallback(async () => {
+    const attachmentKey = voiceRecordingTarget.attachmentKey;
+
+    if (!attachmentKey) {
+      return;
+    }
+
+    try {
+      const recording = await finishVoiceRecording();
+      const voiceNoteFile = await createVoiceNoteSelectedFile(recording);
+
+      if (!voiceNoteFile) {
+        throw new Error("Voice note recording is empty.");
+      }
+
+      setMessageActionModal((currentModal) => ({
+        ...currentModal,
+        attachmentReplacements: {
+          ...(currentModal.attachmentReplacements || {}),
+          [attachmentKey]: voiceNoteFile,
+        },
+        error: "",
+        removedAttachmentKeys: (currentModal.removedAttachmentKeys || []).filter(
+          (currentKey) => currentKey !== attachmentKey,
+        ),
+      }));
+    } catch (error) {
+      setMessageActionModal((currentModal) => ({
+        ...currentModal,
+        error: error?.message || "Unable to use voice note recording.",
+      }));
+      resetVoiceRecordingState();
+    }
+  }, [
+    finishVoiceRecording,
+    resetVoiceRecordingState,
+    voiceRecordingTarget.attachmentKey,
+  ]);
 
   const applyMessageActionResult = useCallback(
     async (result) => {
@@ -6201,27 +6420,7 @@ function GroupConversation({
         return;
       }
 
-      const voiceNoteMetadata = await createVoiceNoteMetadata(
-        recording.blob,
-        recording.durationSeconds,
-      );
-      const extension = getVoiceNoteFileExtension(recording.mimeType);
-      const file = new File(
-        [recording.blob],
-        `voice-note-${Date.now()}.${extension}`,
-        {
-          type: recording.mimeType || recording.blob.type || "audio/webm",
-        },
-      );
-      const voiceNoteFile = {
-        id: createSelectedFileId(file),
-        attachmentKind: VOICE_NOTE_ATTACHMENT_KIND,
-        durationSeconds:
-          voiceNoteMetadata.durationSeconds || recording.durationSeconds,
-        file,
-        fileType: "audio",
-        waveform: voiceNoteMetadata.waveform,
-      };
+      const voiceNoteFile = await createVoiceNoteSelectedFile(recording);
 
       queueOutgoingMessage({
         filesToSend: [voiceNoteFile],
@@ -6245,12 +6444,18 @@ function GroupConversation({
       voiceRecording.status === "recording" &&
       voiceRecording.durationSeconds >= VOICE_NOTE_MAX_DURATION_SECONDS
     ) {
-      void handleSendVoiceRecording();
+      if (voiceRecordingTarget.mode === "edit") {
+        void handleUseMessageActionVoiceReplacement();
+      } else {
+        void handleSendVoiceRecording();
+      }
     }
   }, [
     handleSendVoiceRecording,
+    handleUseMessageActionVoiceReplacement,
     voiceRecording.durationSeconds,
     voiceRecording.status,
+    voiceRecordingTarget.mode,
   ]);
 
   const handleSendMessage = (event) => {
@@ -6750,7 +6955,7 @@ function GroupConversation({
       ) : (
         <form
           className={`parent-layout-page__message-form${
-            isVoiceRecording ? " is-recording" : ""
+            isComposerVoiceRecording ? " is-recording" : ""
           }`}
           onSubmit={handleSendMessage}
         >
@@ -6783,13 +6988,13 @@ function GroupConversation({
             </button>
           </div>
         ) : null}
-        {selectedFiles.length > 0 && !isVoiceRecording ? (
+        {selectedFiles.length > 0 && !isComposerVoiceRecording ? (
           <SelectedAttachmentPreviewList
             files={selectedFiles}
             onRemove={handleRemoveSelectedFile}
           />
         ) : null}
-        {isVoiceRecording ? (
+        {isComposerVoiceRecording ? (
           <>
             <button
               type="button"
@@ -6868,10 +7073,12 @@ function GroupConversation({
               type="button"
               className="parent-layout-page__message-voice"
               onClick={handleStartVoiceRecording}
-              disabled={hasComposedMessage}
+              disabled={hasComposedMessage || isVoiceRecording}
               aria-label="Record voice note"
               title={
-                hasComposedMessage
+                isVoiceRecording
+                  ? "Finish or cancel the current voice recording"
+                  : hasComposedMessage
                   ? "Clear message to record voice note"
                   : "Record voice note"
               }
@@ -6918,14 +7125,26 @@ function GroupConversation({
         actionState={messageActionModal}
         groupName={messageActionGroupName}
         onClose={closeMessageActionModal}
+        onCancelVoiceNoteReplacement={handleCancelMessageActionVoiceReplacement}
         onDraftChange={updateMessageActionDraft}
+        onRecordVoiceNoteReplacement={handleStartMessageActionVoiceReplacement}
         onRemoveCurrentAttachment={handleRemoveMessageActionCurrentAttachment}
         onRemoveReplacementFile={handleRemoveMessageActionReplacementFile}
         onReplaceCurrentAttachment={handleReplaceMessageActionAttachment}
         onReplacementFilesChange={handleMessageActionReplacementFilesChange}
         onRestoreCurrentAttachment={handleRestoreMessageActionCurrentAttachment}
+        onUseVoiceNoteReplacement={handleUseMessageActionVoiceReplacement}
         resolveAttachmentPreviewUrl={resolveMessageActionAttachmentPreviewUrl}
         onSubmit={handleSubmitMessageAction}
+        voiceNoteReplacement={
+          isMessageActionVoiceRecording
+            ? {
+                attachmentKey: voiceRecordingTarget.attachmentKey,
+                durationSeconds: voiceRecording.durationSeconds,
+                status: voiceRecording.status,
+              }
+            : null
+        }
       />
     </section>
   );

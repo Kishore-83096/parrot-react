@@ -689,6 +689,29 @@
   background: rgba(76, 29, 39, 0.72);
 }
 
+:root[data-theme="dark"] .parent-layout-page__voice-recording.is-edit-replacement {
+  border-color: rgba(45, 212, 191, 0.22);
+  background: rgba(10, 9, 17, 0.82);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-action-voice-replacement {
+  border-color: rgba(45, 212, 191, 0.22);
+  background: rgba(20, 184, 166, 0.1);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-action-voice-cancel {
+  color: #fda4af;
+  background: rgba(76, 29, 39, 0.72);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message-action-voice-use,
+:root[data-theme="dark"] .parent-layout-page__edit-attachment-actions button.is-recording,
+:root[data-theme="dark"] .parent-layout-page__edit-attachment-actions button.is-recording:disabled {
+  color: #ffffff;
+  background: linear-gradient(135deg, #14b8a6, #3b82f6);
+  box-shadow: 0 12px 22px rgba(20, 184, 166, 0.2);
+}
+
 :root[data-theme="dark"] .parent-layout-page__message-form.is-read-only,
 :root[data-theme="dark"] .parent-layout-page__message-form.is-read-only p,
 :root[data-theme="dark"] .parent-layout-page__attachment-preview-meta span,
