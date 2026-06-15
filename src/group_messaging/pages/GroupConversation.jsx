@@ -96,6 +96,15 @@ import {
   MESSAGE_ATTACHMENT_ACCEPT,
   SelectedAttachmentPreviewList,
 } from "../../messenger/pages/jsx/AttachmentPreviewControls.jsx";
+import {
+  ComposerAddMenu,
+  SharedContactCards,
+} from "../../messenger/pages/jsx/SharedContactControls.jsx";
+import {
+  getMessageSharedContacts,
+  getSharedContactPreviewLabel,
+  normalizeSharedContacts,
+} from "../../messenger/sharedContacts.js";
 import { GroupPeopleIcon } from "@/components/icons";
 import { getContactName } from "../../parent/pages/jsx/contactHelpers.js";
 import { getGroupLogDisplay } from "../logDisplay.js";
@@ -672,6 +681,14 @@ function getMessagePreviewText(message) {
 
   if (storyContext) {
     return storyContext.type === "reaction" ? "Story reaction" : "Story reply";
+  }
+
+  const sharedContactPreview = getSharedContactPreviewLabel(
+    getMessageSharedContacts(message),
+  );
+
+  if (sharedContactPreview) {
+    return sharedContactPreview;
   }
 
   const attachments = getMessageAttachments(message);
@@ -3430,6 +3447,8 @@ function GroupConversation({
   onGroupEvent,
   onConversationCacheChange,
   onOpenStoryReference,
+  onOpenSharedContactConversation,
+  onSaveSharedContact,
 }) {
   const [roomMessages, setRoomMessages] = useState([]);
   const [logs, setLogs] = useState(() =>
@@ -5967,6 +5986,7 @@ function GroupConversation({
           const encryptedText = await encryptGroupMessageText({
             attachments: encryptedAttachments,
             roomId: queuedMessage.roomId,
+            sharedContacts: queuedMessage.sharedContacts,
             text: queuedMessage.text,
             user,
           });
@@ -6054,12 +6074,20 @@ function GroupConversation({
   ]);
 
   const queueOutgoingMessage = useCallback(
-    ({ filesToSend = [], replyTargetSnapshot = null, text = "" }) => {
+    ({
+      filesToSend = [],
+      replyTargetSnapshot = null,
+      sharedContactsToSend = [],
+      text = "",
+    }) => {
       const normalizedText = String(text || "").trim();
       const safeFilesToSend = Array.isArray(filesToSend) ? filesToSend : [];
+      const sharedContacts = normalizeSharedContacts(sharedContactsToSend);
 
       if (
-        (!normalizedText && safeFilesToSend.length === 0) ||
+        (!normalizedText &&
+          safeFilesToSend.length === 0 &&
+          sharedContacts.length === 0) ||
         !selectedGroupRoomId
       ) {
         return false;
@@ -6097,6 +6125,7 @@ function GroupConversation({
         text: "",
         decrypted_text: normalizedText,
         decrypted_attachments: optimisticAttachments,
+        decrypted_shared_contacts: sharedContacts,
         decryption_status: "ok",
         is_encrypted: true,
         client_message_id: clientMessageId,
@@ -6141,6 +6170,7 @@ function GroupConversation({
         releaseOptimisticPreviews,
         replyTargetId,
         replyTargetSnapshot,
+        sharedContacts,
         text: normalizedText,
       });
       void processSendQueue();
@@ -6232,6 +6262,17 @@ function GroupConversation({
       text: messageDraft,
     });
   };
+
+  const handleShareSelectedContacts = useCallback(
+    (sharedContactsToSend) =>
+      queueOutgoingMessage({
+        filesToSend: selectedFiles,
+        replyTargetSnapshot: replyTarget,
+        sharedContactsToSend,
+        text: messageDraft,
+      }),
+    [messageDraft, queueOutgoingMessage, replyTarget, selectedFiles],
+  );
 
   const handleMessageDraftChange = (event) => {
     if (isGroupDeleted) {
@@ -6414,6 +6455,8 @@ function GroupConversation({
             const messageLinks = extractMessageLinks(messageText);
             const storyContext = getStoryContext(message);
             const messageAttachments = getMessageAttachments(message);
+            const sharedContacts = getMessageSharedContacts(message);
+            const canEditMessage = isMine && sharedContacts.length === 0;
             const attachmentCountClass =
               messageAttachments.length > 0
                 ? ` has-attachments is-attachment-count-${Math.min(
@@ -6429,6 +6472,8 @@ function GroupConversation({
               );
             const bubbleClassName = `parent-layout-page__message-bubble${attachmentCountClass}${
               hasInlineMediaAttachment ? " has-inline-media" : ""
+            }${sharedContacts.length > 0 ? " has-shared-contacts" : ""}${
+              sharedContacts.length > 1 ? " has-shared-contact-list" : ""
             }${messageLinks.length > 0 ? " has-links" : ""}`;
             const messageStyle = isReplyDragging
               ? { "--message-reply-drag-x": `${replyDrag.offsetX}px` }
@@ -6532,6 +6577,16 @@ function GroupConversation({
                       />
                     ) : null}
 
+                    {sharedContacts.length > 0 ? (
+                      <SharedContactCards
+                        contacts={contacts}
+                        messageContacts={sharedContacts}
+                        onOpenConversation={onOpenSharedContactConversation}
+                        onSaveContact={onSaveSharedContact}
+                        user={user}
+                      />
+                    ) : null}
+
                     {messageLinks.length > 0 ? (
                       <MessageLinkPreview links={messageLinks} />
                     ) : null}
@@ -6601,15 +6656,17 @@ function GroupConversation({
                           <>
                             {!isGroupDeleted ? (
                               <>
-                                <button
-                                  type="button"
-                                  className="parent-layout-page__message-edit-action"
-                                  onClick={() => openMessageActionModal(message, "edit")}
-                                  aria-label="Edit message"
-                                  title="Edit"
-                                >
-                                  <Pencil size={15} aria-hidden="true" />
-                                </button>
+                                {canEditMessage ? (
+                                  <button
+                                    type="button"
+                                    className="parent-layout-page__message-edit-action"
+                                    onClick={() => openMessageActionModal(message, "edit")}
+                                    aria-label="Edit message"
+                                    title="Edit"
+                                  >
+                                    <Pencil size={15} aria-hidden="true" />
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   className="parent-layout-page__message-delete-action"
@@ -6784,15 +6841,12 @@ function GroupConversation({
           </>
         ) : (
           <>
-            <button
-              type="button"
-              className="parent-layout-page__message-attach"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach files"
-              title="Attach files"
-            >
-              <Paperclip size={18} aria-hidden="true" />
-            </button>
+            <ComposerAddMenu
+              contacts={contacts}
+              isSending={isSendingMessage}
+              onAttachFiles={() => fileInputRef.current?.click()}
+              onShareContacts={handleShareSelectedContacts}
+            />
             <input
               ref={fileInputRef}
               className="parent-layout-page__message-file-input"

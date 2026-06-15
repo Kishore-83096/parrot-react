@@ -238,6 +238,8 @@
 :root[data-theme="dark"] .parent-layout-page__modal,
 :root[data-theme="dark"] .parent-layout-page__message-info-modal,
 :root[data-theme="dark"] .parent-layout-page__message-action-modal,
+:root[data-theme="dark"] .parent-layout-page__composer-menu,
+:root[data-theme="dark"] .parent-layout-page__contact-share-picker,
 :root[data-theme="dark"] .parent-layout-page__story-composer,
 :root[data-theme="dark"] .parent-layout-page__story-viewers-modal,
 :root[data-theme="dark"] .parent-layout-page__story-settings-modal,
@@ -271,6 +273,8 @@
 :root[data-theme="dark"] .parent-layout-page__message-action-attachment-item,
 :root[data-theme="dark"] .parent-layout-page__message-action-file-button,
 :root[data-theme="dark"] .parent-layout-page__message-read-row,
+:root[data-theme="dark"] .parent-layout-page__shared-contact-card,
+:root[data-theme="dark"] .parent-layout-page__contact-share-option,
 :root[data-theme="dark"] .parent-layout-page__group-settings-member-list,
 :root[data-theme="dark"] .parent-layout-page__story-file-drop,
 :root[data-theme="dark"] .parent-layout-page__story-settings-menu > button,
@@ -300,6 +304,7 @@
 :root[data-theme="dark"] .parent-layout-page__modal-form input,
 :root[data-theme="dark"] .parent-layout-page__profile-field input,
 :root[data-theme="dark"] .parent-layout-page__profile-field select,
+:root[data-theme="dark"] .parent-layout-page__contact-share-picker input[type="search"],
 :root[data-theme="dark"] .parent-layout-page__message-action-textarea,
 :root[data-theme="dark"] .parent-layout-page__message-action-compose-input,
 :root[data-theme="dark"] .parent-layout-page__group-title-form input,
@@ -425,6 +430,70 @@
   border-color: var(--theme-border);
   color: var(--theme-text);
   background: rgba(31, 28, 43, 0.94);
+}
+
+:root[data-theme="dark"] .parent-layout-page__shared-contact-card {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__shared-contact-card {
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  background: rgba(7, 6, 12, 0.34);
+}
+
+:root[data-theme="dark"] .parent-layout-page__composer-menu button,
+:root[data-theme="dark"] .parent-layout-page__contact-share-picker header strong,
+:root[data-theme="dark"] .parent-layout-page__contact-share-option strong,
+:root[data-theme="dark"] .parent-layout-page__shared-contact-card-main strong {
+  color: var(--theme-text);
+}
+
+:root[data-theme="dark"] .parent-layout-page__composer-menu button:hover,
+:root[data-theme="dark"] .parent-layout-page__composer-menu button:focus-visible {
+  color: var(--theme-text);
+  background: rgba(168, 137, 255, 0.16);
+}
+
+:root[data-theme="dark"] .parent-layout-page__contact-share-picker header button {
+  color: var(--theme-muted);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme="dark"] .parent-layout-page__contact-share-picker input[type="search"]::placeholder {
+  color: rgba(182, 173, 200, 0.78);
+}
+
+:root[data-theme="dark"] .parent-layout-page__contact-share-option.is-selected {
+  border-color: rgba(74, 222, 128, 0.34);
+  background: rgba(20, 83, 45, 0.42);
+}
+
+:root[data-theme="dark"] .parent-layout-page__contact-share-list > p,
+:root[data-theme="dark"] .parent-layout-page__contact-share-option small,
+:root[data-theme="dark"] .parent-layout-page__shared-contact-card-main small,
+:root[data-theme="dark"] .parent-layout-page__contact-share-picker footer > span,
+:root[data-theme="dark"] .parent-layout-page__shared-contact-state {
+  color: var(--theme-muted);
+}
+
+:root[data-theme="dark"] .parent-layout-page__shared-contact-state {
+  background: rgba(168, 137, 255, 0.14);
+}
+
+:root[data-theme="dark"] .parent-layout-page__shared-contact-state.is-saved {
+  color: #86efac;
+  background: rgba(20, 83, 45, 0.5);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__shared-contact-state {
+  color: rgba(255, 255, 255, 0.84);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__shared-contact-card-actions button {
+  color: #11101b;
+  background: #ffffff;
 }
 
 :root[data-theme="dark"] .parent-layout-page__message-date-divider span,

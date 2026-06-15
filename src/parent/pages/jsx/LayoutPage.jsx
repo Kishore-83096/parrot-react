@@ -45,8 +45,9 @@ import {
   getRoomContact,
   upsertMessage,
 } from "../../../messenger/pages/jsx/roomHelpers.js";
-import { clearParentSession } from "../../api.js";
+import { clearParentSession, saveParentContact } from "../../api.js";
 import ContactPanel from "./ContactPanel.jsx";
+import { getParentApiErrorMessage } from "./contactHelpers.js";
 import Header from "./Header.jsx";
 import {
   clearMessengerUiCache,
@@ -901,6 +902,100 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     );
   }, []);
 
+  const handleSaveSharedContact = useCallback(
+    async (sharedContact) => {
+      const accountNumber = String(sharedContact?.account_number || "").trim();
+
+      if (!accountNumber) {
+        throw new Error("Contact account number is missing.");
+      }
+
+      if (String(user?.account_number || "") === accountNumber) {
+        throw new Error("You cannot save your own account as a contact.");
+      }
+
+      const existingContact = contacts.find(
+        (contact) => String(contact?.account_number || "") === accountNumber,
+      );
+
+      if (existingContact) {
+        return existingContact;
+      }
+
+      const aliasName =
+        String(
+          sharedContact?.alias_name ||
+            sharedContact?.display_name ||
+            sharedContact?.name ||
+            accountNumber,
+        )
+          .trim()
+          .slice(0, 120) || accountNumber;
+      try {
+        const response = await saveParentContact({
+          account_number: accountNumber,
+          alias_name: aliasName,
+        });
+        const savedContact = response.data?.contact;
+
+        if (savedContact) {
+          handleContactUpdated(savedContact);
+          setToast({
+            type: "success",
+            title: "Contact saved",
+            message: `${aliasName} was added to your contacts.`,
+          });
+        }
+
+        return savedContact;
+      } catch (error) {
+        setToast({
+          type: "error",
+          title: "Contact not saved",
+          message: getParentApiErrorMessage(
+            error,
+            "Unable to save this contact.",
+          ),
+        });
+        return null;
+      }
+    },
+    [contacts, handleContactUpdated, user?.account_number],
+  );
+
+  const handleOpenSharedContactConversation = useCallback(
+    (sharedContact) => {
+      const accountNumber = String(sharedContact?.account_number || "").trim();
+
+      if (!accountNumber) {
+        return;
+      }
+
+      const contact = contacts.find(
+        (currentContact) =>
+          String(currentContact?.account_number || "") === accountNumber,
+      );
+
+      if (!contact) {
+        setToast({
+          type: "info",
+          title: "Save contact first",
+          message: "Save this contact before starting a direct chat.",
+        });
+        return;
+      }
+
+      const matchingRoom = findRoomByAccountNumber(rooms, accountNumber, user);
+
+      setIsGroupSettingsOpen(false);
+      setSelectedContact(contact);
+      setSelectedRoom(matchingRoom);
+      setActivePanelTab("chats");
+      pushLoggedInHistoryView({ panelTab: "chats" });
+    },
+    [contacts, rooms, user],
+  );
+
   const mergeRoomMessage = useCallback(
     (currentRooms, room, message, { forceRead = false } = {}) => {
       if (!message?.room_id) {
@@ -1622,6 +1717,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
                 onRoomMessage={handleRoomMessage}
                 onRoomRead={handleRoomRead}
                 onConversationCacheChange={handleConversationCacheChange}
+                onOpenSharedContactConversation={
+                  handleOpenSharedContactConversation
+                }
+                onSaveSharedContact={handleSaveSharedContact}
               />
             )
           ) : (
@@ -1640,6 +1739,8 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
               onRoomRead={handleRoomRead}
               onConversationCacheChange={handleConversationCacheChange}
               onOpenStoryReference={storiesController.openStoryReference}
+              onOpenSharedContactConversation={handleOpenSharedContactConversation}
+              onSaveSharedContact={handleSaveSharedContact}
             />
           )
         }

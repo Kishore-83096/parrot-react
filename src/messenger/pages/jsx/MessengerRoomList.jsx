@@ -7,6 +7,7 @@ import {
   Music,
   Paperclip,
   Search,
+  UserRound,
   Video,
 } from "@/components/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -35,6 +36,7 @@ const ROOM_PREVIEW_ICONS = {
   audio: Music,
   file: FileIcon,
   image: ImageIcon,
+  contact: UserRound,
   pdf: FileText,
   video: Video,
   voice_note: Mic,

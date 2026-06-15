@@ -88,6 +88,15 @@ import {
   MESSAGE_ATTACHMENT_ACCEPT,
   SelectedAttachmentPreviewList,
 } from "./AttachmentPreviewControls.jsx";
+import {
+  ComposerAddMenu,
+  SharedContactCards,
+} from "./SharedContactControls.jsx";
+import {
+  getMessageSharedContacts,
+  getSharedContactPreviewLabel,
+  normalizeSharedContacts,
+} from "../../sharedContacts.js";
 
 const MESSAGE_PAGE_SIZE = 20;
 const OLDER_MESSAGES_SCROLL_THRESHOLD = 8;
@@ -314,6 +323,14 @@ function getMessagePreviewText(message) {
 
   if (storyContext) {
     return storyContext.type === "reaction" ? "Story reaction" : "Story reply";
+  }
+
+  const sharedContactPreview = getSharedContactPreviewLabel(
+    getMessageSharedContacts(message),
+  );
+
+  if (sharedContactPreview) {
+    return sharedContactPreview;
   }
 
   const attachments = getMessageAttachments(message);
@@ -2864,6 +2881,8 @@ function MessengerConversation({
   onRoomRead,
   onConversationCacheChange,
   onOpenStoryReference,
+  onOpenSharedContactConversation,
+  onSaveSharedContact,
 }) {
   const [roomMessages, setRoomMessages] = useState([]);
   const [roomMessagesCacheRoomId, setRoomMessagesCacheRoomId] = useState(null);
@@ -5261,6 +5280,7 @@ function MessengerConversation({
           const encryptedText = await encryptMessageText({
             attachments: encryptedAttachments,
             recipientAccountNumber: queuedMessage.recipientAccountNumber,
+            sharedContacts: queuedMessage.sharedContacts,
             text: queuedMessage.text,
             user,
           });
@@ -5352,12 +5372,20 @@ function MessengerConversation({
   ]);
 
   const queueOutgoingMessage = useCallback(
-    ({ filesToSend = [], replyTargetSnapshot = null, text = "" }) => {
+    ({
+      filesToSend = [],
+      replyTargetSnapshot = null,
+      sharedContactsToSend = [],
+      text = "",
+    }) => {
       const normalizedText = String(text || "").trim();
       const safeFilesToSend = Array.isArray(filesToSend) ? filesToSend : [];
+      const sharedContacts = normalizeSharedContacts(sharedContactsToSend);
 
       if (
-        (!normalizedText && safeFilesToSend.length === 0) ||
+        (!normalizedText &&
+          safeFilesToSend.length === 0 &&
+          sharedContacts.length === 0) ||
         !selectedPeerAccountNumber
       ) {
         return false;
@@ -5390,6 +5418,7 @@ function MessengerConversation({
         text: "",
         decrypted_text: normalizedText,
         decrypted_attachments: optimisticAttachments,
+        decrypted_shared_contacts: sharedContacts,
         decryption_status: "ok",
         is_encrypted: true,
         client_message_id: clientMessageId,
@@ -5435,6 +5464,7 @@ function MessengerConversation({
         releaseOptimisticPreviews,
         replyTargetId,
         replyTargetSnapshot,
+        sharedContacts,
         text: normalizedText,
       });
       void processSendQueue();
@@ -5519,6 +5549,17 @@ function MessengerConversation({
       text: messageDraft,
     });
   };
+
+  const handleShareSelectedContacts = useCallback(
+    (sharedContactsToSend) =>
+      queueOutgoingMessage({
+        filesToSend: selectedFiles,
+        replyTargetSnapshot: replyTarget,
+        sharedContactsToSend,
+        text: messageDraft,
+      }),
+    [messageDraft, queueOutgoingMessage, replyTarget, selectedFiles],
+  );
 
   const handleMessageDraftChange = (event) => {
     const nextMessageDraft = event.target.value;
@@ -5664,6 +5705,8 @@ function MessengerConversation({
             const messageLinks = extractMessageLinks(messageText);
             const storyContext = getStoryContext(message);
             const messageAttachments = getMessageAttachments(message);
+            const sharedContacts = getMessageSharedContacts(message);
+            const canEditMessage = isMine && sharedContacts.length === 0;
             const attachmentCountClass =
               messageAttachments.length > 0
                 ? ` has-attachments is-attachment-count-${Math.min(
@@ -5679,6 +5722,8 @@ function MessengerConversation({
               );
             const bubbleClassName = `parent-layout-page__message-bubble${attachmentCountClass}${
               hasInlineMediaAttachment ? " has-inline-media" : ""
+            }${sharedContacts.length > 0 ? " has-shared-contacts" : ""}${
+              sharedContacts.length > 1 ? " has-shared-contact-list" : ""
             }${messageLinks.length > 0 ? " has-links" : ""}`;
             const messageStyle = isReplyDragging
               ? { "--message-reply-drag-x": `${replyDrag.offsetX}px` }
@@ -5770,6 +5815,16 @@ function MessengerConversation({
                       />
                     ) : null}
 
+                    {sharedContacts.length > 0 ? (
+                      <SharedContactCards
+                        contacts={contacts}
+                        messageContacts={sharedContacts}
+                        onOpenConversation={onOpenSharedContactConversation}
+                        onSaveContact={onSaveSharedContact}
+                        user={user}
+                      />
+                    ) : null}
+
                     {messageLinks.length > 0 ? (
                       <MessageLinkPreview links={messageLinks} />
                     ) : null}
@@ -5837,15 +5892,17 @@ function MessengerConversation({
                       <>
                         {isMine ? (
                           <>
-                            <button
-                              type="button"
-                              className="parent-layout-page__message-edit-action"
-                              onClick={() => openMessageActionModal(message, "edit")}
-                              aria-label="Edit message"
-                              title="Edit"
-                            >
-                              <Pencil size={15} aria-hidden="true" />
-                            </button>
+                            {canEditMessage ? (
+                              <button
+                                type="button"
+                                className="parent-layout-page__message-edit-action"
+                                onClick={() => openMessageActionModal(message, "edit")}
+                                aria-label="Edit message"
+                                title="Edit"
+                              >
+                                <Pencil size={15} aria-hidden="true" />
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               className="parent-layout-page__message-delete-action"
@@ -5994,15 +6051,12 @@ function MessengerConversation({
           </>
         ) : (
           <>
-            <button
-              type="button"
-              className="parent-layout-page__message-attach"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Attach files"
-              title="Attach files"
-            >
-              <Paperclip size={18} aria-hidden="true" />
-            </button>
+            <ComposerAddMenu
+              contacts={contacts}
+              isSending={isSendingMessage}
+              onAttachFiles={() => fileInputRef.current?.click()}
+              onShareContacts={handleShareSelectedContacts}
+            />
             <input
               ref={fileInputRef}
               className="parent-layout-page__message-file-input"

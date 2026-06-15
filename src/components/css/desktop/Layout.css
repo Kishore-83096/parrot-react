@@ -213,7 +213,7 @@
   width: min(326px, calc(100vw - 24px));
   max-width: 100%;
   min-width: 0;
-  max-height: calc(100dvh - 104px);
+  max-height: min(560px, calc(100dvh - 88px));
   padding: 14px;
   box-sizing: border-box;
   position: absolute;
@@ -233,17 +233,18 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(124, 60, 255, 0.28) transparent;
+  -webkit-overflow-scrolling: touch;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .parent-header__menu::-webkit-scrollbar {
-  width: 6px;
+  width: 0;
+  height: 0;
 }
 
 .parent-header__menu::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(124, 60, 255, 0.28);
+  background: transparent;
 }
 
 .parent-layout-page__account-panel-host {
@@ -255,8 +256,11 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
@@ -265,11 +269,15 @@
   height: 0;
 }
 
+.parent-layout-page__account-panel-host::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
 .parent-header__menu--panel {
   width: 100%;
   max-width: 100%;
   height: auto;
-  max-height: calc(100dvh - 104px);
+  max-height: min(560px, calc(100dvh - 88px));
   min-height: 0;
   box-sizing: border-box;
   align-content: start;
@@ -284,13 +292,12 @@
 }
 
 .parent-layout-page__account-panel-host > .parent-header__menu--panel {
-  height: 100%;
-  max-height: 100%;
+  flex: 0 0 auto;
+  height: auto;
+  max-height: none;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(124, 60, 255, 0.28) transparent;
+  padding-bottom: max(14px, env(safe-area-inset-bottom));
+  overflow: visible;
 }
 
 @keyframes parentAccountPanelSlideIn {
@@ -1078,6 +1085,7 @@
   width: 13px;
   height: 13px;
   display: block;
+  fill: currentColor;
   stroke-width: 2.35;
 }
 
@@ -1632,6 +1640,7 @@
 
 .parent-layout-page__conversation-menu {
   width: 224px;
+  max-height: min(360px, calc(100dvh - 96px));
   padding: 8px;
   position: absolute;
   top: calc(100% + 10px);
@@ -1643,6 +1652,21 @@
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 22px 54px rgba(67, 39, 110, 0.22);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.parent-layout-page__conversation-menu::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.parent-layout-page__conversation-menu::-webkit-scrollbar-thumb {
+  background: transparent;
 }
 
 .parent-layout-page__conversation-menu button {
@@ -2446,6 +2470,111 @@
 
 .parent-layout-page__message-bubble.has-attachments .parent-layout-page__message-sender {
   max-width: min(var(--message-caption-width), 100%);
+}
+
+.parent-layout-page__message-bubble.has-shared-contacts {
+  width: min(46%, 360px);
+  max-width: min(52%, 380px);
+  padding: 8px;
+}
+
+.parent-layout-page__shared-contact-cards {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.parent-layout-page__shared-contact-card {
+  min-width: 0;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(124, 60, 255, 0.13);
+  border-radius: 14px;
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__shared-contact-card {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.parent-layout-page__shared-contact-card-main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.parent-layout-page__shared-contact-avatar {
+  width: 38px;
+  height: 38px;
+  display: inline-grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #7c3cff, #2563eb);
+  font-size: 13px;
+  font-weight: 860;
+}
+
+.parent-layout-page__shared-contact-card .parent-layout-page__shared-contact-avatar {
+  width: 44px;
+  height: 44px;
+}
+
+.parent-layout-page__shared-contact-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__shared-contact-card-main small,
+.parent-layout-page__message.is-mine .parent-layout-page__contact-share-option small {
+  color: rgba(255, 255, 255, 0.76);
+}
+
+.parent-layout-page__shared-contact-card-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.parent-layout-page__shared-contact-state {
+  min-height: 28px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  color: #6a6078;
+  background: rgba(124, 60, 255, 0.09);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.parent-layout-page__shared-contact-state.is-saved {
+  color: #08785e;
+  background: rgba(15, 159, 122, 0.12);
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__shared-contact-state {
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.parent-layout-page__message.is-mine .parent-layout-page__shared-contact-card-actions button {
+  color: #192033;
+  background: #ffffff;
 }
 
 .parent-layout-page__message-actions {
@@ -4453,6 +4582,228 @@
 .parent-layout-page__message-attach:disabled {
   cursor: default;
   opacity: 0.52;
+}
+
+.parent-layout-page__composer-add {
+  grid-area: attach;
+  position: relative;
+  width: 40px;
+  height: 44px;
+  align-self: end;
+}
+
+.parent-layout-page__composer-add-button.is-active {
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--layout-purple), var(--layout-purple-deep));
+}
+
+.parent-layout-page__composer-menu,
+.parent-layout-page__contact-share-picker {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 20;
+  border: 1px solid rgba(124, 60, 255, 0.16);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 42px rgba(62, 35, 112, 0.22);
+  backdrop-filter: blur(18px);
+}
+
+.parent-layout-page__composer-menu {
+  width: 158px;
+  padding: 7px;
+  display: grid;
+  gap: 4px;
+  border-radius: 14px;
+}
+
+.parent-layout-page__composer-menu button {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--layout-text);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 780;
+  text-align: left;
+}
+
+.parent-layout-page__composer-menu button:hover,
+.parent-layout-page__composer-menu button:focus-visible {
+  outline: 0;
+  color: var(--layout-purple-deep);
+  background: rgba(124, 60, 255, 0.1);
+}
+
+.parent-layout-page__contact-share-picker {
+  width: min(350px, calc(100vw - 40px));
+  padding: 10px;
+  display: grid;
+  gap: 9px;
+  border-radius: 16px;
+}
+
+.parent-layout-page__contact-share-picker header,
+.parent-layout-page__contact-share-picker footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.parent-layout-page__contact-share-picker header strong {
+  color: var(--layout-text);
+  font-size: 14px;
+  font-weight: 860;
+}
+
+.parent-layout-page__contact-share-picker header button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  color: #625572;
+  background: rgba(124, 60, 255, 0.08);
+}
+
+.parent-layout-page__contact-share-picker input[type="search"] {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid rgba(124, 60, 255, 0.14);
+  border-radius: 11px;
+  outline: 0;
+  color: var(--layout-text);
+  background: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.parent-layout-page__contact-share-picker input[type="search"]:focus {
+  border-color: rgba(124, 60, 255, 0.36);
+  box-shadow: 0 0 0 3px rgba(124, 60, 255, 0.11);
+}
+
+.parent-layout-page__contact-share-list {
+  max-height: 260px;
+  overflow: auto;
+  display: grid;
+  gap: 6px;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.parent-layout-page__contact-share-list > p {
+  margin: 8px 0;
+  color: #6a6078;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.parent-layout-page__contact-share-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 54px;
+  padding: 7px 8px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--layout-text);
+  background: rgba(244, 239, 255, 0.55);
+  text-align: left;
+}
+
+.parent-layout-page__contact-share-option.is-selected {
+  border-color: rgba(15, 159, 122, 0.3);
+  background: rgba(15, 159, 122, 0.09);
+}
+
+.parent-layout-page__contact-share-option span,
+.parent-layout-page__shared-contact-card-main span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.parent-layout-page__contact-share-option strong,
+.parent-layout-page__shared-contact-card-main strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.18;
+  font-weight: 850;
+}
+
+.parent-layout-page__contact-share-option small,
+.parent-layout-page__shared-contact-card-main small {
+  min-width: 0;
+  overflow: hidden;
+  color: #736881;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.15;
+  font-weight: 700;
+}
+
+.parent-layout-page__contact-share-option i {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #ffffff;
+  background: #0f9f7a;
+}
+
+.parent-layout-page__contact-share-picker footer {
+  padding-top: 2px;
+}
+
+.parent-layout-page__contact-share-picker footer > span {
+  min-width: 0;
+  overflow: hidden;
+  color: #6a6078;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.parent-layout-page__contact-share-picker footer button,
+.parent-layout-page__shared-contact-card-actions button {
+  min-height: 34px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0f9f7a, #2563eb);
+  font-size: 12px;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.parent-layout-page__contact-share-picker footer button:disabled,
+.parent-layout-page__shared-contact-card-actions button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .parent-layout-page__message-voice {

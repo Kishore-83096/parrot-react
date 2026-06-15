@@ -7,7 +7,7 @@ function GroupPeopleIcon({
   return (
     <svg
       className={className}
-      fill="#ffffff"
+      fill="currentColor"
       focusable="false"
       height={size}
       strokeWidth={strokeWidth}

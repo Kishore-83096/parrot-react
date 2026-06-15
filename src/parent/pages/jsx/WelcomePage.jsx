@@ -4,13 +4,15 @@ import {
   CheckCircle2,
   LoaderCircle,
   LogIn,
-  Mail,
   MessageCircle,
+  MessagesSquare,
   Mic,
+  Paperclip,
   ParrotIcon,
-  PhoneCall,
+  Reply,
+  ShieldCheck,
   UserPlus,
-  Video,
+  UsersRound,
 } from "@/components/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -21,28 +23,40 @@ import "../css/WelcomePage.css";
 
 const featureCards = [
   {
-    Icon: MessageCircle,
+    Icon: MessagesSquare,
     accent: "purple",
-    title: "Chats and Groups",
-    text: "Message people directly or create group spaces for casual everyday conversations.",
+    title: "Direct and Group Chat",
+    text: "Save contacts, open direct rooms, create groups, reply, react, edit or delete recent messages, and track delivery state.",
   },
   {
-    Icon: PhoneCall,
+    Icon: Paperclip,
     accent: "blue",
-    title: "Voice and Video Calls",
-    text: "Move from typing to live voice or video calls whenever the conversation needs more.",
-  },
-  {
-    Icon: Mail,
-    accent: "green",
-    title: "Mail and Voice Notes",
-    text: "Send longer mail-style messages or quick voice notes when text feels too slow.",
+    title: "Encrypted Media",
+    text: "Send files, images, audio, video, and browser-recorded voice notes with encrypted upload and inline playback.",
   },
   {
     Icon: Activity,
+    accent: "green",
+    title: "Stories With Audiences",
+    text: "Post encrypted text, image, or video stories with expiry choices, viewers, replies, reactions, and specific-contact visibility.",
+  },
+  {
+    Icon: ShieldCheck,
     accent: "amber",
-    title: "Status Updates",
-    text: "Share what you are doing and keep friends or groups updated in one simple place.",
+    title: "Linked-Device Safety",
+    text: "Use browser keys, a default-device model, and recovery-key verification to reopen encrypted messages on trusted devices.",
+  },
+  {
+    Icon: UsersRound,
+    accent: "purple",
+    title: "Desktop Workflow",
+    text: "Use wide chat panels, hover message actions, message info, profile tools, group settings, and media modals on larger screens.",
+  },
+  {
+    Icon: Reply,
+    accent: "blue",
+    title: "Mobile Workflow",
+    text: "Tap message bubbles for actions, swipe either direction to reply, and use compact menus built for shorter screens.",
   },
 ];
 
@@ -328,14 +342,15 @@ function WelcomePage({ onLoginSuccess }) {
         <div className="parent-welcome__copy">
           <p className="parent-welcome__eyebrow">
             <MessageCircle size={17} aria-hidden="true" />
-            <span>One spot for casual communication</span>
+            <span>Private messaging for desktop and mobile</span>
           </p>
 
-          <h1 id="welcome-title">Keep every conversation close with Parrot.</h1>
+          <h1 id="welcome-title">Private chats, groups, and stories across every screen.</h1>
           <p className="parent-welcome__intro">
-            Parrot is a simple communication space for people and groups. Chat,
-            send mail, call with voice or video, share voice notes, and keep
-            your status fresh from one account.
+            Parrot brings saved contacts, direct chats, group rooms, encrypted
+            attachments, voice notes, stories, and linked-device recovery into
+            one browser app. Desktop gets roomy controls, while mobile keeps
+            tap actions and swipe-to-reply close at hand.
           </p>
         </div>
 
@@ -348,17 +363,17 @@ function WelcomePage({ onLoginSuccess }) {
 
             <div className="parent-welcome__bubble parent-welcome__bubble--light">
               <Mic size={17} />
-              <span>Voice note sent</span>
+              <span>Voice note encrypted</span>
             </div>
 
             <div className="parent-welcome__bubble parent-welcome__bubble--primary">
-              <Video size={17} />
-              <span>Video call at 8?</span>
+              <Paperclip size={17} />
+              <span>File shared safely</span>
             </div>
 
             <div className="parent-welcome__bubble parent-welcome__bubble--status">
-              <Activity size={17} />
-              <span>Status updated</span>
+              <Reply size={17} />
+              <span>Swipe reply ready</span>
             </div>
           </div>
         </div>

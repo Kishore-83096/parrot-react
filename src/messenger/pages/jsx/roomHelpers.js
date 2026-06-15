@@ -9,6 +9,10 @@ import {
   isEncryptedMessageText,
 } from "../../e2ee/messages.js";
 import {
+  getMessageSharedContacts,
+  getSharedContactPreviewLabel,
+} from "../../sharedContacts.js";
+import {
   getMessagePreviewLabel as getGroupMessagePreviewLabel,
   isEncryptedMessageText as isGroupEncryptedMessageText,
 } from "../../../group_messaging/e2ee/messages.js";
@@ -186,11 +190,19 @@ export function getLastMessagePreviewDetails(
           ? message.attachments
           : [];
       const attachmentPreview = getAttachmentPreviewDetails(attachments);
+      const sharedContactPreview = getSharedContactPreviewLabel(
+        getMessageSharedContacts(message),
+      );
       const hasEncryptedPayload = isGroupEncryptedMessageText(message.text);
       const hasEncryptedPlaceholder =
         messageText.toLowerCase() === "encrypted group message";
       let preview = messageText;
       let icon = "";
+
+      if (sharedContactPreview && (!preview || hasEncryptedPlaceholder)) {
+        preview = sharedContactPreview;
+        icon = "contact";
+      }
 
       if (attachmentPreview && (!preview || hasEncryptedPlaceholder)) {
         preview = attachmentPreview.text;
@@ -273,11 +285,19 @@ export function getLastMessagePreviewDetails(
       ? message.attachments
       : [];
   const attachmentPreview = getAttachmentPreviewDetails(attachments);
+  const sharedContactPreview = getSharedContactPreviewLabel(
+    getMessageSharedContacts(message),
+  );
   const hasEncryptedPayload = isEncryptedMessageText(message.text);
   const hasEncryptedPlaceholder =
     messageText.toLowerCase() === "encrypted message";
   let preview = messageText;
   let icon = "";
+
+  if (sharedContactPreview && (!preview || hasEncryptedPlaceholder)) {
+    preview = sharedContactPreview;
+    icon = "contact";
+  }
 
   if (attachmentPreview && (!preview || hasEncryptedPlaceholder)) {
     preview = attachmentPreview.text;

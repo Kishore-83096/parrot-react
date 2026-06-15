@@ -2,6 +2,10 @@ import sodium from "libsodium-wrappers";
 
 import { getMessengerRecipientCryptoDevices } from "../api.js";
 import {
+  getSharedContactPreviewLabel,
+  normalizeSharedContacts,
+} from "../sharedContacts.js";
+import {
   ensureMessengerDeviceKey,
   fromBase64,
   getStoredMessengerDeviceIdentity,
@@ -233,15 +237,21 @@ export async function encryptMessageText({
   attachments = [],
   edit = null,
   recipientAccountNumber,
+  sharedContacts = [],
   text,
   user,
 }) {
   const plaintext = String(text || "");
   const encryptedAttachments = Array.isArray(attachments) ? attachments : [];
+  const normalizedSharedContacts = normalizeSharedContacts(sharedContacts);
   const senderUserId = getCurrentUserId(user);
 
-  if (!plaintext.trim() && encryptedAttachments.length === 0) {
-    throw new Error("Message text or attachment is required.");
+  if (
+    !plaintext.trim() &&
+    encryptedAttachments.length === 0 &&
+    normalizedSharedContacts.length === 0
+  ) {
+    throw new Error("Message text, attachment, or contact is required.");
   }
 
   if (!recipientAccountNumber) {
@@ -275,6 +285,7 @@ export async function encryptMessageText({
     JSON.stringify({
       text: plaintext,
       attachments: encryptedAttachments,
+      shared_contacts: normalizedSharedContacts,
       edit: normalizeEditMetadata(edit),
     }),
   );
@@ -392,6 +403,9 @@ export async function decryptMessageForUser(message, user, decryptionContext) {
             .map(normalizeDecryptedAttachment)
             .filter(Boolean)
         : [],
+      decrypted_shared_contacts: normalizeSharedContacts(
+        plaintextPayload?.shared_contacts,
+      ),
       edit_metadata: normalizeEditMetadata(plaintextPayload?.edit),
       edit_change_type: normalizeEditMetadata(plaintextPayload?.edit).change_type,
       decryption_status: "ok",
@@ -499,6 +513,14 @@ export function getMessagePreviewLabel(message) {
 
   if (text) {
     return text;
+  }
+
+  const sharedContactPreview = getSharedContactPreviewLabel(
+    message?.decrypted_shared_contacts || message?.shared_contacts,
+  );
+
+  if (sharedContactPreview) {
+    return sharedContactPreview;
   }
 
   if (message?.is_encrypted && message?.decryption_status === "ok") {
