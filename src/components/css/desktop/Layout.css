@@ -3239,6 +3239,11 @@
   border-top: 1px solid rgba(124, 60, 255, 0.12);
 }
 
+.parent-layout-page__message-action-controls.is-composer.is-voice-note {
+  grid-template-columns: 42px;
+  justify-content: end;
+}
+
 .parent-layout-page__message-action-compose-attach,
 .parent-layout-page__message-action-compose-submit {
   width: 42px;

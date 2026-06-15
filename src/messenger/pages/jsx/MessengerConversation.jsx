@@ -2727,10 +2727,16 @@ function MessageActionModal({
   const currentText = isEdit
     ? getRenderableMessageText(actionState.message).trim()
     : "";
+  const isVoiceNoteEdit =
+    isEdit &&
+    currentText.length === 0 &&
+    currentAttachments.length > 0 &&
+    currentAttachments.every(isVoiceNoteAttachment);
   const nextText = String(actionState.draft || "").trim();
-  const hasTextChange = currentText !== nextText;
+  const hasTextChange = !isVoiceNoteEdit && currentText !== nextText;
   const hasAnyContentAfterEdit = Boolean(
-    nextText || attachmentEditPlan.finalAttachmentCount > 0,
+    (!isVoiceNoteEdit && nextText) ||
+      attachmentEditPlan.finalAttachmentCount > 0,
   );
   const hasEditChange = hasTextChange || attachmentEditPlan.hasAttachmentChanges;
   const title = isEdit ? "Edit message" : "Delete message";
@@ -2794,7 +2800,9 @@ function MessageActionModal({
             {isExpired
               ? timeoutMessage
               : isEdit
-                ? "Update this message for everyone."
+                ? isVoiceNoteEdit
+                  ? "Record a new voice note for everyone."
+                  : "Update this message for everyone."
                 : `Confirm delete for both sides, you and ${receiverName || "contact"}.`}
           </p>
         </header>
@@ -2903,40 +2911,46 @@ function MessageActionModal({
         {!isExpired ? (
           <div
             className={`parent-layout-page__message-action-controls${
-              isEdit ? " is-composer" : " is-delete"
+              isEdit
+                ? ` is-composer${isVoiceNoteEdit ? " is-voice-note" : ""}`
+                : " is-delete"
             }`}
           >
             {isEdit ? (
               <>
-                <label
-                  className="parent-layout-page__message-action-compose-attach"
-                  aria-label="Attach files"
-                  title="Attach files"
-                >
-                  <Paperclip size={18} aria-hidden="true" />
-                  <input
-                    className="parent-layout-page__message-action-file-input"
-                    type="file"
-                    multiple
-                    accept={MESSAGE_ATTACHMENT_ACCEPT}
-                    onChange={onReplacementFilesChange}
-                    disabled={
-                      actionState.isSubmitting ||
-                      isVoiceNoteReplacementRecording ||
-                      isVoiceNoteReplacementFinishing
-                    }
-                  />
-                </label>
-                <textarea
-                  className="parent-layout-page__message-action-compose-input"
-                  value={actionState.draft}
-                  onChange={(event) => onDraftChange(event.target.value)}
-                  onKeyDown={handleDraftKeyDown}
-                  placeholder="Message"
-                  rows={1}
-                  maxLength={5000}
-                  autoFocus={currentAttachments.length === 0}
-                />
+                {!isVoiceNoteEdit ? (
+                  <>
+                    <label
+                      className="parent-layout-page__message-action-compose-attach"
+                      aria-label="Attach files"
+                      title="Attach files"
+                    >
+                      <Paperclip size={18} aria-hidden="true" />
+                      <input
+                        className="parent-layout-page__message-action-file-input"
+                        type="file"
+                        multiple
+                        accept={MESSAGE_ATTACHMENT_ACCEPT}
+                        onChange={onReplacementFilesChange}
+                        disabled={
+                          actionState.isSubmitting ||
+                          isVoiceNoteReplacementRecording ||
+                          isVoiceNoteReplacementFinishing
+                        }
+                      />
+                    </label>
+                    <textarea
+                      className="parent-layout-page__message-action-compose-input"
+                      value={actionState.draft}
+                      onChange={(event) => onDraftChange(event.target.value)}
+                      onKeyDown={handleDraftKeyDown}
+                      placeholder="Message"
+                      rows={1}
+                      maxLength={5000}
+                      autoFocus={currentAttachments.length === 0}
+                    />
+                  </>
+                ) : null}
                 <button
                   type="submit"
                   className="parent-layout-page__message-action-compose-submit"

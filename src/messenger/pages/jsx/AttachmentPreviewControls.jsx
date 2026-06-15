@@ -434,15 +434,17 @@ export function EditableAttachmentGrid({
                 </button>
               ) : (
                 <>
-                  <button
-                    type="button"
-                    onClick={() => onRemove?.(attachmentKey)}
-                    disabled={disabled}
-                    aria-label={`Remove ${fileName}`}
-                    title="Remove"
-                  >
-                    <Trash2 size={14} aria-hidden="true" />
-                  </button>
+                  {!isVoiceNote ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemove?.(attachmentKey)}
+                      disabled={disabled}
+                      aria-label={`Remove ${fileName}`}
+                      title="Remove"
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                    </button>
+                  ) : null}
                   {isVoiceNote && onRecordVoiceNoteReplacement ? (
                     <button
                       type="button"
