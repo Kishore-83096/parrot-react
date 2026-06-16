@@ -43,6 +43,8 @@ import {
   findRoomByAccountNumber,
   getCurrentUserId,
   getRoomContact,
+  getRoomPeer,
+  isGroupRoom,
   upsertMessage,
 } from "../../../messenger/pages/jsx/roomHelpers.js";
 import { clearParentSession, saveParentContact } from "../../api.js";
@@ -891,16 +893,38 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     });
   }, []);
 
-  const handleContactDeleted = useCallback((accountNumber) => {
-    setContacts((currentContacts) =>
-      currentContacts.filter(
-        (contact) => contact.account_number !== accountNumber,
-      ),
-    );
-    setSelectedContact((currentContact) =>
-      currentContact?.account_number === accountNumber ? null : currentContact,
-    );
-  }, []);
+  const handleContactDeleted = useCallback(
+    (accountNumber) => {
+      const deletedAccountNumber = String(accountNumber || "");
+      const roomMatchesDeletedContact = (room) => {
+        if (!room || isGroupRoom(room)) {
+          return false;
+        }
+
+        const peer = getRoomPeer(room, user);
+
+        return String(peer?.account_number || "") === deletedAccountNumber;
+      };
+
+      setContacts((currentContacts) =>
+        currentContacts.filter(
+          (contact) => String(contact.account_number || "") !== deletedAccountNumber,
+        ),
+      );
+      setRooms((currentRooms) =>
+        currentRooms.filter((room) => !roomMatchesDeletedContact(room)),
+      );
+      setSelectedContact((currentContact) =>
+        String(currentContact?.account_number || "") === deletedAccountNumber
+          ? null
+          : currentContact,
+      );
+      setSelectedRoom((currentRoom) =>
+        roomMatchesDeletedContact(currentRoom) ? null : currentRoom,
+      );
+    },
+    [user],
+  );
 
   const handleSaveSharedContact = useCallback(
     async (sharedContact) => {
@@ -1056,9 +1080,26 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
       }
 
       const mergeOptions = { forceRead: selectRoom };
+      const shouldMergeRoomIntoList = (currentRooms) => {
+        if (selectRoom || isGroupRoom(room)) {
+          return true;
+        }
+
+        if (
+          currentRooms.some(
+            (currentRoom) => Number(currentRoom.id) === messageRoomId,
+          )
+        ) {
+          return true;
+        }
+
+        return Boolean(getRoomContact(room, contacts, user));
+      };
 
       setRooms((currentRooms) =>
-        mergeRoomMessage(currentRooms, room, message, mergeOptions),
+        shouldMergeRoomIntoList(currentRooms)
+          ? mergeRoomMessage(currentRooms, room, message, mergeOptions)
+          : currentRooms,
       );
       setSelectedRoom((currentRoom) => {
         if (!currentRoom && selectRoom) {

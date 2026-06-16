@@ -59,6 +59,7 @@ function MessengerRoomHeader({
   const [peerProfile, setPeerProfile] = useState(null);
   const [isConversationMenuOpen, setIsConversationMenuOpen] = useState(false);
   const [isEditContactModalOpen, setIsEditContactModalOpen] = useState(false);
+  const [isDeleteContactModalOpen, setIsDeleteContactModalOpen] = useState(false);
   const [editContactForm, setEditContactForm] = useState({
     account_number: "",
     alias_name: "",
@@ -114,6 +115,7 @@ function MessengerRoomHeader({
     setIsConversationMenuOpen(false);
     setEditContactMessage(null);
     setActionMessage("");
+    setIsDeleteContactModalOpen(false);
   }, [selectedPeerAccountNumber, selectedRoom?.id]);
 
   useEffect(() => {
@@ -195,6 +197,25 @@ function MessengerRoomHeader({
     setIsEditContactModalOpen(false);
     setEditContactMessage(null);
     setIsContactActionLoading(false);
+  };
+
+  const openDeleteContactModal = () => {
+    if (!selectedConversationContact) {
+      return;
+    }
+
+    setActionMessage("");
+    setIsConversationMenuOpen(false);
+    setIsDeleteContactModalOpen(true);
+  };
+
+  const closeDeleteContactModal = () => {
+    if (isContactActionLoading) {
+      return;
+    }
+
+    setIsDeleteContactModalOpen(false);
+    setActionMessage("");
   };
 
   const getUnsavedContactAlias = () => {
@@ -465,16 +486,8 @@ function MessengerRoomHeader({
     }
   };
 
-  const handleDeleteSelectedContact = async () => {
+  const handleConfirmDeleteSelectedContact = async () => {
     if (!selectedConversationContact?.account_number) {
-      return;
-    }
-
-    const shouldDelete = window.confirm(
-      `Delete ${selectedConversationName} from contacts?`,
-    );
-
-    if (!shouldDelete) {
       return;
     }
 
@@ -487,6 +500,12 @@ function MessengerRoomHeader({
         account_number: selectedConversationContact.account_number,
       });
       onContactDeleted(selectedConversationContact.account_number);
+      setIsDeleteContactModalOpen(false);
+      onToast?.({
+        type: "success",
+        title: "Contact deleted",
+        message: `${selectedConversationName} was removed from contacts. The conversation was kept.`,
+      });
     } catch (error) {
       setActionMessage(
         getParentApiErrorMessage(error, "Unable to delete this contact."),
@@ -575,6 +594,81 @@ function MessengerRoomHeader({
             </button>
           </div>
         </form>
+      </section>
+    </div>
+  ) : null;
+
+  const deleteContactModal = isDeleteContactModalOpen ? (
+    <div className="parent-layout-page__modal-backdrop" role="presentation">
+      <section
+        className="parent-layout-page__modal parent-layout-page__modal--confirm"
+        aria-modal="true"
+        aria-labelledby="parent-delete-contact-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close"
+          type="button"
+          onClick={closeDeleteContactModal}
+          aria-label="Close delete contact confirmation"
+          title="Close"
+          disabled={isContactActionLoading}
+        >
+          <X size={28} strokeWidth={3} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__modal-header">
+          <Trash2 />
+          <div>
+            <h2 id="parent-delete-contact-title">Delete Contact</h2>
+          </div>
+        </div>
+
+        <div className="parent-layout-page__delete-contact-confirmation">
+          <p>
+            Deleting {selectedConversationName} removes only the saved contact
+            details. It does not delete the conversation.
+          </p>
+          <p>
+            If you save this contact again, the conversation will remain as it
+            is.
+          </p>
+
+          {actionMessage ? (
+            <p className="parent-layout-page__form-message parent-layout-page__form-message--error" role="alert">
+              <AlertCircle size={18} aria-hidden="true" />
+              <span>{actionMessage}</span>
+            </p>
+          ) : null}
+
+          <div className="parent-layout-page__modal-action-row">
+            <button
+              className="parent-layout-page__modal-submit parent-layout-page__modal-submit--secondary"
+              type="button"
+              onClick={closeDeleteContactModal}
+              disabled={isContactActionLoading}
+            >
+              <X size={18} aria-hidden="true" />
+              <span>Cancel</span>
+            </button>
+            <button
+              className="parent-layout-page__modal-submit parent-layout-page__modal-submit--danger"
+              type="button"
+              onClick={handleConfirmDeleteSelectedContact}
+              disabled={isContactActionLoading}
+              aria-busy={isContactActionLoading}
+            >
+              {isContactActionLoading ? (
+                <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+              ) : (
+                <Trash2 size={18} aria-hidden="true" />
+              )}
+              <span>
+                {isContactActionLoading ? "Deleting..." : "Delete Contact"}
+              </span>
+            </button>
+          </div>
+        </div>
       </section>
     </div>
   ) : null;
@@ -722,7 +816,7 @@ function MessengerRoomHeader({
                   <button
                     className="is-danger"
                     type="button"
-                    onClick={handleDeleteSelectedContact}
+                    onClick={openDeleteContactModal}
                     disabled={isContactActionLoading}
                   >
                     <Trash2 size={16} aria-hidden="true" />
@@ -763,6 +857,7 @@ function MessengerRoomHeader({
       </div>
 
       {editContactModal ? createPortal(editContactModal, document.body) : null}
+      {deleteContactModal ? createPortal(deleteContactModal, document.body) : null}
     </>
   );
 }

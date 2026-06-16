@@ -7790,6 +7790,31 @@ video.parent-layout-page__attachment-modal-media {
   background: rgba(255, 255, 255, 0.82);
 }
 
+.parent-layout-page__modal--confirm {
+  max-width: 440px;
+}
+
+.parent-layout-page__delete-contact-confirmation {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.parent-layout-page__delete-contact-confirmation p {
+  margin: 0;
+  color: #51445f;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 660;
+}
+
+.parent-layout-page__modal-action-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .parent-layout-page__found-contact {
   min-width: 0;
   margin: 0;
