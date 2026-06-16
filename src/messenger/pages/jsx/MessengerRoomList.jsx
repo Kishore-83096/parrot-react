@@ -1,7 +1,10 @@
 import {
+  Check,
+  CheckCheck,
   File as FileIcon,
   FileText,
   Image as ImageIcon,
+  Info,
   MessagesSquare,
   Mic,
   Music,
@@ -24,8 +27,10 @@ import { getParentContacts } from "../../../parent/api.js";
 import {
   formatRoomTime,
   getContactName,
+  getCurrentUserId,
   getLastMessagePreview,
   getLastMessagePreviewDetails,
+  getMessageStatusLabel,
   getRoomInitials,
   getRoomPeer,
   isGroupRoom,
@@ -35,6 +40,7 @@ const ROOM_PREVIEW_ICONS = {
   attachment: Paperclip,
   audio: Music,
   file: FileIcon,
+  group_log: Info,
   image: ImageIcon,
   contact: UserRound,
   pdf: FileText,
@@ -70,6 +76,7 @@ function MessengerRoomList({
   contacts,
   rooms,
   selectedRoom,
+  typingByRoomId = {},
   user,
   onlineUserIds,
   e2eeRecoveryVersion,
@@ -82,6 +89,7 @@ function MessengerRoomList({
   const [roomSearch, setRoomSearch] = useState("");
   const [hasLoadedContactMap, setHasLoadedContactMap] = useState(false);
   const roomsRef = useRef(rooms);
+  const currentUserId = getCurrentUserId(user);
 
   useEffect(() => {
     roomsRef.current = rooms;
@@ -230,6 +238,15 @@ function MessengerRoomList({
             const peerAccountNumber = String(peer?.account_number || "");
             const contact = contactsByAccountNumber.get(peerAccountNumber) || null;
             const isSelected = selectedRoom?.id === room.id;
+            const typingUsers = Array.isArray(typingByRoomId[String(room.id)])
+              ? typingByRoomId[String(room.id)]
+              : [];
+            const isTypingPreview =
+              !isGroup &&
+              !isSelected &&
+              typingUsers.some(
+                (typingUser) => Number(typingUser.user_id) !== currentUserId,
+              );
             const isPeerOnline =
               !isGroup && onlineUserIds?.has(Number(peer?.user_id));
             const unreadCount = Number(room.unread_count || 0);
@@ -240,16 +257,47 @@ function MessengerRoomList({
                   peer?.display_name ||
                   peerAccountNumber ||
                   `Room ${room.id}`;
-            const lastMessageTime = formatRoomTime(
-              room.last_message?.created_at || room.updated_at,
-            );
             const lastMessagePreview = getLastMessagePreviewDetails(
               room,
               user,
               contactsByAccountNumber,
             );
+            const isGroupLogPreview =
+              isGroup &&
+              Boolean(
+                lastMessagePreview.isLog ||
+                  lastMessagePreview.previewType === "group_log",
+              );
+            const lastMessageTime = formatRoomTime(
+              lastMessagePreview.created_at ||
+                room.last_message?.created_at ||
+                room.updated_at,
+            );
+            const shouldShowSecondaryAccount =
+              !isGroup &&
+              !contact &&
+              peerAccountNumber &&
+              peerAccountNumber !== roomName;
+            const shouldShowMessageStatus =
+              !isTypingPreview &&
+              !isGroupLogPreview &&
+              room.last_message &&
+              !room.last_message.is_deleted &&
+              !room.last_message.deleted_at &&
+              currentUserId &&
+              Number(room.last_message.sender_user_id) === currentUserId;
+            const messageStatus = room.last_message?.status || "sent";
+            const MessageStatusIcon =
+              messageStatus === "read" || messageStatus === "delivered"
+                ? CheckCheck
+                : Check;
             const LastMessagePreviewIcon =
-              ROOM_PREVIEW_ICONS[lastMessagePreview.icon] || null;
+              !isTypingPreview && ROOM_PREVIEW_ICONS[lastMessagePreview.icon]
+                ? ROOM_PREVIEW_ICONS[lastMessagePreview.icon]
+                : null;
+            const previewText = isTypingPreview
+              ? "Typing..."
+              : lastMessagePreview.text;
 
             return (
               <button
@@ -298,20 +346,47 @@ function MessengerRoomList({
                       </span>
                     ) : null}
                   </strong>
-                  {!isGroup && !contact ? (
+                  {shouldShowSecondaryAccount ? (
                     <small>
-                      {peerAccountNumber || "Account number unavailable"}
+                      {peerAccountNumber}
                     </small>
                   ) : null}
                   <small
                     className={`parent-layout-page__chat-preview${
-                      LastMessagePreviewIcon ? " has-icon" : ""
+                      LastMessagePreviewIcon || shouldShowMessageStatus || isTypingPreview
+                        ? " has-icon"
+                        : ""
+                    }${isTypingPreview ? " is-typing" : ""}${
+                      isGroupLogPreview
+                        ? ` is-log is-log-${lastMessagePreview.logKind || "updated"}`
+                        : ""
                     }`}
                   >
+                    {shouldShowMessageStatus ? (
+                      <span
+                        className={`parent-layout-page__chat-message-status is-${messageStatus}`}
+                        aria-label={getMessageStatusLabel(messageStatus)}
+                        title={getMessageStatusLabel(messageStatus)}
+                      >
+                        <MessageStatusIcon size={13} aria-hidden="true" />
+                      </span>
+                    ) : null}
+                    {isTypingPreview ? (
+                      <span
+                        className="parent-layout-page__chat-typing-dots"
+                        aria-hidden="true"
+                      >
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                    ) : null}
                     {LastMessagePreviewIcon ? (
                       <LastMessagePreviewIcon size={13} aria-hidden="true" />
                     ) : null}
-                    <span>{lastMessagePreview.text}</span>
+                    <span className="parent-layout-page__chat-preview-text">
+                      {previewText}
+                    </span>
                   </small>
                 </span>
 

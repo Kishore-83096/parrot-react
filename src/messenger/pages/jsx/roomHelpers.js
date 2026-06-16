@@ -130,6 +130,45 @@ function getSavedContactName(contactNamesByAccountNumber, accountNumber) {
   return getContactName(savedContact);
 }
 
+function getTimestamp(value) {
+  const timestamp = Date.parse(value || "");
+
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function isLogNewerThanMessage(log, message) {
+  if (!log) {
+    return false;
+  }
+
+  if (!message) {
+    return true;
+  }
+
+  return getTimestamp(log.created_at) > getTimestamp(message.created_at);
+}
+
+function getGroupLogPreviewDetails(
+  log,
+  currentUser,
+  contactNamesByAccountNumber,
+) {
+  const display = getGroupLogDisplay(
+    log,
+    currentUser,
+    contactNamesByAccountNumber,
+  );
+
+  return {
+    icon: "group_log",
+    isLog: true,
+    logKind: display.kind,
+    previewType: "group_log",
+    text: display.text,
+    created_at: log?.created_at || "",
+  };
+}
+
 export function getLastMessagePreview(room, currentUser, contactNamesByAccountNumber = null) {
   return getLastMessagePreviewDetails(
     room,
@@ -150,14 +189,19 @@ export function getLastMessagePreviewDetails(
     const latestLog = latestLogs[latestLogs.length - 1];
 
     if (room?.is_deleted && latestLog?.action === "group.deleted") {
-      return {
-        icon: "",
-        text: getGroupLogDisplay(
-          latestLog,
-          currentUser,
-          contactNamesByAccountNumber,
-        ).text,
-      };
+      return getGroupLogPreviewDetails(
+        latestLog,
+        currentUser,
+        contactNamesByAccountNumber,
+      );
+    }
+
+    if (isLogNewerThanMessage(latestLog, message)) {
+      return getGroupLogPreviewDetails(
+        latestLog,
+        currentUser,
+        contactNamesByAccountNumber,
+      );
     }
 
     if (message) {
@@ -246,13 +290,7 @@ export function getLastMessagePreviewDetails(
 
     return {
       icon: "",
-      text: latestLog
-        ? getGroupLogDisplay(
-            latestLog,
-            currentUser,
-            contactNamesByAccountNumber,
-          ).text
-        : "No messages yet.",
+      text: "No messages yet.",
     };
   }
 

@@ -1024,7 +1024,10 @@
 
 .parent-layout-page__contact-text .parent-layout-page__chat-preview {
   color: var(--layout-muted);
-  display: block;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   font-weight: 700;
 }
@@ -1043,7 +1046,79 @@
   stroke-width: 2.4;
 }
 
-.parent-layout-page__contact-text .parent-layout-page__chat-preview span {
+.parent-layout-page__chat-message-status {
+  width: 16px;
+  height: 13px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 16px;
+  color: #8a8099;
+}
+
+.parent-layout-page__chat-message-status svg {
+  width: 13px;
+  height: 13px;
+  color: currentColor;
+  stroke-width: 2.7;
+}
+
+.parent-layout-page__chat-message-status.is-delivered {
+  color: #5d526b;
+}
+
+.parent-layout-page__chat-message-status.is-read {
+  color: #090812;
+}
+
+.parent-layout-page__chat-typing-dots {
+  width: 20px;
+  height: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 0 0 20px;
+}
+
+.parent-layout-page__chat-typing-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--layout-blue);
+  opacity: 0.42;
+  animation: parentTypingDotPulse 900ms ease-in-out infinite;
+}
+
+.parent-layout-page__chat-typing-dots i:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.parent-layout-page__chat-typing-dots i:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.parent-layout-page__contact-text .parent-layout-page__chat-preview.is-typing {
+  color: var(--layout-blue);
+  font-weight: 820;
+}
+
+.parent-layout-page__contact-text .parent-layout-page__chat-preview.is-log {
+  color: #665977;
+  font-style: italic;
+  font-weight: 760;
+}
+
+.parent-layout-page__chat-card.is-unread .parent-layout-page__contact-text .parent-layout-page__chat-preview.is-log {
+  color: #3d334a;
+  font-weight: 820;
+}
+
+.parent-layout-page__contact-text .parent-layout-page__chat-preview.is-log svg {
+  color: var(--layout-purple);
+  stroke-width: 2.5;
+}
+
+.parent-layout-page__contact-text .parent-layout-page__chat-preview-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

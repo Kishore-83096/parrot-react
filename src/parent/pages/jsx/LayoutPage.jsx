@@ -197,8 +197,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [isRecoveryVerifyOpen, setIsRecoveryVerifyOpen] = useState(false);
   const [isRecoveryVerifyRequired, setIsRecoveryVerifyRequired] = useState(false);
   const [storyUnreadCount, setStoryUnreadCount] = useState(0);
+  const [typingByRoomId, setTypingByRoomId] = useState({});
   const [toast, setToast] = useState(null);
   const onlineUserTimeoutsRef = useRef(new Map());
+  const typingTimeoutsRef = useRef(new Map());
   const isLogoutInProgressRef = useRef(false);
   const logoutPromiseRef = useRef(null);
   const currentUserId = getCurrentUserId(user);
@@ -1067,6 +1069,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const handleRoomMessage = useCallback(
     (room, message, { selectRoom = false } = {}) => {
       const messageRoomId = Number(message?.room_id || room?.id || 0);
+      const isIncomingMessage = Number(message?.sender_user_id) !== currentUserId;
 
       if (!message?.room_id) {
         if (room?.id && selectRoom) {
@@ -1081,7 +1084,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
       const mergeOptions = { forceRead: selectRoom };
       const shouldMergeRoomIntoList = (currentRooms) => {
-        if (selectRoom || isGroupRoom(room)) {
+        if (selectRoom || isGroupRoom(room) || isIncomingMessage) {
           return true;
         }
 
@@ -1141,7 +1144,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         });
       }
     },
-    [contacts, mergeRoomMessage, selectedRoom?.id, user],
+    [contacts, currentUserId, mergeRoomMessage, selectedRoom?.id, user],
   );
 
   const handleMaybeEncryptedRoomMessage = useCallback(
@@ -1184,6 +1187,107 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     setSelectedRoom((currentRoom) =>
       currentRoom ? markRoomRead(currentRoom) : currentRoom,
     );
+  }, []);
+
+  const clearTypingIndicator = useCallback((roomId, userId) => {
+    const numericRoomId = Number(roomId || 0);
+    const numericUserId = Number(userId || 0);
+
+    if (!numericRoomId || !numericUserId) {
+      return;
+    }
+
+    const typingKey = `${numericRoomId}:${numericUserId}`;
+    const timeout = typingTimeoutsRef.current.get(typingKey);
+    if (timeout) {
+      globalThis.clearTimeout(timeout);
+      typingTimeoutsRef.current.delete(typingKey);
+    }
+
+    setTypingByRoomId((currentTypingByRoomId) => {
+      const currentTypingUsers = currentTypingByRoomId[String(numericRoomId)];
+      if (!Array.isArray(currentTypingUsers)) {
+        return currentTypingByRoomId;
+      }
+
+      const nextTypingUsers = currentTypingUsers.filter(
+        (typingUser) => Number(typingUser.user_id) !== numericUserId,
+      );
+      if (nextTypingUsers.length === currentTypingUsers.length) {
+        return currentTypingByRoomId;
+      }
+
+      const nextTypingByRoomId = { ...currentTypingByRoomId };
+      if (nextTypingUsers.length > 0) {
+        nextTypingByRoomId[String(numericRoomId)] = nextTypingUsers;
+      } else {
+        delete nextTypingByRoomId[String(numericRoomId)];
+      }
+
+      return nextTypingByRoomId;
+    });
+  }, []);
+
+  const setTypingIndicator = useCallback(
+    (eventPayload) => {
+      const numericRoomId = Number(eventPayload?.room_id || 0);
+      const numericUserId = Number(eventPayload?.user_id || 0);
+
+      if (
+        !numericRoomId ||
+        !numericUserId ||
+        numericUserId === currentUserId
+      ) {
+        return;
+      }
+
+      const typingUser = {
+        user_id: numericUserId,
+        account_number: eventPayload.account_number || "",
+      };
+
+      setTypingByRoomId((currentTypingByRoomId) => {
+        const currentTypingUsers =
+          currentTypingByRoomId[String(numericRoomId)] || [];
+        const nextTypingUsers = [
+          typingUser,
+          ...currentTypingUsers.filter(
+            (currentTypingUser) =>
+              Number(currentTypingUser.user_id) !== numericUserId,
+          ),
+        ];
+
+        return {
+          ...currentTypingByRoomId,
+          [String(numericRoomId)]: nextTypingUsers,
+        };
+      });
+
+      const typingKey = `${numericRoomId}:${numericUserId}`;
+      const currentTimeout = typingTimeoutsRef.current.get(typingKey);
+      if (currentTimeout) {
+        globalThis.clearTimeout(currentTimeout);
+      }
+
+      const expiresInMs = Math.max(
+        Number(eventPayload.expires_in || 7) * 1000,
+        1000,
+      );
+      const nextTimeout = globalThis.setTimeout(() => {
+        clearTypingIndicator(numericRoomId, numericUserId);
+      }, expiresInMs);
+      typingTimeoutsRef.current.set(typingKey, nextTimeout);
+    },
+    [clearTypingIndicator, currentUserId],
+  );
+
+  useEffect(() => {
+    return () => {
+      typingTimeoutsRef.current.forEach((timeout) => {
+        globalThis.clearTimeout(timeout);
+      });
+      typingTimeoutsRef.current.clear();
+    };
   }, []);
 
   const handleRoomMessageStatus = useCallback(
@@ -1458,6 +1562,20 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         eventPayload?.type === "message.deleted"
       ) {
         handleMaybeEncryptedRoomMessage(eventPayload.room, eventPayload.message);
+        if (eventPayload?.message?.room_id && eventPayload?.message?.sender_user_id) {
+          clearTypingIndicator(
+            eventPayload.message.room_id,
+            eventPayload.message.sender_user_id,
+          );
+        }
+      }
+
+      if (eventPayload?.type === "typing.started") {
+        setTypingIndicator(eventPayload);
+      }
+
+      if (eventPayload?.type === "typing.stopped") {
+        clearTypingIndicator(eventPayload.room_id, eventPayload.user_id);
       }
 
       if (
@@ -1590,11 +1708,13 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     handleMaybeEncryptedRoomMessage,
     handleRoomMessageStatus,
     handleRoomRead,
+    clearTypingIndicator,
     loadLinkedDevices,
     markOnlineUser,
     maybePromptForRecoveryKeyUpdate,
     removeOnlineUser,
     replaceOnlineUsers,
+    setTypingIndicator,
     user,
   ]);
 
@@ -1638,6 +1758,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         contacts={contacts}
         rooms={rooms}
         selectedRoom={selectedRoom}
+        typingByRoomId={typingByRoomId}
         user={user}
         onlineUserIds={onlineUserIds}
         e2eeRecoveryVersion={e2eeRecoveryVersion}
