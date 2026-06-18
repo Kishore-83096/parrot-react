@@ -345,6 +345,24 @@ function getMessagePreviewText(message) {
   return attachmentCount > 0 ? "Attachment" : "Message";
 }
 
+function isMessageDeleted(message) {
+  return Boolean(message?.is_deleted || message?.deleted_at);
+}
+
+function getReplyReferenceStateLabel(message) {
+  if (isMessageDeleted(message)) {
+    return "deleted";
+  }
+
+  return message?.edited_at ? "edited" : "";
+}
+
+function getReplyPreviewText(message) {
+  return isMessageDeleted(message)
+    ? "Original message was deleted"
+    : getMessagePreviewText(message);
+}
+
 function getStoryContext(message) {
   const storyContext = message?.story_context;
 
@@ -2528,10 +2546,13 @@ function getParticipantDisplayName(participant) {
 
 function getReplyAuthorLabel(message, currentUserId, participantNamesByUserId) {
   const senderUserId = Number(message?.sender_user_id);
+  const authorLabel =
+    senderUserId === Number(currentUserId)
+      ? "You"
+      : participantNamesByUserId.get(senderUserId) || "Contact";
+  const stateLabel = getReplyReferenceStateLabel(message);
 
-  return senderUserId === Number(currentUserId)
-    ? "You"
-    : participantNamesByUserId.get(senderUserId) || "Contact";
+  return stateLabel ? `${authorLabel} - ${stateLabel}` : authorLabel;
 }
 
 function mergeMessagePage(currentMessages, pageMessages) {
@@ -4367,6 +4388,18 @@ function MessengerConversation({
     return nextMessagesById;
   }, [roomMessages]);
 
+  useEffect(() => {
+    if (!replyTarget?.id) {
+      return;
+    }
+
+    const updatedReplyTarget = messagesById.get(Number(replyTarget.id));
+
+    if (updatedReplyTarget && updatedReplyTarget !== replyTarget) {
+      setReplyTarget(updatedReplyTarget);
+    }
+  }, [messagesById, replyTarget]);
+
   const participantNamesByUserId = useMemo(() => {
     const namesByUserId = new Map();
     const participants = [
@@ -4428,8 +4461,8 @@ function MessengerConversation({
       }
 
       return (
-        message.reply_to ||
         messagesById.get(Number(message.reply_to_message_id)) ||
+        message.reply_to ||
         null
       );
     },
@@ -4948,7 +4981,7 @@ function MessengerConversation({
       !supportsMobileMessageTap() ||
       event.defaultPrevented ||
       event.target?.closest?.(
-        "a, button, input, select, textarea, [role='button'], [data-reaction-picker-root]",
+        "a, button, input, select, textarea, [role='button'], [data-reaction-picker-root], .parent-layout-page__message-reply-preview.is-deleted",
       )
     ) {
       return;
@@ -5199,10 +5232,19 @@ function MessengerConversation({
   }, [pendingReplyScrollId, roomMessages.length, scrollToMessageElement]);
 
   const handleScrollToReplyTarget = useCallback(
-    async (messageId) => {
+    async (messageId, replyPreview = null) => {
       const numericMessageId = Number(messageId);
 
       if (!numericMessageId) {
+        return;
+      }
+
+      const knownMessage =
+        replyPreview || messagesById.get(numericMessageId) || null;
+
+      if (isMessageDeleted(knownMessage)) {
+        setPendingReplyScrollId(null);
+        setRoomMessage("The message you replied to was deleted.");
         return;
       }
 
@@ -5210,13 +5252,13 @@ function MessengerConversation({
         return;
       }
 
-      if (messagesById.has(numericMessageId)) {
+      if (knownMessage) {
         setPendingReplyScrollId(numericMessageId);
         return;
       }
 
       if (!selectedRoom?.id) {
-        setRoomMessage("Original message is no longer available in this chat.");
+        setRoomMessage("The message you replied to no longer exists in this chat.");
         return;
       }
 
@@ -5239,14 +5281,17 @@ function MessengerConversation({
           mode: "prepend",
           silent: true,
         });
-        const foundMessage = (pageResult?.messages || []).some(
+        const foundMessage = (pageResult?.messages || []).find(
           (message) => Number(message.id) === numericMessageId,
         );
 
-        if (pageResult?.error || !foundMessage) {
+        if (isMessageDeleted(foundMessage)) {
+          setPendingReplyScrollId(null);
+          setRoomMessage("The message you replied to was deleted.");
+        } else if (pageResult?.error || !foundMessage) {
           setPendingReplyScrollId(null);
           setRoomMessage(
-            "Original message is no longer available in this chat.",
+            "The message you replied to no longer exists in this chat.",
           );
         }
       } finally {
@@ -5906,12 +5951,15 @@ function MessengerConversation({
             const messageStatus = getMessageStatusLabel(message.status);
             const sentWhileBlocked = Boolean(message.sent_while_blocked) && !isDeleted;
             const replyPreview = getReplyPreview(message);
+            const replyPreviewMessageId =
+              replyPreview?.id || message.reply_to_message_id;
+            const isReplyPreviewDeleted = isMessageDeleted(replyPreview);
             const replyPreviewClassName = replyPreview
               ? `parent-layout-page__message-reply-preview ${
                   Number(replyPreview.sender_user_id) === currentUserId
                     ? "is-replying-to-mine"
                     : "is-replying-to-theirs"
-                }`
+                }${isReplyPreviewDeleted ? " is-deleted" : ""}`
               : "parent-layout-page__message-reply-preview";
             const isReplyDragging = replyDrag.messageId === message.id;
             const hasMessageReactions =
@@ -5996,11 +6044,22 @@ function MessengerConversation({
                       </p>
                     ) : (
                       <>
-                    {replyPreview ? (
+                    {replyPreview && isReplyPreviewDeleted ? (
+                      <div
+                        className={replyPreviewClassName}
+                        aria-label="Replied message was deleted"
+                        title="Replied message was deleted"
+                      >
+                        <span>Message is deleted</span>
+                        <p>{getReplyPreviewText(replyPreview)}</p>
+                      </div>
+                    ) : replyPreview ? (
                       <button
                         type="button"
                         className={replyPreviewClassName}
-                        onClick={() => handleScrollToReplyTarget(replyPreview.id)}
+                        onClick={() =>
+                          handleScrollToReplyTarget(replyPreviewMessageId, replyPreview)
+                        }
                         disabled={isReplyTargetLoading}
                         aria-label="Show replied message"
                         title="Show replied message"
@@ -6012,13 +6071,22 @@ function MessengerConversation({
                             participantNamesByUserId,
                           )}
                         </span>
-                        <p>{getMessagePreviewText(replyPreview)}</p>
+                        <p>{getReplyPreviewText(replyPreview)}</p>
                       </button>
                     ) : message.reply_to_message_id ? (
-                      <div className="parent-layout-page__message-reply-preview is-unavailable">
+                      <button
+                        type="button"
+                        className="parent-layout-page__message-reply-preview is-unavailable"
+                        onClick={() =>
+                          handleScrollToReplyTarget(message.reply_to_message_id)
+                        }
+                        disabled={isReplyTargetLoading}
+                        aria-label="Find replied message"
+                        title="Find replied message"
+                      >
                         <span>Original message</span>
-                        <p>Message unavailable</p>
-                      </div>
+                        <p>Message preview unavailable</p>
+                      </button>
                     ) : null}
 
                     {storyContext ? (
@@ -6202,7 +6270,7 @@ function MessengerConversation({
                   participantNamesByUserId,
                 )}
               </span>
-              <p>{getMessagePreviewText(replyTarget)}</p>
+              <p>{getReplyPreviewText(replyTarget)}</p>
             </div>
             <button
               type="button"

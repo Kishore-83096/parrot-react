@@ -3475,6 +3475,10 @@
 }
 
 .parent-layout-page__message-reply-preview.is-unavailable {
+  cursor: pointer;
+}
+
+.parent-layout-page__message-reply-preview.is-deleted {
   cursor: default;
 }
 
