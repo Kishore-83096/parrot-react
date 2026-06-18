@@ -339,6 +339,7 @@ function Header({
   user,
   defaultDevicePromptVersion = 0,
   isAccountPanelActive = false,
+  isContactsPanelActive = false,
   onContactsChange,
   onDefaultDeviceChanged,
   onContactUpdated,
@@ -3777,10 +3778,16 @@ function Header({
           className="parent-header__menu-button parent-header__contacts-button"
           type="button"
           onClick={onOpenContactsPanel}
-          aria-label="Open contacts"
-          title="Open contacts"
+          aria-expanded={isContactsPanelActive}
+          aria-pressed={isContactsPanelActive}
+          aria-label={isContactsPanelActive ? "Close contacts" : "Open contacts"}
+          title={isContactsPanelActive ? "Close contacts" : "Open contacts"}
         >
-          <Plus size={22} aria-hidden="true" />
+          {isContactsPanelActive ? (
+            <X size={22} aria-hidden="true" />
+          ) : (
+            <Plus size={22} aria-hidden="true" />
+          )}
         </button>
 
         <button

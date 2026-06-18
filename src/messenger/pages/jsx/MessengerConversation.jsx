@@ -2996,6 +2996,7 @@ function MessengerConversation({
   releasedMessagesVersion,
   cachedConversation,
   onRoomMessage,
+  onMessageStatusChange,
   onRoomRead,
   onConversationCacheChange,
   onOpenStoryReference,
@@ -3617,8 +3618,9 @@ function MessengerConversation({
           };
         }),
       );
+      onMessageStatusChange?.(eventPayload);
     },
-    [currentUserId],
+    [currentUserId, onMessageStatusChange],
   );
 
   const applyMessageReactionEvent = useCallback(

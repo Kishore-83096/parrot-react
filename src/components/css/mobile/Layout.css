@@ -1063,6 +1063,11 @@
   stroke-width: 2.7;
 }
 
+.parent-layout-page__contact-text .parent-layout-page__chat-preview .parent-layout-page__chat-message-status svg {
+  color: currentColor;
+  stroke-width: 2.7;
+}
+
 .parent-layout-page__chat-message-status.is-delivered {
   color: #5d526b;
 }
@@ -1450,10 +1455,14 @@
 .parent-layout-page__tabs button:hover,
 .parent-layout-page__tabs button:focus-visible,
 .parent-layout-page__tabs button.is-active {
-  color: #ffffff;
-  background: linear-gradient(135deg, var(--layout-purple), var(--layout-purple-deep));
-  box-shadow: 0 12px 24px rgba(122, 53, 245, 0.18);
+  color: var(--layout-purple);
+  background: transparent;
+  box-shadow: none;
   outline: none;
+}
+
+.parent-layout-page__tabs button:focus-visible {
+  border-color: rgba(122, 53, 245, 0.34);
 }
 
 .parent-layout-page__story-tab-icon {
@@ -1501,19 +1510,19 @@
 .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-play-ring,
 .parent-layout-page__tabs button:focus-visible .parent-layout-page__story-tab-icon-play-ring,
 .parent-layout-page__tabs button.is-active .parent-layout-page__story-tab-icon-play-ring {
-  stroke: #ffffff;
+  stroke: currentColor;
 }
 
 .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-orbit,
 .parent-layout-page__tabs button:focus-visible .parent-layout-page__story-tab-icon-orbit,
 .parent-layout-page__tabs button.is-active .parent-layout-page__story-tab-icon-orbit {
-  fill: rgba(255, 255, 255, 0.24);
+  fill: rgba(122, 53, 245, 0.16);
 }
 
 .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-play,
 .parent-layout-page__tabs button:focus-visible .parent-layout-page__story-tab-icon-play,
 .parent-layout-page__tabs button.is-active .parent-layout-page__story-tab-icon-play {
-  fill: #ffffff;
+  fill: currentColor;
 }
 
 .parent-layout-page__tab-badge {

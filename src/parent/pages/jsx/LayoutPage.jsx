@@ -201,6 +201,9 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   const [toast, setToast] = useState(null);
   const onlineUserTimeoutsRef = useRef(new Map());
   const typingTimeoutsRef = useRef(new Map());
+  const previousNonContactPanelTabRef = useRef(
+    activePanelTab === "contacts" ? "chats" : activePanelTab,
+  );
   const isLogoutInProgressRef = useRef(false);
   const logoutPromiseRef = useRef(null);
   const currentUserId = getCurrentUserId(user);
@@ -605,6 +608,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     if (activePanelTab === "stories") {
       setStoryUnreadCount(0);
     }
+
+    if (activePanelTab !== "contacts") {
+      previousNonContactPanelTabRef.current = activePanelTab;
+    }
   }, [activePanelTab]);
 
   useEffect(() => {
@@ -630,6 +637,16 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
 
   const toggleAccountPanel = () => {
     setIsAccountPanelOpen((currentValue) => !currentValue);
+  };
+
+  const toggleContactsPanel = () => {
+    if (activePanelTab === "contacts") {
+      changePanelTab(previousNonContactPanelTabRef.current || "chats");
+      return;
+    }
+
+    previousNonContactPanelTabRef.current = activePanelTab;
+    changePanelTab("contacts");
   };
 
   const handleContactsChange = useCallback((nextContacts) => {
@@ -1813,10 +1830,11 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             user={user}
             defaultDevicePromptVersion={defaultDevicePromptVersion}
             isAccountPanelActive={isAccountPanelOpen}
+            isContactsPanelActive={activePanelTab === "contacts"}
             onContactsChange={handleContactsChange}
             onContactUpdated={handleHeaderContactUpdated}
             onDefaultDeviceChanged={handleDefaultDeviceChanged}
-            onOpenContactsPanel={() => changePanelTab("contacts")}
+            onOpenContactsPanel={toggleContactsPanel}
             onToggleAccountPanel={toggleAccountPanel}
             onRecoveryKeyRequested={handleRecoveryKeyRequested}
             onLogout={handleLogout}
@@ -1898,6 +1916,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
                   : null
               }
               onRoomMessage={handleRoomMessage}
+              onMessageStatusChange={handleRoomMessageStatus}
               onRoomRead={handleRoomRead}
               onConversationCacheChange={handleConversationCacheChange}
               onOpenStoryReference={storiesController.openStoryReference}

@@ -521,9 +521,6 @@
 }
 
 :root[data-theme="dark"] .parent-welcome__create,
-:root[data-theme="dark"] .parent-layout-page__tabs button:hover,
-:root[data-theme="dark"] .parent-layout-page__tabs button:focus-visible,
-:root[data-theme="dark"] .parent-layout-page__tabs button.is-active,
 :root[data-theme="dark"] .parent-layout-page__stories-primary-button,
 :root[data-theme="dark"] .parent-layout-page__stories-icon-button,
 :root[data-theme="dark"] .parent-layout-page__stories-room-empty-actions button,
@@ -572,6 +569,16 @@
   fill: var(--theme-purple);
 }
 
+:root[data-theme="dark"] .parent-layout-page__chat-message-status,
+:root[data-theme="dark"] .parent-layout-page__chat-message-status.is-sent,
+:root[data-theme="dark"] .parent-layout-page__chat-message-status.is-delivered {
+  color: var(--theme-text);
+}
+
+:root[data-theme="dark"] .parent-layout-page__chat-message-status.is-read {
+  color: var(--theme-purple);
+}
+
 :root[data-theme="dark"] .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-orbit,
 :root[data-theme="dark"] .parent-layout-page__tabs button:focus-visible .parent-layout-page__story-tab-icon-orbit,
 :root[data-theme="dark"] .parent-layout-page__tabs button.is-active .parent-layout-page__story-tab-icon-orbit,
@@ -581,13 +588,19 @@
 :root[data-theme="dark"] .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-play-ring,
 :root[data-theme="dark"] .parent-layout-page__tabs button:focus-visible .parent-layout-page__story-tab-icon-play-ring,
 :root[data-theme="dark"] .parent-layout-page__tabs button.is-active .parent-layout-page__story-tab-icon-play-ring {
-  stroke: var(--theme-text);
+  stroke: currentColor;
+}
+
+:root[data-theme="dark"] .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-orbit,
+:root[data-theme="dark"] .parent-layout-page__tabs button:focus-visible .parent-layout-page__story-tab-icon-orbit,
+:root[data-theme="dark"] .parent-layout-page__tabs button.is-active .parent-layout-page__story-tab-icon-orbit {
+  fill: rgba(168, 137, 255, 0.18);
 }
 
 :root[data-theme="dark"] .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-play,
 :root[data-theme="dark"] .parent-layout-page__tabs button:focus-visible .parent-layout-page__story-tab-icon-play,
 :root[data-theme="dark"] .parent-layout-page__tabs button.is-active .parent-layout-page__story-tab-icon-play {
-  fill: var(--theme-text);
+  fill: currentColor;
 }
 
 :root[data-theme="dark"] .parent-layout-page__stories-toolbar,
