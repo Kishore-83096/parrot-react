@@ -116,6 +116,10 @@
   border-radius: var(--theme-radius-card);
 }
 
+.parent-layout-page__tabs {
+  border-radius: 0;
+}
+
 .parent-welcome button,
 .parent-welcome input,
 .parent-header button,

@@ -1,4 +1,11 @@
 function StoryTabIcon({ size = 24 }) {
+  const pathProps = {
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+  };
+
   return (
     <svg
       className="parent-layout-page__story-tab-icon"
@@ -9,22 +16,20 @@ function StoryTabIcon({ size = 24 }) {
       aria-hidden="true"
     >
       <path
-        className="parent-layout-page__story-tab-icon-orbit"
-        d="M18.9 9.1a8 8 0 1 1-5.5-4.9"
+        d="M16.42 7.95C18.86 10.39 18.86 14.35 16.42 16.79C13.98 19.23 10.02 19.23 7.58 16.79C5.14 14.35 5.14 10.39 7.58 7.95C10.02 5.51 13.98 5.51 16.42 7.95Z"
+        {...pathProps}
       />
       <path
-        className="parent-layout-page__story-tab-icon-inner"
-        d="M8.2 8.5a6.3 6.3 0 0 0-1.1 6.6M9.5 17.2a6.2 6.2 0 0 0 5 .1"
-      />
-      <circle
-        className="parent-layout-page__story-tab-icon-play-ring"
-        cx="16.7"
-        cy="7.2"
-        r="4.2"
+        d="M8.24999 21.64C6.24999 20.84 4.49999 19.39 3.33999 17.38C2.19999 15.41 1.81999 13.22 2.08999 11.13"
+        {...pathProps}
       />
       <path
-        className="parent-layout-page__story-tab-icon-play"
-        d="M15.6 5.4v3.6l3-1.8-3-1.8Z"
+        d="M5.84998 4.47998C7.54998 3.14998 9.67997 2.35999 12 2.35999C14.27 2.35999 16.36 3.12997 18.04 4.40997"
+        {...pathProps}
+      />
+      <path
+        d="M15.75 21.64C17.75 20.84 19.5 19.39 20.66 17.38C21.8 15.41 22.18 13.22 21.91 11.13"
+        {...pathProps}
       />
     </svg>
   );

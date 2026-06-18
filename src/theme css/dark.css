@@ -289,6 +289,12 @@
   background: var(--theme-control-bg);
 }
 
+:root[data-theme="dark"] .parent-layout-page__tabs {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 :root[data-theme="dark"] .parent-layout-page__profile-details dd,
 :root[data-theme="dark"] .parent-layout-page__crypto-device code,
 :root[data-theme="dark"] .parent-layout-page__story-media-text > span,

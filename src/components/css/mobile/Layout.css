@@ -1428,14 +1428,14 @@
 }
 
 .parent-layout-page__tabs {
-  min-height: 52px;
-  padding: 5px;
+  min-height: 40px;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 7px;
-  border: 1px solid rgba(124, 60, 255, 0.12);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.54);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .parent-layout-page__tabs button {
@@ -8383,11 +8383,11 @@ video.parent-layout-page__attachment-modal-media {
 }
 
 .parent-layout-page__tabs {
-  min-height: 50px;
-  padding: 4px;
+  min-height: 42px;
+  padding: 0;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
-  border-radius: 16px;
+  border-radius: 0;
 }
 
 .parent-layout-page__tabs button {
