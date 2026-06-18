@@ -4576,16 +4576,16 @@
 .parent-layout-page__message-form {
   grid-area: composer;
   min-width: 0;
-  min-height: 70px;
-  padding: 0px 18px 13px;
+  min-height: 62px;
+  padding: 0 16px 9px;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 40px 46px;
+  grid-template-columns: 38px minmax(0, 1fr) 38px 42px;
   grid-template-areas:
     "reply reply reply reply"
     "files files files files"
     "attach draft voice send";
   align-items: end;
-  gap: 10px;
+  gap: 8px;
   border-top: 1px solid rgba(124, 60, 255, 0.14);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(244, 239, 255, 0.68) 54%, rgba(255, 226, 247, 0.6)),
@@ -4636,11 +4636,11 @@
   grid-area: draft;
   width: 100%;
   min-width: 0;
-  min-height: 44px;
-  max-height: 142px;
-  padding: 12px 14px;
+  min-height: 38px;
+  max-height: 128px;
+  padding: 9px 12px;
   border: 0;
-  border-radius: 14px;
+  border-radius: 13px;
   outline: 0;
   color: var(--layout-text);
   background: rgba(255, 255, 255, 0.82);
@@ -4659,13 +4659,13 @@
 
 .parent-layout-page__message-attach {
   grid-area: attach;
-  width: 40px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 14px;
+  border-radius: 13px;
   color: var(--layout-purple-deep);
   background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 10px 20px rgba(95, 52, 167, 0.08);
@@ -4680,8 +4680,8 @@
 .parent-layout-page__composer-add {
   grid-area: attach;
   position: relative;
-  width: 40px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   align-self: end;
 }
 
@@ -4901,13 +4901,13 @@
 
 .parent-layout-page__message-voice {
   grid-area: voice;
-  width: 40px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 14px;
+  border-radius: 13px;
   color: #ffffff;
   background: linear-gradient(135deg, #0f9f7a, #2563eb);
   box-shadow: 0 12px 24px rgba(15, 159, 122, 0.18);
@@ -4927,13 +4927,13 @@
 .parent-layout-page__voice-recording {
   grid-area: draft;
   min-width: 0;
-  min-height: 44px;
-  padding: 8px 12px;
+  min-height: 38px;
+  padding: 7px 10px;
   display: grid;
   grid-template-columns: 11px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  border-radius: 14px;
+  border-radius: 13px;
   color: var(--layout-text);
   background: rgba(255, 255, 255, 0.86);
   box-shadow: 0 10px 20px rgba(95, 52, 167, 0.08);
@@ -5423,15 +5423,15 @@
 
 .parent-layout-page__message-submit {
   grid-area: send;
-  width: 46px;
-  height: 44px;
+  width: 42px;
+  height: 38px;
   padding: 0;
   position: relative;
   display: grid;
   place-items: center;
   overflow: visible;
   border: 0;
-  border-radius: 14px;
+  border-radius: 13px;
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-purple), var(--layout-purple-deep));
   box-shadow: 0 12px 24px rgba(122, 53, 245, 0.18);
