@@ -2048,9 +2048,12 @@
 }
 
 .parent-layout-page__conversation {
+  --conversation-keyboard-inset: 0px;
+
   position: relative;
   min-height: 0;
   height: 100%;
+  padding-bottom: var(--conversation-keyboard-inset);
   display: grid;
   grid-template-areas:
     "notice"
@@ -2060,6 +2063,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   gap: 0;
   overflow: hidden;
+  transition: padding-bottom 160ms ease;
 }
 
 .parent-layout-page__conversation button:disabled,
@@ -6787,6 +6791,10 @@ video.parent-layout-page__attachment-modal-media {
   .parent-layout-page__composer-menu,
   .parent-layout-page__contact-share-picker {
     animation: none;
+  }
+
+  .parent-layout-page__conversation {
+    transition: none;
   }
 }
 

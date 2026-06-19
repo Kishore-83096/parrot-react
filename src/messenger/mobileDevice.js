@@ -25,3 +25,20 @@ export function isRealMobileDevice() {
   // iPadOS can present a desktop-class Macintosh user agent.
   return /Macintosh/i.test(deviceText) && Number(navigatorObject.maxTouchPoints || 0) > 1;
 }
+
+export function getMobileKeyboardInset() {
+  const visualViewport = globalThis.visualViewport;
+
+  if (!visualViewport) {
+    return 0;
+  }
+
+  const layoutHeight =
+    globalThis.innerHeight ||
+    globalThis.document?.documentElement?.clientHeight ||
+    visualViewport.height;
+  const keyboardInset =
+    layoutHeight - visualViewport.height - visualViewport.offsetTop;
+
+  return Math.max(0, Math.round(keyboardInset));
+}

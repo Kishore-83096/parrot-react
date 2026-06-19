@@ -465,7 +465,8 @@ export function formatRoomTime(value) {
 
   if (isToday) {
     return date.toLocaleTimeString([], {
-      hour: "2-digit",
+      hour: "numeric",
+      hour12: true,
       minute: "2-digit",
     });
   }
@@ -481,6 +482,24 @@ export function formatRoomTime(value) {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+}
+
+export function formatMessageTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleTimeString([], {
+    hour: "numeric",
+    hour12: true,
+    minute: "2-digit",
   });
 }
 

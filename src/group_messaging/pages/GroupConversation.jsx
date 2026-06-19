@@ -71,14 +71,17 @@ import {
   MessageLinkPreview,
   MessageTextWithLinks,
 } from "../../messenger/messageLinks.jsx";
-import { isRealMobileDevice } from "../../messenger/mobileDevice.js";
+import {
+  getMobileKeyboardInset,
+  isRealMobileDevice,
+} from "../../messenger/mobileDevice.js";
 import {
   decryptEncryptedAttachmentBlob,
   encryptSelectedFilesForGroupMessage,
   isEncryptedAttachment,
 } from "../e2ee/files.js";
 import {
-  formatRoomTime,
+  formatMessageTime,
   getCurrentUserId,
   getMessageDateDividerLabel,
   getMessageDateKey,
@@ -3651,6 +3654,7 @@ function GroupConversation({
   const [typingUserIds, setTypingUserIds] = useState([]);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const roomSocketRef = useRef(null);
+  const conversationRef = useRef(null);
   const messagesListRef = useRef(null);
   const messagesEndRef = useRef(null);
   const messageDraftRef = useRef(null);
@@ -3662,6 +3666,7 @@ function GroupConversation({
   const voiceRecordingStartedAtRef = useRef(0);
   const voiceRecordingMimeTypeRef = useRef("");
   const isVoiceRecordingStoppingRef = useRef(false);
+  const shouldRestoreMobileDraftFocusRef = useRef(false);
   const sendQueueRef = useRef([]);
   const isProcessingSendQueueRef = useRef(false);
   const optimisticMessageSequenceRef = useRef(0);
@@ -3730,19 +3735,49 @@ function GroupConversation({
     });
   }, [selectedRoom?.id]);
 
-  const focusMessageDraft = useCallback(() => {
+  const updateConversationKeyboardInset = useCallback(() => {
+    const conversation = conversationRef.current;
+
+    if (!conversation) {
+      return;
+    }
+
+    const isDraftFocused =
+      globalThis.document?.activeElement === messageDraftRef.current;
+    const keyboardInset =
+      isDraftFocused && isRealMobileDevice() ? getMobileKeyboardInset() : 0;
+
+    conversation.style.setProperty(
+      "--conversation-keyboard-inset",
+      `${keyboardInset}px`,
+    );
+
+    if (isDraftFocused && keyboardInset > 0) {
+      globalThis.requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ block: "end" });
+      });
+    }
+  }, []);
+
+  const focusMessageDraft = useCallback((options = {}) => {
+    const { allowMobile = false } = options || {};
     const textarea = messageDraftRef.current;
 
-    if (!textarea || isAttachmentViewerOpen || isRealMobileDevice()) {
+    if (
+      !textarea ||
+      isAttachmentViewerOpen ||
+      (!allowMobile && isRealMobileDevice())
+    ) {
       return;
     }
 
     textarea.focus({ preventScroll: true });
     const cursorPosition = textarea.value.length;
     textarea.setSelectionRange(cursorPosition, cursorPosition);
-  }, [isAttachmentViewerOpen]);
+    globalThis.requestAnimationFrame(updateConversationKeyboardInset);
+  }, [isAttachmentViewerOpen, updateConversationKeyboardInset]);
 
-  const focusMessageDraftUnlessTextEntryIsActive = useCallback(() => {
+  const focusMessageDraftUnlessTextEntryIsActive = useCallback((options = {}) => {
     const activeElement = globalThis.document?.activeElement;
 
     if (
@@ -3752,8 +3787,14 @@ function GroupConversation({
       return;
     }
 
-    focusMessageDraft();
+    focusMessageDraft(options);
   }, [focusMessageDraft]);
+
+  const rememberMobileDraftFocusForSend = useCallback(() => {
+    shouldRestoreMobileDraftFocusRef.current =
+      isRealMobileDevice() &&
+      globalThis.document?.activeElement === messageDraftRef.current;
+  }, []);
 
   const currentUserId = getCurrentUserId(user);
   const selectedGroupRoomId =
@@ -4522,6 +4563,39 @@ function GroupConversation({
     hasActiveConversation,
     isAttachmentViewerOpen,
     selectedGroupRoomId,
+  ]);
+
+  useEffect(() => {
+    const conversation = conversationRef.current;
+
+    if (!hasActiveConversation || !isRealMobileDevice() || !conversation) {
+      conversation?.style.removeProperty("--conversation-keyboard-inset");
+      return undefined;
+    }
+
+    const visualViewport = globalThis.visualViewport;
+    const textarea = messageDraftRef.current;
+    const updateInset = () => updateConversationKeyboardInset();
+
+    updateInset();
+    visualViewport?.addEventListener("resize", updateInset);
+    visualViewport?.addEventListener("scroll", updateInset);
+    globalThis.addEventListener("resize", updateInset);
+    textarea?.addEventListener("focus", updateInset);
+    textarea?.addEventListener("blur", updateInset);
+
+    return () => {
+      visualViewport?.removeEventListener("resize", updateInset);
+      visualViewport?.removeEventListener("scroll", updateInset);
+      globalThis.removeEventListener("resize", updateInset);
+      textarea?.removeEventListener("focus", updateInset);
+      textarea?.removeEventListener("blur", updateInset);
+      conversation.style.removeProperty("--conversation-keyboard-inset");
+    };
+  }, [
+    hasActiveConversation,
+    selectedGroupRoomId,
+    updateConversationKeyboardInset,
   ]);
 
   useEffect(() => {
@@ -6362,6 +6436,7 @@ function GroupConversation({
     ({
       filesToSend = [],
       replyTargetSnapshot = null,
+      restoreDraftFocus = false,
       sharedContactsToSend = [],
       text = "",
     }) => {
@@ -6446,7 +6521,7 @@ function GroupConversation({
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      focusMessageDraft();
+      focusMessageDraft({ allowMobile: restoreDraftFocus });
 
       sendQueueRef.current.push({
         clientMessageId,
@@ -6526,10 +6601,16 @@ function GroupConversation({
 
   const handleSendMessage = (event) => {
     event?.preventDefault();
+    const restoreDraftFocus =
+      shouldRestoreMobileDraftFocusRef.current ||
+      (isRealMobileDevice() &&
+        globalThis.document?.activeElement === messageDraftRef.current);
+    shouldRestoreMobileDraftFocusRef.current = false;
 
     queueOutgoingMessage({
       filesToSend: selectedFiles,
       replyTargetSnapshot: replyTarget,
+      restoreDraftFocus,
       text: messageDraft,
     });
   };
@@ -6605,7 +6686,7 @@ function GroupConversation({
   }
 
   return (
-    <section className="parent-layout-page__conversation">
+    <section className="parent-layout-page__conversation" ref={conversationRef}>
       {roomMessage ? (
         <p className="parent-layout-page__conversation-message" role="alert">
           {roomMessage}
@@ -6896,7 +6977,7 @@ function GroupConversation({
 
                     <footer>
                       <time dateTime={message.created_at}>
-                        {formatRoomTime(message.created_at)}
+                        {formatMessageTime(message.created_at)}
                       </time>
                       {sentWhileBlocked ? (
                         <span
@@ -7177,6 +7258,8 @@ function GroupConversation({
             <button
               type="submit"
               className="parent-layout-page__message-submit"
+              onPointerDown={rememberMobileDraftFocusForSend}
+              onTouchStart={rememberMobileDraftFocusForSend}
               disabled={!hasComposedMessage}
               aria-label={
                 isSendingMessage ? "Queue message" : "Send message"
