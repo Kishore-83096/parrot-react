@@ -991,7 +991,7 @@
 }
 
 .parent-layout-page__chat-card.is-unread {
-  box-shadow: inset 3px 0 0 #db2777;
+  box-shadow: none;
 }
 
 .parent-layout-page__chat-card.is-selected.is-unread {
