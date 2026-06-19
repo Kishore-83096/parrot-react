@@ -3,6 +3,8 @@ import {
   Ban,
   Camera,
   CheckCircle2,
+  ExternalLink,
+  FileText,
   Eye,
   EyeOff,
   KeyRound,
@@ -27,9 +29,16 @@ import SmartAvatar from "../../../components/SmartAvatar.jsx";
 import ThemeToggleButton from "../../../theme css/ThemeToggleButton.jsx";
 import {
   getMessengerErrorMessage,
+  getMessengerSavedMessages,
   getMessengerUserCryptoDevices,
   refreshMessengerPresenceVisibility,
+  saveMessengerMessage,
 } from "../../../messenger/api.js";
+import { saveGroupMessage } from "../../../group_messaging/api.js";
+import {
+  decryptGroupMessageForUser,
+  getRenderableMessageText as getGroupRenderableMessageText,
+} from "../../../group_messaging/e2ee/messages.js";
 import {
   getStoredMessengerDeviceIdentity,
   revokeMessengerDevice,
@@ -37,10 +46,15 @@ import {
   updateDefaultMessengerDevicePassword,
 } from "../../../messenger/e2ee/devices/index.js";
 import {
+  decryptMessageForUser,
+  getRenderableMessageText as getDirectRenderableMessageText,
+} from "../../../messenger/e2ee/messages.js";
+import {
   clearStoredRecoveryKey,
   getStoredRecoveryKey,
   saveRecoveryKeyBackup,
 } from "../../../messenger/e2ee/recovery.js";
+import { getReactionConfig } from "../../../messenger/reactions.js";
 import {
   blockParentContact,
   changeParentPassword,
@@ -197,6 +211,99 @@ function getApiErrorMessage(error, fallbackMessage) {
   }
 
   return error.response?.data?.message || fallbackMessage;
+}
+
+function formatSavedDateTime(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function getSavedMessageAttachments(message) {
+  if (
+    Array.isArray(message?.decrypted_attachments) &&
+    message.decrypted_attachments.length > 0
+  ) {
+    return message.decrypted_attachments;
+  }
+
+  return Array.isArray(message?.attachments) ? message.attachments : [];
+}
+
+function getSavedAttachmentUrl(attachment) {
+  return (
+    attachment?.file_url ||
+    attachment?.encrypted_file_url ||
+    attachment?.thumbnail_url ||
+    ""
+  );
+}
+
+function getSavedAttachmentLabel(attachment, index) {
+  return (
+    attachment?.file_name ||
+    attachment?.original_file_name ||
+    `${attachment?.file_type || "Attachment"} ${index + 1}`
+  );
+}
+
+function getSavedMessageText(save) {
+  const message = save?.message;
+  const text =
+    save?.message_kind === "group"
+      ? getGroupRenderableMessageText(message)
+      : getDirectRenderableMessageText(message);
+
+  return String(text || "").trim();
+}
+
+function getSavedMessageSenderLabel(save, currentUserId) {
+  const sender = save?.sender || {};
+
+  if (sender.user_id && Number(sender.user_id) === Number(currentUserId)) {
+    return "You";
+  }
+
+  return sender.display_name || sender.account_number || "Unknown sender";
+}
+
+function getSavedReactionLabel(reactionItem) {
+  const reactionConfig = getReactionConfig(reactionItem?.reaction);
+  const count = Math.max(Number(reactionItem?.count || 0), 0);
+
+  if (!reactionConfig || count <= 0) {
+    return "";
+  }
+
+  return `${reactionConfig.emoji} ${count}`;
+}
+
+async function decryptSavedItemForUser(save, user) {
+  const message = save?.message;
+
+  if (!message) {
+    return save;
+  }
+
+  const decryptedMessage =
+    save.message_kind === "group"
+      ? await decryptGroupMessageForUser(message, user)
+      : await decryptMessageForUser(message, user);
+
+  return {
+    ...save,
+    message: decryptedMessage,
+  };
 }
 
 function getEmptyAccountForm() {
@@ -356,6 +463,7 @@ function Header({
     useState(false);
   const [isGhostManagementModalOpen, setIsGhostManagementModalOpen] =
     useState(false);
+  const [isMySavesModalOpen, setIsMySavesModalOpen] = useState(false);
   const [isDefaultDeviceSelectionRequired, setIsDefaultDeviceSelectionRequired] =
     useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("view");
@@ -389,6 +497,7 @@ function Header({
   const [linkedDevicesMessage, setLinkedDevicesMessage] = useState(null);
   const [blockManagementMessage, setBlockManagementMessage] = useState(null);
   const [ghostManagementMessage, setGhostManagementMessage] = useState(null);
+  const [mySavesMessage, setMySavesMessage] = useState(null);
   const [recoveryKeyMessage, setRecoveryKeyMessage] = useState(null);
   const [defaultDevicePasswordMessage, setDefaultDevicePasswordMessage] =
     useState(null);
@@ -419,12 +528,15 @@ function Header({
     useState(false);
   const [isGhostManagementLoading, setIsGhostManagementLoading] =
     useState(false);
+  const [isMySavesLoading, setIsMySavesLoading] = useState(false);
   const [isRecoveryKeySaving, setIsRecoveryKeySaving] = useState(false);
   const [isDefaultDevicePasswordSaving, setIsDefaultDevicePasswordSaving] =
     useState(false);
   const [isDefaultDevicePasswordUpdating, setIsDefaultDevicePasswordUpdating] =
     useState(false);
   const [isLogoutPending, setIsLogoutPending] = useState(false);
+  const [mySaves, setMySaves] = useState([]);
+  const [mySavesActionId, setMySavesActionId] = useState("");
   const [revokingDeviceId, setRevokingDeviceId] = useState("");
   const [defaultingDeviceId, setDefaultingDeviceId] = useState("");
   const [isStoredRecoveryKeyVisible, setIsStoredRecoveryKeyVisible] =
@@ -465,6 +577,7 @@ function Header({
   const email =
     accountDisplay?.email || user?.email || (username ? `${username}@epost.com` : "");
   const profilePicture = displayProfile?.profile_picture;
+  const currentUserId = Number(user?.id || user?.user_id || 0);
   useEffect(() => {
     const file = profileForm.profile_picture_file;
     if (!file || typeof URL === "undefined") {
@@ -698,6 +811,29 @@ function Header({
     }
   }, [onContactsChange]);
 
+  const loadMySaves = useCallback(async () => {
+    setIsMySavesLoading(true);
+    setMySavesMessage(null);
+
+    try {
+      const response = await getMessengerSavedMessages({ limit: 100 });
+      const result = response.data?.result || response.data;
+      const rawSaves = Array.isArray(result?.saves) ? result.saves : [];
+      const decryptedSaves = await Promise.all(
+        rawSaves.map((save) => decryptSavedItemForUser(save, user)),
+      );
+
+      setMySaves(decryptedSaves);
+    } catch (error) {
+      setMySavesMessage({
+        type: "error",
+        text: getMessengerErrorMessage(error, "Unable to load saved messages."),
+      });
+    } finally {
+      setIsMySavesLoading(false);
+    }
+  }, [user]);
+
   const refreshStoredRecoveryKey = useCallback(() => {
     setStoredRecoveryKey(getStoredRecoveryKey(user));
   }, [user]);
@@ -706,6 +842,7 @@ function Header({
     pushLoggedInHistoryView({ modal: "profile", profileTab: "view" });
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
+    setIsMySavesModalOpen(false);
     setActiveProfileTab("view");
     setIsProfileModalOpen(true);
     loadProfile();
@@ -715,6 +852,7 @@ function Header({
     pushLoggedInHistoryView({ modal: "account", accountTab: "password" });
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
+    setIsMySavesModalOpen(false);
     setActiveAccountTab("password");
     setAccountForm(getEmptyAccountForm());
     setAccountMessage(null);
@@ -725,6 +863,7 @@ function Header({
     pushLoggedInHistoryView({ modal: "linkedDevices" });
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
+    setIsMySavesModalOpen(false);
     setIsDefaultDeviceSelectionRequired(false);
     setActiveLinkedDevicesTab("devices");
     setLinkedDevicesMessage(null);
@@ -747,12 +886,56 @@ function Header({
     }
   }, [isLogoutPending, onLogout]);
 
+  const handleRemoveSavedMessage = useCallback(
+    async (save) => {
+      const messageId = Number(save?.message?.id || 0);
+      const roomId = Number(save?.room?.id || save?.group?.id || 0);
+      const actionId = `${save?.message_kind || "message"}:${messageId}`;
+
+      if (!messageId) {
+        return;
+      }
+
+      setMySavesActionId(actionId);
+      setMySavesMessage(null);
+
+      try {
+        if (save?.message_kind === "group") {
+          await saveGroupMessage(roomId, messageId, false);
+        } else {
+          await saveMessengerMessage(messageId, false);
+        }
+
+        setMySaves((currentSaves) =>
+          currentSaves.filter((currentSave) => currentSave.id !== save.id),
+        );
+        onToast?.({
+          type: "success",
+          title: "Removed from My Saves",
+          message: "The message was removed from your saved messages.",
+        });
+      } catch (error) {
+        setMySavesMessage({
+          type: "error",
+          text: getMessengerErrorMessage(
+            error,
+            "Unable to remove this saved message.",
+          ),
+        });
+      } finally {
+        setMySavesActionId("");
+      }
+    },
+    [onToast],
+  );
+
   const openBlockManagementModal = () => {
     pushLoggedInHistoryView({ modal: "blockManagement" });
     setIsProfileModalOpen(false);
     setIsAccountModalOpen(false);
     setIsLinkedDevicesModalOpen(false);
     setIsGhostManagementModalOpen(false);
+    setIsMySavesModalOpen(false);
     setBlockManagementSearch("");
     setBlockManagementMessage(null);
     setIsBlockManagementModalOpen(true);
@@ -765,10 +948,23 @@ function Header({
     setIsAccountModalOpen(false);
     setIsLinkedDevicesModalOpen(false);
     setIsBlockManagementModalOpen(false);
+    setIsMySavesModalOpen(false);
     setGhostManagementSearch("");
     setGhostManagementMessage(null);
     setIsGhostManagementModalOpen(true);
     loadGhostManagementContacts();
+  };
+
+  const openMySavesModal = () => {
+    pushLoggedInHistoryView({ modal: "mySaves" });
+    setIsProfileModalOpen(false);
+    setIsAccountModalOpen(false);
+    setIsLinkedDevicesModalOpen(false);
+    setIsBlockManagementModalOpen(false);
+    setIsGhostManagementModalOpen(false);
+    setMySavesMessage(null);
+    setIsMySavesModalOpen(true);
+    loadMySaves();
   };
 
   useEffect(() => {
@@ -783,6 +979,7 @@ function Header({
     handledDefaultDevicePromptVersionRef.current = defaultDevicePromptVersion;
     setIsBlockManagementModalOpen(false);
     setIsGhostManagementModalOpen(false);
+    setIsMySavesModalOpen(false);
     setIsDefaultDeviceSelectionRequired(true);
     setActiveLinkedDevicesTab("devices");
     setIsLinkedDevicesModalOpen(true);
@@ -860,6 +1057,13 @@ function Header({
     setIsGhostManagementLoading(false);
   }, []);
 
+  const resetMySavesModal = useCallback(() => {
+    setIsMySavesModalOpen(false);
+    setMySavesMessage(null);
+    setMySavesActionId("");
+    setIsMySavesLoading(false);
+  }, []);
+
   const closeBlockManagementModal = useCallback(() => {
     if (isCurrentHistoryModal("blockManagement")) {
       clearLoggedInHistoryModal();
@@ -875,6 +1079,18 @@ function Header({
 
     resetGhostManagementModal();
   }, [resetGhostManagementModal]);
+
+  const closeMySavesModal = useCallback(() => {
+    if (mySavesActionId) {
+      return;
+    }
+
+    if (isCurrentHistoryModal("mySaves")) {
+      clearLoggedInHistoryModal();
+    }
+
+    resetMySavesModal();
+  }, [mySavesActionId, resetMySavesModal]);
 
   const closeProfileModal = useCallback(() => {
     if (isCurrentHistoryModal("profile")) {
@@ -1016,6 +1232,24 @@ function Header({
   ]);
 
   useEffect(() => {
+    if (!isMySavesModalOpen) {
+      return undefined;
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && !mySavesActionId) {
+        closeMySavesModal();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeMySavesModal, isMySavesModalOpen, mySavesActionId]);
+
+  useEffect(() => {
     const handlePopState = (event) => {
       const historyView =
         event.state?.[LOGGED_IN_HISTORY_KEY] || getLoggedInHistoryView();
@@ -1025,6 +1259,7 @@ function Header({
         resetLinkedDevicesModal();
         resetBlockManagementModal();
         resetGhostManagementModal();
+        resetMySavesModal();
         setIsProfileModalOpen(true);
         setActiveProfileTab(historyView.profileTab === "edit" ? "edit" : "view");
         setProfileMessage(null);
@@ -1041,6 +1276,7 @@ function Header({
         resetLinkedDevicesModal();
         resetBlockManagementModal();
         resetGhostManagementModal();
+        resetMySavesModal();
         setIsAccountModalOpen(true);
         setActiveAccountTab(
           historyView.accountTab === "delete"
@@ -1057,6 +1293,7 @@ function Header({
         resetAccountModal();
         resetBlockManagementModal();
         resetGhostManagementModal();
+        resetMySavesModal();
         setIsLinkedDevicesModalOpen(true);
         setActiveLinkedDevicesTab("devices");
         setLinkedDevicesMessage(null);
@@ -1070,6 +1307,7 @@ function Header({
         resetAccountModal();
         resetLinkedDevicesModal();
         resetGhostManagementModal();
+        resetMySavesModal();
         setIsBlockManagementModalOpen(true);
         setBlockManagementMessage(null);
         loadBlockManagementContacts();
@@ -1081,9 +1319,22 @@ function Header({
         resetAccountModal();
         resetLinkedDevicesModal();
         resetBlockManagementModal();
+        resetMySavesModal();
         setIsGhostManagementModalOpen(true);
         setGhostManagementMessage(null);
         loadGhostManagementContacts();
+        return;
+      }
+
+      if (historyView?.modal === "mySaves") {
+        resetProfileModal();
+        resetAccountModal();
+        resetLinkedDevicesModal();
+        resetBlockManagementModal();
+        resetGhostManagementModal();
+        setIsMySavesModalOpen(true);
+        setMySavesMessage(null);
+        loadMySaves();
         return;
       }
 
@@ -1092,6 +1343,7 @@ function Header({
       resetLinkedDevicesModal();
       resetBlockManagementModal();
       resetGhostManagementModal();
+      resetMySavesModal();
     };
 
     window.addEventListener("popstate", handlePopState);
@@ -1105,10 +1357,12 @@ function Header({
     loadCryptoDevices,
     loadBlockManagementContacts,
     loadGhostManagementContacts,
+    loadMySaves,
     resetAccountModal,
     resetBlockManagementModal,
     resetGhostManagementModal,
     resetLinkedDevicesModal,
+    resetMySavesModal,
     resetProfileModal,
     user,
   ]);
@@ -3254,6 +3508,215 @@ function Header({
     </div>
   ) : null;
 
+  const mySavesModal = isMySavesModalOpen ? (
+    <div className="parent-layout-page__modal-backdrop" role="presentation">
+      <section
+        className="parent-layout-page__modal parent-layout-page__modal--account parent-layout-page__my-saves-modal"
+        aria-modal="true"
+        aria-labelledby="parent-my-saves-title"
+        role="dialog"
+      >
+        <button
+          className="parent-layout-page__modal-close"
+          type="button"
+          onClick={closeMySavesModal}
+          aria-label="Close My Saves"
+          title="Close"
+          disabled={Boolean(mySavesActionId)}
+        >
+          <X size={28} strokeWidth={3} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__modal-header">
+          <span
+            className="parent-layout-page__block-management-icon parent-layout-page__my-saves-icon"
+            aria-hidden="true"
+          >
+            <Save size={24} />
+          </span>
+          <div>
+            <h2 id="parent-my-saves-title">My Saves</h2>
+          </div>
+        </div>
+
+        <div className="parent-layout-page__my-saves">
+          <div className="parent-layout-page__block-management-summary">
+            <span>
+              <strong>{mySaves.length}</strong>
+              <small>saved messages</small>
+            </span>
+          </div>
+
+          {mySavesMessage ? (
+            <p
+              className={
+                mySavesMessage.type === "error"
+                  ? "parent-layout-page__modal-error"
+                  : "parent-layout-page__form-note"
+              }
+              role={mySavesMessage.type === "error" ? "alert" : "status"}
+            >
+              {mySavesMessage.text}
+            </p>
+          ) : null}
+
+          {isMySavesLoading && mySaves.length === 0 ? (
+            <div
+              className="parent-layout-page__block-management-empty"
+              aria-live="polite"
+            >
+              Loading saved messages
+            </div>
+          ) : mySaves.length === 0 ? (
+            <div className="parent-layout-page__block-management-empty">
+              No saved messages yet.
+            </div>
+          ) : (
+            <div className="parent-layout-page__my-saves-list">
+              {mySaves.map((save) => {
+                const message = save.message || {};
+                const isGroupSave = save.message_kind === "group";
+                const text = getSavedMessageText(save);
+                const attachments = getSavedMessageAttachments(message);
+                const reactions = Array.isArray(message.reactions)
+                  ? message.reactions
+                  : [];
+                const visibleReactions = reactions
+                  .map(getSavedReactionLabel)
+                  .filter(Boolean);
+                const senderLabel = getSavedMessageSenderLabel(
+                  save,
+                  currentUserId,
+                );
+                const receivedLabel =
+                  save.direction === "outgoing" ? "Sent" : "Received";
+                const groupOwner = save.group?.owner || {};
+                const groupOwnerLabel =
+                  groupOwner.display_name ||
+                  groupOwner.account_number ||
+                  (save.group?.created_by_user_id
+                    ? `User ${save.group.created_by_user_id}`
+                    : "");
+                const actionId = `${save.message_kind}:${message.id}`;
+                const isRemoving = mySavesActionId === actionId;
+
+                return (
+                  <article
+                    className={`parent-layout-page__my-save${
+                      isGroupSave ? " is-group" : " is-direct"
+                    }`}
+                    key={save.id}
+                  >
+                    <header className="parent-layout-page__my-save-header">
+                      <div>
+                        <strong>{senderLabel}</strong>
+                        <span>
+                          {isGroupSave
+                            ? save.group?.title || `Group ${save.room?.id || ""}`
+                            : "Direct message"}
+                        </span>
+                      </div>
+
+                      <button
+                        className="parent-layout-page__my-save-remove"
+                        type="button"
+                        onClick={() => handleRemoveSavedMessage(save)}
+                        disabled={Boolean(mySavesActionId)}
+                        aria-busy={isRemoving}
+                        aria-label="Remove saved message"
+                        title="Remove from My Saves"
+                      >
+                        {isRemoving ? (
+                          <LoaderCircle
+                            className="app-button-spinner"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Trash2 size={16} aria-hidden="true" />
+                        )}
+                      </button>
+                    </header>
+
+                    <dl className="parent-layout-page__my-save-meta">
+                      <div>
+                        <dt>{receivedLabel}</dt>
+                        <dd>{formatSavedDateTime(save.received_at)}</dd>
+                      </div>
+                      <div>
+                        <dt>Saved</dt>
+                        <dd>{formatSavedDateTime(save.saved_at)}</dd>
+                      </div>
+                      {isGroupSave && groupOwnerLabel ? (
+                        <div>
+                          <dt>Owner</dt>
+                          <dd>{groupOwnerLabel}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+
+                    {text ? (
+                      <p className="parent-layout-page__my-save-text">{text}</p>
+                    ) : message.decryption_status &&
+                      message.decryption_status !== "ok" ? (
+                      <p className="parent-layout-page__my-save-text is-muted">
+                        Encrypted message unavailable on this device.
+                      </p>
+                    ) : attachments.length === 0 ? (
+                      <p className="parent-layout-page__my-save-text is-muted">
+                        No text content.
+                      </p>
+                    ) : null}
+
+                    {attachments.length > 0 ? (
+                      <div
+                        className="parent-layout-page__my-save-attachments"
+                        aria-label="Saved message attachments"
+                      >
+                        {attachments.map((attachment, index) => {
+                          const attachmentUrl = getSavedAttachmentUrl(attachment);
+                          const attachmentLabel = getSavedAttachmentLabel(
+                            attachment,
+                            index,
+                          );
+
+                          return attachmentUrl ? (
+                            <a
+                              href={attachmentUrl}
+                              key={`${attachmentUrl}-${index}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <FileText size={15} aria-hidden="true" />
+                              <span>{attachmentLabel}</span>
+                              <ExternalLink size={13} aria-hidden="true" />
+                            </a>
+                          ) : (
+                            <span key={`${attachmentLabel}-${index}`}>
+                              <FileText size={15} aria-hidden="true" />
+                              <span>{attachmentLabel}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+
+                    {visibleReactions.length > 0 ? (
+                      <div className="parent-layout-page__my-save-reactions">
+                        {visibleReactions.map((reactionLabel) => (
+                          <span key={reactionLabel}>{reactionLabel}</span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  ) : null;
+
   const linkedDevicesModal = isLinkedDevicesModalOpen ? (
     <div className="parent-layout-page__modal-backdrop" role="presentation">
       <section
@@ -3726,6 +4189,15 @@ function Header({
         <button
           className="parent-header__account-button"
           type="button"
+          onClick={openMySavesModal}
+        >
+          <Save size={16} aria-hidden="true" />
+          <span>My Saves</span>
+        </button>
+
+        <button
+          className="parent-header__account-button"
+          type="button"
           onClick={openBlockManagementModal}
         >
           <Ban size={16} aria-hidden="true" />
@@ -3803,6 +4275,7 @@ function Header({
       {ghostManagementModal
         ? createPortal(ghostManagementModal, document.body)
         : null}
+      {mySavesModal ? createPortal(mySavesModal, document.body) : null}
       {linkedDevicesModal ? createPortal(linkedDevicesModal, document.body) : null}
       {defaultDevicePasswordModal
         ? createPortal(defaultDevicePasswordModal, document.body)

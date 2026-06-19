@@ -21,6 +21,7 @@
   Play,
   Pencil,
   Reply,
+  Save,
   Send,
   Shield,
   Trash2,
@@ -57,6 +58,7 @@ import {
   markGroupRoomRead,
   prewarmGroupReceiptVisibility,
   reactToGroupMessage,
+  saveGroupMessage,
   sendGroupMessage,
 } from "../api.js";
 import {
@@ -5858,6 +5860,70 @@ function GroupConversation({
     [currentUserId, isGroupDeleted, messagesById, selectedRoom?.id],
   );
 
+  const handleToggleMessageSaved = useCallback(
+    async (message) => {
+      const messageId = Number(message?.id);
+
+      if (
+        !messageId ||
+        messageId < 0 ||
+        !selectedRoom?.id ||
+        isGroupDeleted ||
+        message?.is_deleted ||
+        message?.deleted_at
+      ) {
+        if (isGroupDeleted) {
+          setRoomMessage("This group has been deleted. Messages are read-only.");
+        }
+        return;
+      }
+
+      const previousMessage = messagesById.get(messageId) || message;
+      const nextSaved = !Boolean(previousMessage.saved_by_me);
+
+      setActiveMessageActionsId(null);
+      setReactionPickerMessageId(null);
+      setRoomMessage("");
+      setRoomMessages((currentMessages) =>
+        currentMessages.map((currentMessage) =>
+          Number(currentMessage.id) === messageId
+            ? { ...currentMessage, saved_by_me: nextSaved }
+            : currentMessage,
+        ),
+      );
+
+      try {
+        const response = await saveGroupMessage(
+          selectedRoom.id,
+          messageId,
+          nextSaved,
+        );
+        const result = response.data?.result || response.data;
+        const serverSaved = Boolean(result?.saved);
+
+        setRoomMessages((currentMessages) =>
+          currentMessages.map((currentMessage) =>
+            Number(currentMessage.id) === messageId
+              ? { ...currentMessage, saved_by_me: serverSaved }
+              : currentMessage,
+          ),
+        );
+      } catch (error) {
+        setRoomMessages((currentMessages) =>
+          currentMessages.map((currentMessage) =>
+            Number(currentMessage.id) === messageId
+              ? previousMessage
+              : currentMessage,
+          ),
+        );
+        setRoomMessage(
+          getMessengerErrorMessage(error, "Unable to update saved message."),
+        );
+      }
+    },
+    [isGroupDeleted, messagesById, selectedRoom?.id],
+  );
+
   const handleFileInputChange = useCallback((event) => {
     const incomingFiles = Array.from(event.target.files || []);
 
@@ -7070,6 +7136,28 @@ function GroupConversation({
                             onSelect={handleSelectMessageReaction}
                           />
                         ) : null}
+                        <button
+                          type="button"
+                          className={`parent-layout-page__message-save-action${
+                            message.saved_by_me ? " is-saved" : ""
+                          }`}
+                          onClick={() => handleToggleMessageSaved(message)}
+                          disabled={isGroupDeleted}
+                          aria-label={
+                            message.saved_by_me
+                              ? "Remove from My Saves"
+                              : "Save message"
+                          }
+                          title={
+                            isGroupDeleted
+                              ? "Group deleted"
+                              : message.saved_by_me
+                              ? "Remove from My Saves"
+                              : "Save message"
+                          }
+                        >
+                          <Save size={15} aria-hidden="true" />
+                        </button>
                         <button
                           type="button"
                           className="parent-layout-page__message-reply-action"

@@ -187,6 +187,16 @@ export const getMessengerRoomMessages = (
   );
 };
 
+export const getMessengerSavedMessages = ({ limit } = {}) => {
+  const params = {};
+
+  if (limit !== undefined && limit !== "") {
+    params.limit = limit;
+  }
+
+  return messengerAxios.get("/saves/", { params });
+};
+
 export const createMessengerClientMessageId = () => {
   if (globalThis.crypto?.randomUUID) {
     return globalThis.crypto.randomUUID();
@@ -236,6 +246,11 @@ export const editMessengerMessage = (messageId, data) =>
 
 export const deleteMessengerMessage = (messageId) =>
   messengerAxios.post(`/messages/${encodeURIComponent(messageId)}/delete/`, {});
+
+export const saveMessengerMessage = (messageId, saved = true) =>
+  messengerAxios.post(`/messages/${encodeURIComponent(messageId)}/save/`, {
+    saved,
+  });
 
 export const registerMessengerCryptoDevice = (data) =>
   messengerAxios.post("/crypto/devices/", data);

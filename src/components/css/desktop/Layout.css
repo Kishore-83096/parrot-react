@@ -2820,6 +2820,7 @@
 .parent-layout-page__message-reply-action,
 .parent-layout-page__message-info-action,
 .parent-layout-page__message-edit-action,
+.parent-layout-page__message-save-action,
 .parent-layout-page__message-delete-action {
   width: 28px;
   height: 28px;
@@ -2845,10 +2846,18 @@
 .parent-layout-page__message-info-action:hover,
 .parent-layout-page__message-info-action:focus-visible,
 .parent-layout-page__message-edit-action:hover,
-.parent-layout-page__message-edit-action:focus-visible {
+.parent-layout-page__message-edit-action:focus-visible,
+.parent-layout-page__message-save-action:hover,
+.parent-layout-page__message-save-action:focus-visible {
   color: #ffffff;
   background: linear-gradient(135deg, var(--layout-blue), var(--layout-purple));
   transform: translateY(-1px);
+}
+
+.parent-layout-page__message-save-action.is-saved {
+  color: #ffffff;
+  border-color: rgba(245, 158, 11, 0.44);
+  background: linear-gradient(135deg, #f59e0b, #f97316);
 }
 
 .parent-layout-page__message-delete-action:hover,
@@ -2861,6 +2870,7 @@
 .parent-layout-page__message-reply-action svg,
 .parent-layout-page__message-info-action svg,
 .parent-layout-page__message-edit-action svg,
+.parent-layout-page__message-save-action svg,
 .parent-layout-page__message-delete-action svg {
   display: block;
   stroke-width: 2.6;

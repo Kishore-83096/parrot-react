@@ -121,6 +121,12 @@ export const deleteGroupMessage = (roomId, messageId) =>
     {},
   );
 
+export const saveGroupMessage = (roomId, messageId, saved = true) =>
+  messengerAxios.post(
+    `/groups/${encodeURIComponent(roomId)}/messages/${encodeURIComponent(messageId)}/save/`,
+    { saved },
+  );
+
 export const markGroupRoomDelivered = (roomId, data = {}) =>
   messengerAxios.post(
     `/groups/${encodeURIComponent(roomId)}/messages/delivered/`,

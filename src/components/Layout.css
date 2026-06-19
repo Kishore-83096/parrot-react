@@ -150,3 +150,209 @@
     transform: translateY(0);
   }
 }
+
+.parent-layout-page__my-saves-modal {
+  width: min(680px, calc(100vw - 28px));
+}
+
+.parent-layout-page__my-saves-icon {
+  color: #ffffff;
+  background: linear-gradient(135deg, #f59e0b, #f97316);
+}
+
+.parent-layout-page__my-saves {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.parent-layout-page__my-saves-list {
+  display: grid;
+  gap: 10px;
+  max-height: min(58vh, 520px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.parent-layout-page__my-save {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(124, 60, 255, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 251, 255, 0.9)),
+    rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(31, 41, 55, 0.08);
+}
+
+.parent-layout-page__my-save.is-group {
+  border-color: rgba(14, 165, 164, 0.22);
+}
+
+.parent-layout-page__my-save-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.parent-layout-page__my-save-header > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.parent-layout-page__my-save-header strong,
+.parent-layout-page__my-save-header span,
+.parent-layout-page__my-save-meta dd,
+.parent-layout-page__my-save-text,
+.parent-layout-page__my-save-attachments a,
+.parent-layout-page__my-save-attachments span {
+  overflow-wrap: anywhere;
+}
+
+.parent-layout-page__my-save-header strong {
+  color: var(--layout-text);
+  font-size: 14px;
+  line-height: 1.2;
+  font-weight: 850;
+}
+
+.parent-layout-page__my-save-header span {
+  color: var(--layout-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 720;
+}
+
+.parent-layout-page__my-save-remove {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 999px;
+  color: #b42318;
+  background: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+}
+
+.parent-layout-page__my-save-remove:hover,
+.parent-layout-page__my-save-remove:focus-visible {
+  color: #ffffff;
+  background: linear-gradient(135deg, #ef4444, #b42318);
+  outline: none;
+}
+
+.parent-layout-page__my-save-remove:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.parent-layout-page__my-save-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.parent-layout-page__my-save-meta div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.parent-layout-page__my-save-meta dt {
+  color: var(--layout-muted);
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.parent-layout-page__my-save-meta dd {
+  margin: 0;
+  color: var(--layout-text);
+  font-size: 12px;
+  line-height: 1.25;
+  font-weight: 760;
+}
+
+.parent-layout-page__my-save-text {
+  margin: 0;
+  color: var(--layout-text);
+  font-size: 13px;
+  line-height: 1.42;
+  font-weight: 650;
+  white-space: pre-wrap;
+}
+
+.parent-layout-page__my-save-text.is-muted {
+  color: var(--layout-muted);
+  font-style: italic;
+}
+
+.parent-layout-page__my-save-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.parent-layout-page__my-save-attachments a,
+.parent-layout-page__my-save-attachments span {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid rgba(63, 140, 255, 0.18);
+  border-radius: 8px;
+  color: var(--layout-blue);
+  background: rgba(239, 247, 255, 0.82);
+  font-size: 12px;
+  line-height: 1.15;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.parent-layout-page__my-save-attachments a:hover,
+.parent-layout-page__my-save-attachments a:focus-visible {
+  border-color: rgba(63, 140, 255, 0.42);
+  background: rgba(224, 241, 255, 0.96);
+  outline: none;
+}
+
+.parent-layout-page__my-save-attachments svg {
+  flex: 0 0 auto;
+}
+
+.parent-layout-page__my-save-reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.parent-layout-page__my-save-reactions span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--layout-text);
+  background: rgba(245, 158, 11, 0.12);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+@media (max-width: 560px) {
+  .parent-layout-page__my-save-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .parent-layout-page__my-saves-list {
+    max-height: min(62vh, 520px);
+  }
+}

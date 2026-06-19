@@ -553,6 +553,34 @@
   background: #050505;
 }
 
+:root[data-theme="dark"] .parent-layout-page__my-save,
+:root[data-theme="dark"] .parent-layout-page__my-save-attachments a,
+:root[data-theme="dark"] .parent-layout-page__my-save-attachments span {
+  border-color: var(--theme-control-border);
+  color: #ffffff;
+  background: #050505;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .parent-layout-page__my-save-header strong,
+:root[data-theme="dark"] .parent-layout-page__my-save-meta dd,
+:root[data-theme="dark"] .parent-layout-page__my-save-text {
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .parent-layout-page__my-save-header span,
+:root[data-theme="dark"] .parent-layout-page__my-save-meta dt,
+:root[data-theme="dark"] .parent-layout-page__my-save-text.is-muted {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+:root[data-theme="dark"] .parent-layout-page__my-save-attachments a:hover,
+:root[data-theme="dark"] .parent-layout-page__my-save-attachments a:focus-visible {
+  border-color: rgba(96, 165, 250, 0.48);
+  color: #dbeafe;
+  background: rgba(30, 64, 175, 0.36);
+}
+
 :root[data-theme="dark"] .parent-layout-page__block-management-summary span,
 :root[data-theme="dark"] .parent-layout-page__block-management-search,
 :root[data-theme="dark"] .parent-layout-page__block-management-search input,
