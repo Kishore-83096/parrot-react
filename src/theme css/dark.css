@@ -174,8 +174,6 @@
 
 :root[data-theme="dark"] .parrot-layout__room-body {
   background:
-    linear-gradient(rgba(168, 137, 255, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(168, 137, 255, 0.045) 1px, transparent 1px),
     radial-gradient(circle at 16% 22%, rgba(168, 137, 255, 0.09), transparent 32%),
     radial-gradient(circle at 88% 74%, rgba(114, 187, 255, 0.08), transparent 38%);
 }
@@ -601,6 +599,90 @@
 
 :root[data-theme="dark"] .parent-layout-page__block-management-switch.is-ghosted .parent-layout-page__block-toggle-switch {
   background: #2737c9;
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-content,
+:root[data-theme="dark"] .parent-layout-page__group-settings-modal,
+:root[data-theme="dark"] .parent-layout-page__group-picture-editor,
+:root[data-theme="dark"] .parent-layout-page__group-settings-add-toggle,
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-list,
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-row,
+:root[data-theme="dark"] .parent-layout-page__group-member-list,
+:root[data-theme="dark"] .parent-layout-page__group-member-option,
+:root[data-theme="dark"] .parent-layout-page__group-member-empty,
+:root[data-theme="dark"] .parent-layout-page__group-role-badge,
+:root[data-theme="dark"] .parent-layout-page__group-role-badge.is-admin,
+:root[data-theme="dark"] .parent-layout-page__group-role-badge.is-sub_admin,
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-actions button,
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-actions button.is-danger {
+  border-color: var(--theme-control-border);
+  color: #ffffff;
+  background: #050505;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-title-form label,
+:root[data-theme="dark"] .parent-layout-page__group-picture-copy strong,
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-row strong,
+:root[data-theme="dark"] .parent-layout-page__group-member-option strong {
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-picture-copy small,
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-row small,
+:root[data-theme="dark"] .parent-layout-page__group-member-option small,
+:root[data-theme="dark"] .parent-layout-page__group-member-empty {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-title-form input {
+  border-color: var(--theme-control-border);
+  color: #ffffff;
+  background: #050505;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-title-form input::placeholder {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-member-option:hover,
+:root[data-theme="dark"] .parent-layout-page__group-member-option:focus-visible,
+:root[data-theme="dark"] .parent-layout-page__group-member-option.is-selected,
+:root[data-theme="dark"] .parent-layout-page__group-member-option.is-selected:hover,
+:root[data-theme="dark"] .parent-layout-page__group-member-option.is-selected:focus-visible {
+  color: #ffffff;
+  background: #050505;
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-add-toggle[aria-expanded="true"] {
+  border-color: rgba(168, 137, 255, 0.38);
+  color: #ffffff;
+  background: #050505;
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-title-form button,
+:root[data-theme="dark"] .parent-layout-page__group-settings-picture,
+:root[data-theme="dark"] .parent-layout-page__group-settings-add-toggle,
+:root[data-theme="dark"] .parent-layout-page__group-settings-full-button,
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-actions button,
+:root[data-theme="dark"] .parent-layout-page__group-settings-danger .parent-layout-page__modal-submit,
+:root[data-theme="dark"] .parent-layout-page__group-settings-content .parent-layout-page__picture-action {
+  border: 1px solid rgba(168, 137, 255, 0.44);
+  color: #ffffff;
+  background: #050505;
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-title-form button,
+:root[data-theme="dark"] .parent-layout-page__group-settings-content .parent-layout-page__picture-action.is-primary {
+  border-color: rgba(74, 222, 128, 0.48);
+}
+
+:root[data-theme="dark"] .parent-layout-page__group-settings-member-actions button.is-danger,
+:root[data-theme="dark"] .parent-layout-page__group-settings-danger .parent-layout-page__modal-submit--secondary,
+:root[data-theme="dark"] .parent-layout-page__group-settings-danger .parent-layout-page__modal-submit--danger {
+  border-color: rgba(251, 113, 133, 0.52);
 }
 
 :root[data-theme="dark"] .parent-layout-page__message.is-theirs .parent-layout-page__message-bubble {

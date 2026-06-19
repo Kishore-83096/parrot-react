@@ -99,13 +99,9 @@
   display: grid;
   overflow: hidden;
   background:
-    linear-gradient(rgba(124, 60, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(124, 60, 255, 0.035) 1px, transparent 1px),
     radial-gradient(circle at 16% 22%, rgba(255, 255, 255, 0.54), transparent 32%),
     radial-gradient(circle at 88% 74%, rgba(255, 181, 230, 0.22), transparent 38%);
   background-size:
-    34px 34px,
-    34px 34px,
     auto,
     auto;
 }
