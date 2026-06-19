@@ -211,11 +211,11 @@
 
 :root[data-theme="dark"] .parent-layout-page__contact-card:hover,
 :root[data-theme="dark"] .parent-layout-page__contact-card:focus-visible {
-  background: rgba(168, 137, 255, 0.12);
+  background: transparent;
 }
 
 :root[data-theme="dark"] .parent-layout-page__contact-card.is-selected {
-  background: rgba(168, 137, 255, 0.14);
+  background: transparent;
 }
 
 :root[data-theme="dark"] .parent-header__logout {
@@ -398,18 +398,31 @@
 }
 
 :root[data-theme="dark"] .parent-layout-page__modal-form input,
+:root[data-theme="dark"] .parent-layout-page__contact-table input,
+:root[data-theme="dark"] .parent-layout-page__contact-fields input,
 :root[data-theme="dark"] .parent-layout-page__profile-field input,
 :root[data-theme="dark"] .parent-layout-page__profile-field select,
 :root[data-theme="dark"] .parent-layout-page__contact-share-picker input[type="search"],
+:root[data-theme="dark"] .parent-layout-page__group-avatar-input > span,
+:root[data-theme="dark"] .parent-layout-page__group-member-search,
+:root[data-theme="dark"] .parent-layout-page__group-member-search input,
+:root[data-theme="dark"] .parent-layout-page__group-member-list,
 :root[data-theme="dark"] .parent-layout-page__message-action-textarea,
 :root[data-theme="dark"] .parent-layout-page__message-action-compose-input,
 :root[data-theme="dark"] .parent-layout-page__group-title-form input,
 :root[data-theme="dark"] .parent-layout-page__story-media-text textarea,
 :root[data-theme="dark"] .parent-layout-page__story-contact-picker input[type="search"] {
   border-color: var(--theme-control-border);
-  color: var(--theme-text);
-  background: rgba(10, 9, 17, 0.72);
+  color: #ffffff;
+  background: #050505;
   box-shadow: none;
+}
+
+:root[data-theme="dark"] .parent-layout-page__modal-form input::placeholder,
+:root[data-theme="dark"] .parent-layout-page__contact-table input::placeholder,
+:root[data-theme="dark"] .parent-layout-page__contact-fields input::placeholder,
+:root[data-theme="dark"] .parent-layout-page__group-member-search input::placeholder {
+  color: rgba(255, 255, 255, 0.62);
 }
 
 :root[data-theme="dark"] .parent-layout-page__field-label,
@@ -488,6 +501,20 @@
   background: rgba(38, 34, 52, 0.92);
 }
 
+:root[data-theme="dark"] .parent-layout-page__conversation-menu-button {
+  border-color: var(--theme-control-border);
+  color: var(--theme-purple);
+  background: #050505;
+}
+
+:root[data-theme="dark"] .parent-layout-page__conversation-menu-button:hover,
+:root[data-theme="dark"] .parent-layout-page__conversation-menu-button:focus-visible,
+:root[data-theme="dark"] .parent-layout-page__conversation-menu-button[aria-expanded="true"] {
+  border-color: rgba(168, 137, 255, 0.38);
+  color: #ffffff;
+  background: linear-gradient(135deg, var(--layout-purple), var(--layout-purple-deep));
+}
+
 :root[data-theme="dark"] .parent-layout-page__modal-close,
 :root[data-theme="dark"] .parent-layout-page__story-modal-close,
 :root[data-theme="dark"] .parent-layout-page__conversation-close-button,
@@ -520,6 +547,60 @@
 :root[data-theme="dark"] .parent-layout-page__block-management-status.is-ghosted {
   color: #c7d2fe;
   background: rgba(49, 46, 129, 0.48);
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-modal {
+  border-color: var(--theme-border);
+  color: #ffffff;
+  background: #050505;
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-summary span,
+:root[data-theme="dark"] .parent-layout-page__block-management-search,
+:root[data-theme="dark"] .parent-layout-page__block-management-search input,
+:root[data-theme="dark"] .parent-layout-page__block-management-list,
+:root[data-theme="dark"] .parent-layout-page__block-management-empty,
+:root[data-theme="dark"] .parent-layout-page__block-management-row,
+:root[data-theme="dark"] .parent-layout-page__block-management-row.is-blocked,
+:root[data-theme="dark"] .parent-layout-page__block-management-row.is-ghosted,
+:root[data-theme="dark"] .parent-layout-page__block-management-status,
+:root[data-theme="dark"] .parent-layout-page__block-management-status.is-blocked,
+:root[data-theme="dark"] .parent-layout-page__block-management-status.is-ghosted {
+  border-color: var(--theme-control-border);
+  color: #ffffff;
+  background: #050505;
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-summary strong,
+:root[data-theme="dark"] .parent-layout-page__block-management .parent-layout-page__contact-text strong {
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-summary small,
+:root[data-theme="dark"] .parent-layout-page__block-management .parent-layout-page__contact-text small {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-search input::placeholder {
+  color: rgba(255, 255, 255, 0.62);
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-switch {
+  color: #ffffff;
+  background: transparent;
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-switch .parent-layout-page__block-toggle-switch {
+  background: #050505;
+  box-shadow: inset 0 0 0 1px var(--theme-control-border);
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-switch.is-blocked .parent-layout-page__block-toggle-switch {
+  background: #ef3d55;
+}
+
+:root[data-theme="dark"] .parent-layout-page__block-management-switch.is-ghosted .parent-layout-page__block-toggle-switch {
+  background: #2737c9;
 }
 
 :root[data-theme="dark"] .parent-layout-page__message.is-theirs .parent-layout-page__message-bubble {

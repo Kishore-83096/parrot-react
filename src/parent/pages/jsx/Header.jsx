@@ -16,7 +16,6 @@ import {
   Search,
   ShieldCheck,
   Trash2,
-  Unlock,
   UserRound,
   X,
 } from "@/components/icons";
@@ -508,8 +507,6 @@ function Header({
   const blockedContactsCount = blockManagementContacts.filter(
     (contact) => contact.blocked,
   ).length;
-  const unblockedContactsCount =
-    blockManagementContacts.length - blockedContactsCount;
   const ghostManagementQuery = ghostManagementSearch.trim().toLowerCase();
   const filteredGhostManagementContacts = useMemo(() => {
     const sourceContacts = Array.isArray(ghostManagementContacts)
@@ -530,8 +527,6 @@ function Header({
   const ghostedContactsCount = ghostManagementContacts.filter(
     (contact) => contact.ghosted,
   ).length;
-  const normalGhostContactsCount =
-    ghostManagementContacts.length - ghostedContactsCount;
 
   useEffect(() => {
     const nextContacts = Array.isArray(contacts) ? contacts : [];
@@ -2988,12 +2983,10 @@ function Header({
         <div className="parent-layout-page__block-management">
           <div className="parent-layout-page__block-management-summary">
             <span>
-              <strong>{blockedContactsCount}</strong>
-              <small>Blocked</small>
-            </span>
-            <span>
-              <strong>{unblockedContactsCount}</strong>
-              <small>Block</small>
+              <strong>
+                {blockedContactsCount}/{blockManagementContacts.length}
+              </strong>
+              <small>contacts are blocked</small>
             </span>
           </div>
 
@@ -3075,28 +3068,28 @@ function Header({
                     </span>
 
                     <button
-                      className={`parent-layout-page__block-management-action${
-                        isBlocked ? " is-unblock" : " is-block"
+                      className={`parent-layout-page__block-management-switch parent-layout-page__block-toggle${
+                        isBlocked ? " is-blocked" : " is-unblocked"
                       }`}
                       type="button"
+                      role="switch"
+                      aria-checked={isBlocked}
+                      aria-label={`${isBlocked ? "Unblock" : "Block"} ${getContactName(contact)}`}
+                      title={isBlocked ? "Blocked" : "Not blocked"}
                       onClick={() => handleToggleManagedContactBlock(contact)}
                       disabled={Boolean(blockActionAccountNumber)}
                       aria-busy={isUpdating}
                     >
                       {isUpdating ? (
                         <LoaderCircle className="app-button-spinner" aria-hidden="true" />
-                      ) : isBlocked ? (
-                        <Unlock size={15} aria-hidden="true" />
                       ) : (
-                        <Ban size={15} aria-hidden="true" />
+                        <span
+                          className="parent-layout-page__block-toggle-switch"
+                          aria-hidden="true"
+                        >
+                          <span />
+                        </span>
                       )}
-                      <span>
-                        {isUpdating
-                          ? "Updating"
-                          : isBlocked
-                          ? "Unblock"
-                          : "Block"}
-                      </span>
                     </button>
                   </div>
                 );
@@ -3142,12 +3135,10 @@ function Header({
         <div className="parent-layout-page__block-management">
           <div className="parent-layout-page__block-management-summary">
             <span>
-              <strong>{ghostedContactsCount}</strong>
-              <small>Ghosted</small>
-            </span>
-            <span>
-              <strong>{normalGhostContactsCount}</strong>
-              <small>Ghost</small>
+              <strong>
+                {ghostedContactsCount}/{ghostManagementContacts.length}
+              </strong>
+              <small>contacts are ghosted</small>
             </span>
           </div>
 
@@ -3230,28 +3221,28 @@ function Header({
                     </span>
 
                     <button
-                      className={`parent-layout-page__block-management-action${
-                        isGhosted ? " is-unblock" : " is-ghost"
+                      className={`parent-layout-page__block-management-switch parent-layout-page__block-toggle${
+                        isGhosted ? " is-ghosted" : " is-visible"
                       }`}
                       type="button"
+                      role="switch"
+                      aria-checked={isGhosted}
+                      aria-label={`${isGhosted ? "Remove ghosting for" : "Ghost"} ${getContactName(contact)}`}
+                      title={isGhosted ? "Ghosted" : "Not ghosted"}
                       onClick={() => handleToggleManagedContactGhost(contact)}
                       disabled={Boolean(ghostActionAccountNumber)}
                       aria-busy={isUpdating}
                     >
                       {isUpdating ? (
                         <LoaderCircle className="app-button-spinner" aria-hidden="true" />
-                      ) : isGhosted ? (
-                        <Eye size={15} aria-hidden="true" />
                       ) : (
-                        <EyeOff size={15} aria-hidden="true" />
+                        <span
+                          className="parent-layout-page__block-toggle-switch"
+                          aria-hidden="true"
+                        >
+                          <span />
+                        </span>
                       )}
-                      <span>
-                        {isUpdating
-                          ? "Updating"
-                          : isGhosted
-                          ? "Remove"
-                          : "Ghost"}
-                      </span>
                     </button>
                   </div>
                 );

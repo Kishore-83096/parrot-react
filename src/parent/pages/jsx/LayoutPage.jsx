@@ -646,8 +646,16 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
   };
 
   const toggleContactsPanel = () => {
-    if (activePanelTab === "contacts") {
+    const isContactsPanelVisible =
+      activePanelTab === "contacts" && !isAccountPanelOpen;
+
+    if (isContactsPanelVisible) {
       changePanelTab(previousNonContactPanelTabRef.current || "chats");
+      return;
+    }
+
+    if (activePanelTab === "contacts") {
+      setIsAccountPanelOpen(false);
       return;
     }
 
@@ -1845,7 +1853,9 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
             user={user}
             defaultDevicePromptVersion={defaultDevicePromptVersion}
             isAccountPanelActive={isAccountPanelOpen}
-            isContactsPanelActive={activePanelTab === "contacts"}
+            isContactsPanelActive={
+              activePanelTab === "contacts" && !isAccountPanelOpen
+            }
             onContactsChange={handleContactsChange}
             onContactUpdated={handleHeaderContactUpdated}
             onDefaultDeviceChanged={handleDefaultDeviceChanged}
