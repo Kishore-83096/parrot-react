@@ -109,6 +109,7 @@ function normalizeResult(response) {
 
 function GroupSettingsPanel({
   contacts,
+  isClosing = false,
   selectedRoom,
   user,
   onClose,
@@ -494,7 +495,9 @@ function GroupSettingsPanel({
 
   return (
     <section
-      className="parent-layout-page__conversation parent-layout-page__group-settings-tab"
+      className={`parent-layout-page__conversation parent-layout-page__group-settings-tab${
+        isClosing ? " is-closing" : ""
+      }`}
       aria-label="Group settings"
     >
       <div

@@ -198,14 +198,15 @@ function hasCachedCurrentLastMessage(cachedConversation, selectedRoom) {
   const cachedMessages = Array.isArray(cachedConversation?.messages)
     ? cachedConversation.messages
     : [];
-
-  if (cachedMessages.length === 0) {
-    return false;
-  }
+  const hasCachedPagination = Boolean(cachedConversation?.pagination);
 
   const lastMessageId = Number(selectedRoom?.last_message?.id || 0);
   if (!lastMessageId) {
-    return true;
+    return cachedMessages.length > 0 || hasCachedPagination;
+  }
+
+  if (cachedMessages.length === 0) {
+    return false;
   }
 
   return cachedMessages.some(
@@ -3524,7 +3525,10 @@ function MessageInfoModal({
             </button>
           </div>
         ) : null}
-        <div className="parent-layout-page__message-info-panel">
+        <div
+          key={safeActiveTab}
+          className="parent-layout-page__message-info-panel"
+        >
           {safeActiveTab === "reactions" ? (
             reactionRows.length > 0 ? (
               <div className="parent-layout-page__message-info-list">

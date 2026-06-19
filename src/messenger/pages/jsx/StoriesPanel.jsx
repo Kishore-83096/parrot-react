@@ -1904,190 +1904,197 @@ function StoryComposer({
           </button>
         </div>
 
-        {storyMode === "media" ? (
-          <>
-            <button
-              className="parent-layout-page__story-file-drop"
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*,video/*"
-                onChange={handleFilesChange}
-              />
-              <ImageIcon size={28} aria-hidden="true" />
-              <span>
-                {selectedFiles.length
-                  ? "Replace image or video"
-                  : "Choose image or video"}
-              </span>
-            </button>
-
-            {selectedFilePreviews.length > 0 ? (
-              <div
-                className="parent-layout-page__story-selected-media"
-                aria-label="Selected story media previews"
+        <div
+          key={storyMode}
+          className="parent-layout-page__story-mode-panel"
+          role="tabpanel"
+          aria-label={storyMode === "media" ? "Visual story" : "Text story"}
+        >
+          {storyMode === "media" ? (
+            <>
+              <button
+                className="parent-layout-page__story-file-drop"
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
               >
-                {selectedFilePreviews.map(({ file, url }, index) => (
-                  <figure
-                    key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-                  >
-                    <div className="parent-layout-page__story-selected-media-preview">
-                      {file.type.startsWith("video/") ? (
-                        <>
-                          <video
-                            ref={selectedVideoPreviewRef}
-                            src={url}
-                            autoPlay
-                            muted={isPreviewVideoMuted}
-                            onEnded={restartSelectedVideoPreview}
-                            onLoadedMetadata={handleSelectedVideoMetadata}
-                            onTimeUpdate={handleSelectedVideoTimeUpdate}
-                            playsInline
-                            preload="metadata"
-                          />
-                          <button
-                            className="parent-layout-page__story-video-mute"
-                            type="button"
-                            onClick={() =>
-                              setIsPreviewVideoMuted((isMuted) => !isMuted)
-                            }
-                            aria-label={
-                              isPreviewVideoMuted
-                                ? "Unmute video preview"
-                                : "Mute video preview"
-                            }
-                            title={
-                              isPreviewVideoMuted
-                                ? "Unmute video preview"
-                                : "Mute video preview"
-                            }
-                          >
-                            {isPreviewVideoMuted ? (
-                              <VolumeX size={17} aria-hidden="true" />
-                            ) : (
-                              <Volume2 size={17} aria-hidden="true" />
-                            )}
-                          </button>
-                        </>
-                      ) : (
-                        <img src={url} alt={`Preview of ${file.name}`} />
-                      )}
-                    </div>
-                    <figcaption>{file.name}</figcaption>
-                    {file.type.startsWith("video/") && videoTrim ? (
-                      <section
-                        className="parent-layout-page__story-video-trimmer"
-                        aria-label="Trim selected video"
-                      >
-                        <header>
-                          <span>
-                            <Scissors size={15} aria-hidden="true" />
-                            Trim video
-                          </span>
-                          <strong>
-                            {formatVideoTrimTime(
-                              videoTrim.endSeconds - videoTrim.startSeconds,
-                            )}
-                          </strong>
-                        </header>
-                        <div
-                          className="parent-layout-page__story-video-trim-timeline"
-                          style={{
-                            "--story-video-trim-end": `${
-                              (videoTrim.endSeconds / videoTrim.duration) * 100
-                            }%`,
-                            "--story-video-trim-start": `${
-                              (videoTrim.startSeconds / videoTrim.duration) * 100
-                            }%`,
-                          }}
-                        >
-                          <span className="is-start">
-                            {formatVideoTrimTime(videoTrim.startSeconds)}
-                          </span>
-                          <input
-                            className="is-start"
-                            type="range"
-                            min="0"
-                            max={videoTrim.duration}
-                            step="0.1"
-                            value={videoTrim.startSeconds}
-                            onChange={handleVideoTrimStartChange}
-                            aria-label="Video trim start time"
-                          />
-                          <input
-                            className="is-end"
-                            type="range"
-                            min="0"
-                            max={videoTrim.duration}
-                            step="0.1"
-                            value={videoTrim.endSeconds}
-                            onChange={handleVideoTrimEndChange}
-                            aria-label="Video trim end time"
-                          />
-                          <span className="is-end">
-                            {formatVideoTrimTime(videoTrim.endSeconds)}
-                          </span>
-                        </div>
-                      </section>
-                    ) : null}
-                  </figure>
-                ))}
-              </div>
-            ) : null}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,video/*"
+                  onChange={handleFilesChange}
+                />
+                <ImageIcon size={28} aria-hidden="true" />
+                <span>
+                  {selectedFiles.length
+                    ? "Replace image or video"
+                    : "Choose image or video"}
+                </span>
+              </button>
 
-            <label className="parent-layout-page__story-media-text">
-              <span>Story text</span>
+              {selectedFilePreviews.length > 0 ? (
+                <div
+                  className="parent-layout-page__story-selected-media"
+                  aria-label="Selected story media previews"
+                >
+                  {selectedFilePreviews.map(({ file, url }, index) => (
+                    <figure
+                      key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+                    >
+                      <div className="parent-layout-page__story-selected-media-preview">
+                        {file.type.startsWith("video/") ? (
+                          <>
+                            <video
+                              ref={selectedVideoPreviewRef}
+                              src={url}
+                              autoPlay
+                              muted={isPreviewVideoMuted}
+                              onEnded={restartSelectedVideoPreview}
+                              onLoadedMetadata={handleSelectedVideoMetadata}
+                              onTimeUpdate={handleSelectedVideoTimeUpdate}
+                              playsInline
+                              preload="metadata"
+                            />
+                            <button
+                              className="parent-layout-page__story-video-mute"
+                              type="button"
+                              onClick={() =>
+                                setIsPreviewVideoMuted((isMuted) => !isMuted)
+                              }
+                              aria-label={
+                                isPreviewVideoMuted
+                                  ? "Unmute video preview"
+                                  : "Mute video preview"
+                              }
+                              title={
+                                isPreviewVideoMuted
+                                  ? "Unmute video preview"
+                                  : "Mute video preview"
+                              }
+                            >
+                              {isPreviewVideoMuted ? (
+                                <VolumeX size={17} aria-hidden="true" />
+                              ) : (
+                                <Volume2 size={17} aria-hidden="true" />
+                              )}
+                            </button>
+                          </>
+                        ) : (
+                          <img src={url} alt={`Preview of ${file.name}`} />
+                        )}
+                      </div>
+                      <figcaption>{file.name}</figcaption>
+                      {file.type.startsWith("video/") && videoTrim ? (
+                        <section
+                          className="parent-layout-page__story-video-trimmer"
+                          aria-label="Trim selected video"
+                        >
+                          <header>
+                            <span>
+                              <Scissors size={15} aria-hidden="true" />
+                              Trim video
+                            </span>
+                            <strong>
+                              {formatVideoTrimTime(
+                                videoTrim.endSeconds - videoTrim.startSeconds,
+                              )}
+                            </strong>
+                          </header>
+                          <div
+                            className="parent-layout-page__story-video-trim-timeline"
+                            style={{
+                              "--story-video-trim-end": `${
+                                (videoTrim.endSeconds / videoTrim.duration) * 100
+                              }%`,
+                              "--story-video-trim-start": `${
+                                (videoTrim.startSeconds / videoTrim.duration) * 100
+                              }%`,
+                            }}
+                          >
+                            <span className="is-start">
+                              {formatVideoTrimTime(videoTrim.startSeconds)}
+                            </span>
+                            <input
+                              className="is-start"
+                              type="range"
+                              min="0"
+                              max={videoTrim.duration}
+                              step="0.1"
+                              value={videoTrim.startSeconds}
+                              onChange={handleVideoTrimStartChange}
+                              aria-label="Video trim start time"
+                            />
+                            <input
+                              className="is-end"
+                              type="range"
+                              min="0"
+                              max={videoTrim.duration}
+                              step="0.1"
+                              value={videoTrim.endSeconds}
+                              onChange={handleVideoTrimEndChange}
+                              aria-label="Video trim end time"
+                            />
+                            <span className="is-end">
+                              {formatVideoTrimTime(videoTrim.endSeconds)}
+                            </span>
+                          </div>
+                        </section>
+                      ) : null}
+                    </figure>
+                  ))}
+                </div>
+              ) : null}
+
+              <label className="parent-layout-page__story-media-text">
+                <span>Story text</span>
+                <textarea
+                  value={mediaStoryText}
+                  onChange={(event) =>
+                    setMediaStoryText(event.target.value.slice(0, TEXT_STORY_MAX_LENGTH))
+                  }
+                  placeholder="Write something about this story"
+                  maxLength={TEXT_STORY_MAX_LENGTH}
+                />
+                <small>
+                  {mediaStoryText.length}/{TEXT_STORY_MAX_LENGTH}
+                </small>
+              </label>
+            </>
+          ) : (
+            <section
+              className="parent-layout-page__story-text-composer"
+              style={{
+                "--story-text-background": activeTextTheme.background,
+                "--story-text-color": activeTextTheme.color,
+              }}
+            >
               <textarea
-                value={mediaStoryText}
-                onChange={(event) =>
-                  setMediaStoryText(event.target.value.slice(0, TEXT_STORY_MAX_LENGTH))
-                }
-                placeholder="Write something about this story"
+                value={textStoryText}
+                onChange={handleTextStoryChange}
+                placeholder="Write a story"
+                aria-label="Write story text"
                 maxLength={TEXT_STORY_MAX_LENGTH}
               />
-              <small>
-                {mediaStoryText.length}/{TEXT_STORY_MAX_LENGTH}
-              </small>
-            </label>
-          </>
-        ) : (
-          <section
-            className="parent-layout-page__story-text-composer"
-            style={{
-              "--story-text-background": activeTextTheme.background,
-              "--story-text-color": activeTextTheme.color,
-            }}
-          >
-            <textarea
-              value={textStoryText}
-              onChange={handleTextStoryChange}
-              placeholder="Write a story"
-              aria-label="Write story text"
-              maxLength={TEXT_STORY_MAX_LENGTH}
-            />
-            <div className="parent-layout-page__story-text-tools">
-              <div className="parent-layout-page__story-theme-swatches" aria-label="Story color">
-                {TEXT_STORY_THEMES.map((theme) => (
-                  <button
-                    className={textStoryTheme === theme.key ? "is-active" : ""}
-                    key={theme.key}
-                    type="button"
-                    onClick={() => setTextStoryTheme(theme.key)}
-                    style={{ "--story-theme-background": theme.background }}
-                    aria-label={theme.label}
-                    title={theme.label}
-                  />
-                ))}
+              <div className="parent-layout-page__story-text-tools">
+                <div className="parent-layout-page__story-theme-swatches" aria-label="Story color">
+                  {TEXT_STORY_THEMES.map((theme) => (
+                    <button
+                      className={textStoryTheme === theme.key ? "is-active" : ""}
+                      key={theme.key}
+                      type="button"
+                      onClick={() => setTextStoryTheme(theme.key)}
+                      style={{ "--story-theme-background": theme.background }}
+                      aria-label={theme.label}
+                      title={theme.label}
+                    />
+                  ))}
+                </div>
+                <span>
+                  {textStoryText.length}/{TEXT_STORY_MAX_LENGTH}
+                </span>
               </div>
-              <span>
-                {textStoryText.length}/{TEXT_STORY_MAX_LENGTH}
-              </span>
-            </div>
-          </section>
-        )}
+            </section>
+          )}
+        </div>
 
         {shouldShowInlineSettings ? (
           <StorySettingsFields

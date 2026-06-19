@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Layout from "../../../components/Layout.jsx";
 import ParrotToast from "../../../components/ParrotToast.jsx";
+import { useAnimatedPresence } from "../../../components/useAnimatedPresence.js";
 import {
   clearMessengerSession,
   getMessengerErrorMessage,
@@ -59,6 +60,7 @@ import {
 } from "../../../messenger/cache.js";
 
 const LOGGED_IN_HISTORY_KEY = "parrotLoggedInView";
+const GROUP_SETTINGS_ANIMATION_MS = 260;
 
 function getLoggedInHistoryView() {
   return window.history.state?.[LOGGED_IN_HISTORY_KEY] || null;
@@ -180,6 +182,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     () => initialMessengerUiCache.selectedRoom,
   );
   const [isGroupSettingsOpen, setIsGroupSettingsOpen] = useState(false);
+  const {
+    shouldRender: shouldRenderGroupSettings,
+    isExiting: isGroupSettingsClosing,
+  } = useAnimatedPresence(isGroupSettingsOpen, GROUP_SETTINGS_ANIMATION_MS);
   const [conversationCache, setConversationCache] = useState(
     () => initialMessengerUiCache.conversations,
   );
@@ -1750,40 +1756,49 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
     user,
   });
 
-  const contactPanelContent =
-    isAccountPanelOpen ? (
-      <div
-        className="parent-layout-page__account-panel-host"
-        ref={handleAccountPanelHost}
-      />
-    ) : activePanelTab === "stories" ? (
-      <StoriesListPanel
-        contacts={contacts}
-        controller={storiesController}
-        user={user}
-      />
-    ) : activePanelTab === "contacts" ? (
-      <ContactPanel
-        contacts={contacts}
-        selectedContact={selectedContact}
-        onContactsChange={handleContactsChange}
-        onGroupCreated={handleGroupCreated}
-        onSelectContact={handleSelectContact}
-      />
-    ) : (
-      <MessengerRoomList
-        contacts={contacts}
-        rooms={rooms}
-        selectedRoom={selectedRoom}
-        typingByRoomId={typingByRoomId}
-        user={user}
-        onlineUserIds={onlineUserIds}
-        e2eeRecoveryVersion={e2eeRecoveryVersion}
-        onContactsChange={handleContactsChange}
-        onRoomsChange={handleRoomsChange}
-        onSelectRoom={handleSelectRoom}
-      />
-    );
+  const contactPanelTransitionKey = isAccountPanelOpen
+    ? "account"
+    : activePanelTab;
+  const contactPanelContent = (
+    <div
+      key={contactPanelTransitionKey}
+      className="parent-layout-page__panel-transition"
+    >
+      {isAccountPanelOpen ? (
+        <div
+          className="parent-layout-page__account-panel-host"
+          ref={handleAccountPanelHost}
+        />
+      ) : activePanelTab === "stories" ? (
+        <StoriesListPanel
+          contacts={contacts}
+          controller={storiesController}
+          user={user}
+        />
+      ) : activePanelTab === "contacts" ? (
+        <ContactPanel
+          contacts={contacts}
+          selectedContact={selectedContact}
+          onContactsChange={handleContactsChange}
+          onGroupCreated={handleGroupCreated}
+          onSelectContact={handleSelectContact}
+        />
+      ) : (
+        <MessengerRoomList
+          contacts={contacts}
+          rooms={rooms}
+          selectedRoom={selectedRoom}
+          typingByRoomId={typingByRoomId}
+          user={user}
+          onlineUserIds={onlineUserIds}
+          e2eeRecoveryVersion={e2eeRecoveryVersion}
+          onContactsChange={handleContactsChange}
+          onRoomsChange={handleRoomsChange}
+          onSelectRoom={handleSelectRoom}
+        />
+      )}
+    </div>
+  );
 
   const contactTabs = (
     <nav className="parent-layout-page__tabs" aria-label="Contact panel tabs">
@@ -1847,7 +1862,7 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         roomHeader={
           selectedRoom?.is_group ? (
             <GroupRoomHeader
-              isSettingsOpen={isGroupSettingsOpen}
+              isSettingsOpen={isGroupSettingsOpen || shouldRenderGroupSettings}
               selectedRoom={selectedRoom}
               user={user}
               onCloseConversation={handleCloseConversation}
@@ -1873,9 +1888,10 @@ function LayoutPage({ user, onLogout, onUserUpdate }) {
         }
         room={
           selectedRoom?.is_group ? (
-            isGroupSettingsOpen ? (
+            shouldRenderGroupSettings ? (
               <GroupSettingsPanel
                 contacts={contacts}
+                isClosing={isGroupSettingsClosing}
                 selectedRoom={selectedRoom}
                 user={user}
                 onClose={handleOpenGroupMessages}

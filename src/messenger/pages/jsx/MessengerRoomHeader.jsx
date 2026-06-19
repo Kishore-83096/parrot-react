@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
+import { useAnimatedPresence } from "../../../components/useAnimatedPresence.js";
 import {
   markMessengerRoomRead,
   refreshMessengerPresenceVisibility,
@@ -41,6 +42,8 @@ import {
   getParentApiErrorMessage,
   getRoomPeer,
 } from "./roomHelpers.js";
+
+const CONTACT_MENU_ANIMATION_MS = 180;
 
 function MessengerRoomHeader({
   contacts,
@@ -67,6 +70,11 @@ function MessengerRoomHeader({
   const [editContactMessage, setEditContactMessage] = useState(null);
   const [actionMessage, setActionMessage] = useState("");
   const [isContactActionLoading, setIsContactActionLoading] = useState(false);
+  const {
+    shouldRender: shouldRenderConversationMenu,
+    isExiting: isConversationMenuClosing,
+  } = useAnimatedPresence(isConversationMenuOpen, CONTACT_MENU_ANIMATION_MS);
+  const conversationActionsRef = useRef(null);
   const peerProfileCacheRef = useRef(peerProfileCache || {});
 
   useEffect(() => {
@@ -117,6 +125,34 @@ function MessengerRoomHeader({
     setActionMessage("");
     setIsDeleteContactModalOpen(false);
   }, [selectedPeerAccountNumber, selectedRoom?.id]);
+
+  useEffect(() => {
+    if (!isConversationMenuOpen) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (conversationActionsRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setIsConversationMenuOpen(false);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setIsConversationMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isConversationMenuOpen]);
 
   useEffect(() => {
     if (!selectedPeerAccountNumber) {
@@ -342,14 +378,12 @@ function MessengerRoomHeader({
       );
 
       if (!shouldBlock) {
-        setIsConversationMenuOpen(false);
         return;
       }
     }
 
     setIsContactActionLoading(true);
     setActionMessage("");
-    setIsConversationMenuOpen(false);
 
     try {
       const payload = {
@@ -422,14 +456,12 @@ function MessengerRoomHeader({
       );
 
       if (!shouldGhost) {
-        setIsConversationMenuOpen(false);
         return;
       }
     }
 
     setIsContactActionLoading(true);
     setActionMessage("");
-    setIsConversationMenuOpen(false);
 
     try {
       const payload = {
@@ -714,7 +746,10 @@ function MessengerRoomHeader({
           ) : null}
         </div>
 
-        <div className="parent-layout-page__conversation-actions">
+        <div
+          className="parent-layout-page__conversation-actions"
+          ref={conversationActionsRef}
+        >
           {selectedConversationContact ? (
             <>
               <button
@@ -731,8 +766,12 @@ function MessengerRoomHeader({
                 <MoreVertical size={22} aria-hidden="true" />
               </button>
 
-              {isConversationMenuOpen ? (
-                <div className="parent-layout-page__conversation-menu">
+              {shouldRenderConversationMenu ? (
+                <div
+                  className={`parent-layout-page__conversation-menu${
+                    isConversationMenuClosing ? " is-closing" : ""
+                  }`}
+                >
                   <button type="button" onClick={openEditContactModal}>
                     <Pencil size={16} aria-hidden="true" />
                     <span>Edit Name</span>

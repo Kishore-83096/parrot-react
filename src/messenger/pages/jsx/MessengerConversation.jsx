@@ -168,6 +168,26 @@ function getEmptyMessagePagination() {
     nextBeforeMessageId: null,
   };
 }
+
+function hasCachedCurrentLastMessage(cachedConversation, selectedRoom) {
+  const cachedMessages = Array.isArray(cachedConversation?.messages)
+    ? cachedConversation.messages
+    : [];
+  const hasCachedPagination = Boolean(cachedConversation?.pagination);
+
+  const lastMessageId = Number(selectedRoom?.last_message?.id || 0);
+  if (!lastMessageId) {
+    return cachedMessages.length > 0 || hasCachedPagination;
+  }
+
+  if (cachedMessages.length === 0) {
+    return false;
+  }
+
+  return cachedMessages.some(
+    (message) => Number(message?.id || 0) === lastMessageId,
+  );
+}
 const TEXT_DOCUMENT_EXTENSIONS = new Set(["csv", "json", "md", "rtf", "txt"]);
 const OFFICE_DOCUMENT_EXTENSIONS = new Set([
   "doc",
@@ -3828,7 +3848,7 @@ function MessengerConversation({
     [markRoomReadForMessages, user],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sendTypingStopped();
     resetVoiceRecordingState();
     clearRemoteTypingUsers();
@@ -3868,10 +3888,14 @@ function MessengerConversation({
       ? cachedRoomConversation.messages
       : [];
     const cachedPagination = cachedRoomConversation?.pagination;
+    const canUseCachedConversation = hasCachedCurrentLastMessage(
+      cachedRoomConversation,
+      selectedRoom,
+    );
 
     setRoomMessagesCacheRoomId(selectedRoom.id);
 
-    if (cachedMessages.length > 0 || cachedPagination) {
+    if (canUseCachedConversation) {
       setRoomMessages(cachedMessages);
       setMessagePagination({
         hasMore: Boolean(cachedPagination?.hasMore),
@@ -3885,6 +3909,7 @@ function MessengerConversation({
       return;
     }
 
+    setRoomMessages([]);
     loadRoomMessages(selectedRoom.id);
   }, [
     clearRemoteTypingUsers,

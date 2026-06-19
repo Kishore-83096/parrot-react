@@ -20,6 +20,16 @@
   --theme-border: rgba(255, 255, 255, 0.14);
   --theme-control-bg: rgba(29, 25, 42, 0.88);
   --theme-control-border: rgba(255, 255, 255, 0.12);
+  --theme-message-outgoing-bg: linear-gradient(135deg, #121116 0%, #08080c 58%, #020203 100%);
+  --theme-message-incoming-bg:
+    linear-gradient(135deg, rgba(35, 33, 45, 0.72), rgba(10, 9, 15, 0.56)),
+    rgba(8, 8, 12, 0.5);
+  --theme-message-outgoing-border: rgba(255, 255, 255, 0.12);
+  --theme-message-incoming-border: rgba(255, 255, 255, 0.14);
+  --theme-message-outgoing-shadow: 0 16px 34px rgba(0, 0, 0, 0.42);
+  --theme-message-incoming-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 36px rgba(0, 0, 0, 0.3);
   --theme-page-bg: #08070d;
   --theme-page-background:
     radial-gradient(circle at 9% 9%, rgba(124, 77, 255, 0.3), transparent 31%),
@@ -146,6 +156,12 @@
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.38);
 }
 
+:root[data-theme="dark"] .parent-layout-page__account-panel-host > .parent-header__menu--panel {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
 :root[data-theme="dark"] .parrot-layout__contacts-header,
 :root[data-theme="dark"] .parrot-layout__contacts-footer,
 :root[data-theme="dark"] .parrot-layout__room-header {
@@ -170,12 +186,16 @@
 :root[data-theme="dark"] .parent-layout-page__create-group-button,
 :root[data-theme="dark"] .parent-layout-page__add-contact-button,
 :root[data-theme="dark"] .parent-layout-page__contacts-search,
-:root[data-theme="dark"] .parent-layout-page__contacts-list,
 :root[data-theme="dark"] .parent-layout-page__contacts-placeholder,
 :root[data-theme="dark"] .parent-layout-page__room-placeholder {
   border-color: var(--theme-control-border);
   color: var(--theme-text);
   background: var(--theme-control-bg);
+}
+
+:root[data-theme="dark"] .parent-layout-page__contacts-list {
+  border-color: transparent;
+  background: transparent;
 }
 
 :root[data-theme="dark"] .parent-header__id-row dd,
@@ -189,10 +209,80 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
+:root[data-theme="dark"] .parent-layout-page__contact-card:hover,
+:root[data-theme="dark"] .parent-layout-page__contact-card:focus-visible {
+  background: rgba(168, 137, 255, 0.12);
+}
+
+:root[data-theme="dark"] .parent-layout-page__contact-card.is-selected {
+  background: rgba(168, 137, 255, 0.14);
+}
+
 :root[data-theme="dark"] .parent-header__logout {
   border-color: rgba(251, 113, 133, 0.28);
   color: #fda4af;
   background: rgba(76, 29, 39, 0.68);
+}
+
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__profile-button,
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__account-button {
+  border-color: transparent;
+  color: var(--theme-text);
+  background: transparent;
+}
+
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__profile-button:hover,
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__profile-button:focus-visible,
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__account-button:hover,
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__account-button:focus-visible {
+  color: var(--theme-text);
+  background: rgba(168, 137, 255, 0.14);
+}
+
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__logout {
+  border-color: transparent;
+  color: #fda4af;
+  background: transparent;
+}
+
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__logout:hover:not(:disabled),
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__logout:focus-visible:not(:disabled),
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__logout:disabled,
+:root[data-theme="dark"] .parent-header__menu--panel .parent-header__logout.is-loading {
+  color: #fda4af;
+  background: rgba(251, 113, 133, 0.12);
+  border-color: transparent;
+}
+
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__profile-button:hover,
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__profile-button:focus-visible,
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__logout:hover:not(:disabled),
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__logout:focus-visible:not(:disabled),
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__id-card-theme:hover,
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__id-card-theme:focus-visible {
+  background: transparent;
+  transform: scale(1.025);
+}
+
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__profile-button,
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__id-card-theme {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__profile-button:hover,
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__profile-button:focus-visible,
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__id-card-theme:hover,
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__id-card-theme:focus-visible {
+  border-color: rgba(168, 137, 255, 0.36);
+}
+
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__logout {
+  border-color: rgba(251, 113, 133, 0.22);
+}
+
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__logout:hover:not(:disabled),
+:root[data-theme="dark"] .parent-header__id-card-actions .parent-header__logout:focus-visible:not(:disabled) {
+  border-color: rgba(251, 113, 133, 0.38);
 }
 
 :root[data-theme="dark"] .parrot-toast {
@@ -364,8 +454,8 @@
 }
 
 :root[data-theme="dark"] .parent-layout-page__message-read-status.is-read {
-  color: #86efac;
-  background: rgba(20, 83, 45, 0.56);
+  color: #db2777;
+  background: rgba(219, 39, 119, 0.18);
 }
 
 :root[data-theme="dark"] .parent-layout-page__message-read-status.is-delivered {
@@ -433,9 +523,27 @@
 }
 
 :root[data-theme="dark"] .parent-layout-page__message.is-theirs .parent-layout-page__message-bubble {
-  border-color: var(--theme-border);
+  border-color: var(--theme-message-incoming-border);
   color: var(--theme-text);
-  background: rgba(31, 28, 43, 0.94);
+  background: var(--theme-message-incoming-bg);
+  box-shadow: var(--theme-message-incoming-shadow);
+  -webkit-backdrop-filter: blur(18px) saturate(1.12);
+  backdrop-filter: blur(18px) saturate(1.12);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__message-bubble {
+  border-color: var(--theme-message-outgoing-border);
+  color: #ffffff;
+  background: var(--theme-message-outgoing-bg);
+  box-shadow: var(--theme-message-outgoing-shadow);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message.is-theirs .parent-layout-page__message-bubble footer {
+  color: var(--theme-muted);
+}
+
+:root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__message-bubble footer {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 :root[data-theme="dark"] .parent-layout-page__shared-contact-card {
@@ -582,7 +690,7 @@
 }
 
 :root[data-theme="dark"] .parent-layout-page__chat-message-status.is-read {
-  color: var(--theme-purple);
+  color: #db2777;
 }
 
 :root[data-theme="dark"] .parent-layout-page__tabs button:hover .parent-layout-page__story-tab-icon-orbit,
@@ -742,45 +850,46 @@
 
 :root[data-theme="dark"] .parent-layout-page__message-reply-preview,
 :root[data-theme="dark"] .parent-layout-page__message-reply-composer {
-  border-left-color: var(--theme-purple);
+  border-left-color: rgba(255, 255, 255, 0.42);
   color: var(--theme-text);
-  background:
-    linear-gradient(135deg, rgba(24, 21, 35, 0.96), rgba(10, 9, 17, 0.92)),
-    rgba(10, 9, 17, 0.92);
+  background: var(--theme-message-incoming-bg);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  backdrop-filter: blur(14px) saturate(1.08);
 }
 
 :root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__message-reply-preview {
-  border-left-color: rgba(255, 255, 255, 0.82);
+  border-left-color: rgba(255, 255, 255, 0.5);
   color: #ffffff;
-  background: rgba(7, 6, 12, 0.36);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme="dark"] .parent-layout-page__message-reply-preview.is-replying-to-mine,
 :root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__message-reply-preview.is-replying-to-mine,
 :root[data-theme="dark"] .parent-layout-page__message-reply-composer.is-replying-to-mine {
-  border-left-color: rgba(255, 255, 255, 0.88);
+  border-left-color: #db2777;
   color: #ffffff;
-  background:
-    linear-gradient(135deg, rgba(88, 80, 180, 0.96), rgba(64, 49, 132, 0.96)),
-    rgba(64, 49, 132, 0.96);
+  background: var(--theme-message-outgoing-bg);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 :root[data-theme="dark"] .parent-layout-page__message-reply-preview.is-replying-to-theirs,
 :root[data-theme="dark"] .parent-layout-page__message.is-mine .parent-layout-page__message-reply-preview.is-replying-to-theirs,
 :root[data-theme="dark"] .parent-layout-page__message-reply-composer.is-replying-to-theirs {
-  border-left-color: var(--theme-blue);
+  border-left-color: rgba(219, 39, 119, 0.64);
   color: var(--theme-text);
-  background:
-    linear-gradient(135deg, rgba(12, 18, 32, 0.96), rgba(10, 9, 17, 0.92)),
-    rgba(10, 9, 17, 0.92);
+  background: var(--theme-message-incoming-bg);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  backdrop-filter: blur(14px) saturate(1.08);
 }
 
 :root[data-theme="dark"] .parent-layout-page__message-bubble .parent-layout-page__message-reply-preview span,
 :root[data-theme="dark"] .parent-layout-page__message-reply-composer span,
 :root[data-theme="dark"] .parent-layout-page__message-reply-composer.is-replying-to-theirs span {
-  color: var(--theme-blue);
+  color: #f9a8d4;
 }
 
 :root[data-theme="dark"] .parent-layout-page__message-bubble .parent-layout-page__message-reply-preview p,

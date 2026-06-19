@@ -9,9 +9,10 @@ import {
   UserRound,
   X,
 } from "@/components/icons";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import SmartAvatar from "../../../components/SmartAvatar.jsx";
+import { useAnimatedPresence } from "../../../components/useAnimatedPresence.js";
 import {
   buildSharedContactSaveAlias,
   findSavedSharedContact,
@@ -23,6 +24,8 @@ import {
   getContactInitials,
   getContactName,
 } from "../../../parent/pages/jsx/contactHelpers.js";
+
+const COMPOSER_MENU_ANIMATION_MS = 180;
 
 function getSharedContactInitials(contact) {
   return getContactInitials({
@@ -49,6 +52,14 @@ export function ComposerAddMenu({
   const [selectedAccountNumbers, setSelectedAccountNumbers] = useState(() => new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const menuRef = useRef(null);
+  const {
+    shouldRender: shouldRenderMenu,
+    isExiting: isMenuClosing,
+  } = useAnimatedPresence(isMenuOpen, COMPOSER_MENU_ANIMATION_MS);
+  const {
+    shouldRender: shouldRenderContactPicker,
+    isExiting: isContactPickerClosing,
+  } = useAnimatedPresence(isContactPickerOpen, COMPOSER_MENU_ANIMATION_MS);
   const safeContacts = useMemo(
     () => (Array.isArray(contacts) ? [...contacts].sort(sortContactsByName) : []),
     [contacts],
@@ -75,6 +86,11 @@ export function ComposerAddMenu({
     [safeContacts, selectedAccountNumbers],
   );
 
+  const closeComposerAdd = useCallback(() => {
+    setIsMenuOpen(false);
+    setIsContactPickerOpen(false);
+  }, []);
+
   useEffect(() => {
     if (!isMenuOpen && !isContactPickerOpen) {
       return undefined;
@@ -85,8 +101,7 @@ export function ComposerAddMenu({
         return;
       }
 
-      setIsMenuOpen(false);
-      setIsContactPickerOpen(false);
+      closeComposerAdd();
     };
 
     const handleKeyDown = (event) => {
@@ -94,8 +109,7 @@ export function ComposerAddMenu({
         return;
       }
 
-      setIsMenuOpen(false);
-      setIsContactPickerOpen(false);
+      closeComposerAdd();
     };
 
     document.addEventListener("pointerdown", handlePointerDown);
@@ -105,7 +119,16 @@ export function ComposerAddMenu({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isContactPickerOpen, isMenuOpen]);
+  }, [closeComposerAdd, isContactPickerOpen, isMenuOpen]);
+
+  const toggleComposerAdd = () => {
+    if (isMenuOpen || isContactPickerOpen) {
+      closeComposerAdd();
+      return;
+    }
+
+    setIsMenuOpen(true);
+  };
 
   const toggleContact = (accountNumber) => {
     const normalizedAccountNumber = String(accountNumber || "");
@@ -142,8 +165,7 @@ export function ComposerAddMenu({
 
     setSelectedAccountNumbers(new Set());
     setSearchTerm("");
-    setIsContactPickerOpen(false);
-    setIsMenuOpen(false);
+    closeComposerAdd();
   };
 
   return (
@@ -153,7 +175,7 @@ export function ComposerAddMenu({
         className={`parent-layout-page__message-attach parent-layout-page__composer-add-button${
           isMenuOpen || isContactPickerOpen ? " is-active" : ""
         }`}
-        onClick={() => setIsMenuOpen((currentValue) => !currentValue)}
+        onClick={toggleComposerAdd}
         disabled={disabled}
         aria-expanded={isMenuOpen || isContactPickerOpen}
         aria-label="Add to message"
@@ -162,8 +184,13 @@ export function ComposerAddMenu({
         <Plus size={19} aria-hidden="true" />
       </button>
 
-      {isMenuOpen ? (
-        <div className="parent-layout-page__composer-menu" role="menu">
+      {shouldRenderMenu ? (
+        <div
+          className={`parent-layout-page__composer-menu${
+            isMenuClosing ? " is-closing" : ""
+          }`}
+          role="menu"
+        >
           <button
             type="button"
             role="menuitem"
@@ -189,9 +216,11 @@ export function ComposerAddMenu({
         </div>
       ) : null}
 
-      {isContactPickerOpen ? (
+      {shouldRenderContactPicker ? (
         <div
-          className="parent-layout-page__contact-share-picker"
+          className={`parent-layout-page__contact-share-picker${
+            isContactPickerClosing ? " is-closing" : ""
+          }`}
           role="dialog"
           aria-label="Share saved contacts"
         >

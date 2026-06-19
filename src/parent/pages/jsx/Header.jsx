@@ -3655,29 +3655,7 @@ function Header({
   const accountPanel = isAccountPanelActive ? (
     <div className="parent-header__menu parent-header__menu--panel">
       <section className="parent-header__id-card" aria-label="Account identity">
-        <div className="parent-header__id-card-header">
-          <span>Account number</span>
-          <strong>{accountNumber}</strong>
-        </div>
-        <div className="parent-header__id-card-main">
-          <div className="parent-header__id-card-copy">
-            <dl className="parent-header__id-details">
-              {savedProfileName ? (
-                <div className="parent-header__id-row parent-header__id-row--name">
-                  <dt>Name</dt>
-                  <dd>{savedProfileName}</dd>
-                </div>
-              ) : null}
-              <div className="parent-header__id-row">
-                <dt>Username</dt>
-                <dd>@{username}</dd>
-              </div>
-              <div className="parent-header__id-row">
-                <dt>Email</dt>
-                <dd>{email}</dd>
-              </div>
-            </dl>
-          </div>
+        <div className="parent-header__id-card-top">
           <div className="parent-header__id-card-media">
             <SmartAvatar
               className="parent-header__avatar parent-header__avatar--id-card"
@@ -3687,45 +3665,64 @@ function Header({
               username={username}
               fallback="P"
             />
-            <div className="parent-header__id-card-actions">
+          </div>
+          <div className="parent-header__id-card-actions">
+            <ThemeToggleButton
+              className="parent-header__id-card-theme"
+              iconMode="current"
+              size={14}
+            />
+            <button
+              className="parent-header__profile-button parent-header__profile-button--id-card"
+              type="button"
+              onClick={openProfileModal}
+            >
+              <UserRound size={13} aria-hidden="true" />
+              <span>Profile</span>
+            </button>
+            {onLogout ? (
               <button
-                className="parent-header__profile-button parent-header__profile-button--id-card"
+                className={`parent-header__logout parent-header__logout--id-card${
+                  isLogoutPending ? " is-loading" : ""
+                }`}
                 type="button"
-                onClick={openProfileModal}
+                onClick={handleHeaderLogout}
+                disabled={isLogoutPending}
+                aria-busy={isLogoutPending}
               >
-                <UserRound size={13} aria-hidden="true" />
-                <span>Profile</span>
+                {isLogoutPending ? (
+                  <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+                ) : (
+                  <LogOut size={13} aria-hidden="true" />
+                )}
+                <span>{isLogoutPending ? "Logging out" : "Logout"}</span>
               </button>
-              {onLogout ? (
-                <button
-                  className={`parent-header__logout parent-header__logout--id-card${
-                    isLogoutPending ? " is-loading" : ""
-                  }`}
-                  type="button"
-                  onClick={handleHeaderLogout}
-                  disabled={isLogoutPending}
-                  aria-busy={isLogoutPending}
-                >
-                  {isLogoutPending ? (
-                    <LoaderCircle className="app-button-spinner" aria-hidden="true" />
-                  ) : (
-                    <LogOut size={13} aria-hidden="true" />
-                  )}
-                  <span>{isLogoutPending ? "Logging out" : "Logout"}</span>
-                </button>
-              ) : null}
-            </div>
+            ) : null}
           </div>
         </div>
+        <dl className="parent-header__id-details">
+          <div className="parent-header__id-row">
+            <dt>Account number</dt>
+            <dd>{accountNumber}</dd>
+          </div>
+          {savedProfileName ? (
+            <div className="parent-header__id-row parent-header__id-row--name">
+              <dt>Name</dt>
+              <dd>{savedProfileName}</dd>
+            </div>
+          ) : null}
+          <div className="parent-header__id-row">
+            <dt>Username</dt>
+            <dd>@{username}</dd>
+          </div>
+          <div className="parent-header__id-row">
+            <dt>Email</dt>
+            <dd>{email}</dd>
+          </div>
+        </dl>
       </section>
 
-      <div className="parent-header__menu-actions">
-        <ThemeToggleButton
-          className="parent-header__account-button parent-header__account-theme"
-          showLabel
-          size={16}
-        />
-
+      <div className="parent-header__menu-actions" aria-label="Account settings">
         <button
           className="parent-header__account-button"
           type="button"

@@ -4,12 +4,24 @@ import { useTheme } from "./themeManager.jsx";
 
 function ThemeToggleButton({
   className = "",
+  iconMode = "target",
   showLabel = false,
   size = 18,
 }) {
   const { isDarkTheme, toggleTheme } = useTheme();
-  const Icon = isDarkTheme ? Sun : Moon;
-  const label = isDarkTheme ? "Switch to light theme" : "Switch to dark theme";
+  const Icon =
+    iconMode === "current"
+      ? isDarkTheme
+        ? Moon
+        : Sun
+      : isDarkTheme
+        ? Sun
+        : Moon;
+  const actionLabel = isDarkTheme ? "Switch to light theme" : "Switch to dark theme";
+  const label =
+    iconMode === "current"
+      ? `${isDarkTheme ? "Dark theme" : "Light theme"}. ${actionLabel}`
+      : actionLabel;
 
   return (
     <button
