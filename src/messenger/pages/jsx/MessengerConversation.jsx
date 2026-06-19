@@ -61,6 +61,7 @@ import {
   MessageLinkPreview,
   MessageTextWithLinks,
 } from "../../messageLinks.jsx";
+import { isRealMobileDevice } from "../../mobileDevice.js";
 import {
   decryptEncryptedAttachmentBlob,
   encryptSelectedFilesForMessage,
@@ -2988,7 +2989,9 @@ function MessageActionModal({
                       placeholder="Message"
                       rows={1}
                       maxLength={5000}
-                      autoFocus={currentAttachments.length === 0}
+                      autoFocus={
+                        !isRealMobileDevice() && currentAttachments.length === 0
+                      }
                     />
                   </>
                 ) : null}
@@ -3138,7 +3141,7 @@ function MessengerConversation({
   const focusMessageDraft = useCallback(() => {
     const textarea = messageDraftRef.current;
 
-    if (!textarea || isAttachmentViewerOpen) {
+    if (!textarea || isAttachmentViewerOpen || isRealMobileDevice()) {
       return;
     }
 

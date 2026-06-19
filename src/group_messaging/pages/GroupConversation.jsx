@@ -71,6 +71,7 @@ import {
   MessageLinkPreview,
   MessageTextWithLinks,
 } from "../../messenger/messageLinks.jsx";
+import { isRealMobileDevice } from "../../messenger/mobileDevice.js";
 import {
   decryptEncryptedAttachmentBlob,
   encryptSelectedFilesForGroupMessage,
@@ -3359,7 +3360,9 @@ function MessageActionModal({
                       placeholder="Message"
                       rows={1}
                       maxLength={5000}
-                      autoFocus={currentAttachments.length === 0}
+                      autoFocus={
+                        !isRealMobileDevice() && currentAttachments.length === 0
+                      }
                     />
                   </>
                 ) : null}
@@ -3730,7 +3733,7 @@ function GroupConversation({
   const focusMessageDraft = useCallback(() => {
     const textarea = messageDraftRef.current;
 
-    if (!textarea || isAttachmentViewerOpen) {
+    if (!textarea || isAttachmentViewerOpen || isRealMobileDevice()) {
       return;
     }
 
