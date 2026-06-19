@@ -2,15 +2,21 @@ import {
   AlertCircle,
   Ban,
   Camera,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
+  Download,
   ExternalLink,
+  File as FileIcon,
   FileText,
   Eye,
   EyeOff,
+  Image as ImageIcon,
   KeyRound,
   LoaderCircle,
   LogOut,
   Menu,
+  MoreVertical,
   ParrotIcon,
   Pencil,
   Plus,
@@ -49,6 +55,14 @@ import {
   decryptMessageForUser,
   getRenderableMessageText as getDirectRenderableMessageText,
 } from "../../../messenger/e2ee/messages.js";
+import {
+  decryptEncryptedAttachmentBlob,
+  isEncryptedAttachment as isMessengerEncryptedAttachment,
+} from "../../../messenger/e2ee/files.js";
+import {
+  decryptEncryptedAttachmentBlob as decryptGroupEncryptedAttachmentBlob,
+  isEncryptedAttachment as isGroupEncryptedAttachment,
+} from "../../../group_messaging/e2ee/files.js";
 import {
   clearStoredRecoveryKey,
   getStoredRecoveryKey,
@@ -229,31 +243,530 @@ function formatSavedDateTime(value) {
   }).format(date);
 }
 
-function getSavedMessageAttachments(message) {
-  if (
+function getSavedMessageAttachments(message, messageKind = "direct") {
+  const attachments =
     Array.isArray(message?.decrypted_attachments) &&
     message.decrypted_attachments.length > 0
-  ) {
-    return message.decrypted_attachments;
-  }
+      ? message.decrypted_attachments
+      : Array.isArray(message?.attachments)
+        ? message.attachments
+        : [];
 
-  return Array.isArray(message?.attachments) ? message.attachments : [];
+  return attachments.map((attachment) => ({
+    ...attachment,
+    saved_message_kind:
+      attachment?.saved_message_kind ||
+      (attachment?.type === "e2ee.group_file" ? "group" : messageKind),
+  }));
 }
 
-function getSavedAttachmentUrl(attachment) {
-  return (
-    attachment?.file_url ||
-    attachment?.encrypted_file_url ||
-    attachment?.thumbnail_url ||
-    ""
-  );
+function getSavedAttachmentMessageKind(attachment) {
+  if (
+    attachment?.saved_message_kind === "group" ||
+    attachment?.message_kind === "group" ||
+    attachment?.room_type === "group" ||
+    attachment?.type === "e2ee.group_file"
+  ) {
+    return "group";
+  }
+
+  return "direct";
+}
+
+function isSavedEncryptedAttachment(attachment) {
+  return getSavedAttachmentMessageKind(attachment) === "group"
+    ? isGroupEncryptedAttachment(attachment)
+    : isMessengerEncryptedAttachment(attachment);
 }
 
 function getSavedAttachmentLabel(attachment, index) {
   return (
     attachment?.file_name ||
     attachment?.original_file_name ||
+    attachment?.name ||
     `${attachment?.file_type || "Attachment"} ${index + 1}`
+  );
+}
+
+function getSavedAttachmentKey(attachment, index = 0) {
+  return String(
+    attachment?.id ||
+      attachment?.upload_intent_id ||
+      attachment?.file_url ||
+      attachment?.encrypted_file_url ||
+      attachment?.thumbnail_url ||
+      attachment?.preview_url ||
+      attachment?.url ||
+      attachment?.secure_url ||
+      `${attachment?.file_name || "attachment"}-${index}`,
+  );
+}
+
+function getSavedAttachmentSourceUrl(attachment) {
+  return (
+    attachment?.file_url ||
+    attachment?.url ||
+    attachment?.secure_url ||
+    attachment?.download_url ||
+    attachment?.encrypted_file_url ||
+    attachment?.thumbnail_url ||
+    attachment?.preview_url ||
+    attachment?.local_preview_url ||
+    ""
+  );
+}
+
+function getSavedAttachmentPreviewUrl(attachment) {
+  if (!attachment) {
+    return "";
+  }
+
+  if (isSavedEncryptedAttachment(attachment)) {
+    return "";
+  }
+
+  return (
+    attachment.local_preview_url ||
+    attachment.thumbnail_url ||
+    attachment.preview_url ||
+    attachment.file_url ||
+    attachment.url ||
+    attachment.secure_url ||
+    attachment.download_url ||
+    ""
+  );
+}
+
+function getSavedAttachmentMimeType(attachment) {
+  return String(
+    attachment?.mime_type ||
+      attachment?.content_type ||
+      attachment?.type ||
+      "",
+  ).toLowerCase();
+}
+
+function getSavedAttachmentFileName(attachment) {
+  return String(
+    attachment?.file_name ||
+      attachment?.original_file_name ||
+      attachment?.name ||
+      "",
+  ).toLowerCase();
+}
+
+function isSavedPdfAttachment(attachment) {
+  const mimeType = getSavedAttachmentMimeType(attachment);
+  const fileName = getSavedAttachmentFileName(attachment);
+
+  return mimeType === "application/pdf" || fileName.endsWith(".pdf");
+}
+
+function getSavedAttachmentKind(attachment) {
+  const fileType = String(attachment?.file_type || "").toLowerCase();
+  const mimeType = getSavedAttachmentMimeType(attachment);
+  const fileName = getSavedAttachmentFileName(attachment);
+
+  if (
+    fileType === "image" ||
+    mimeType.startsWith("image/") ||
+    /\.(avif|bmp|gif|heic|heif|jpe?g|png|svg|webp)$/i.test(fileName)
+  ) {
+    return "image";
+  }
+
+  if (isSavedPdfAttachment(attachment)) {
+    return "pdf";
+  }
+
+  if (
+    fileType === "video" ||
+    mimeType.startsWith("video/") ||
+    /\.(m4v|mov|mp4|mpeg|mpg|ogv|webm)$/i.test(fileName)
+  ) {
+    return "video";
+  }
+
+  if (
+    fileType === "audio" ||
+    mimeType.startsWith("audio/") ||
+    /\.(aac|flac|m4a|mp3|oga|ogg|opus|wav|weba)$/i.test(fileName)
+  ) {
+    return "audio";
+  }
+
+  return "file";
+}
+
+function getSavedAttachmentKindLabel(kind) {
+  const labels = {
+    image: "Image",
+    pdf: "PDF",
+    video: "Video",
+    audio: "Audio",
+    file: "File",
+  };
+
+  return labels[kind] || labels.file;
+}
+
+function getSavedAttachmentIcon(kind, size = 24) {
+  if (kind === "image") {
+    return <ImageIcon size={size} aria-hidden="true" />;
+  }
+
+  if (kind === "file") {
+    return <FileIcon size={size} aria-hidden="true" />;
+  }
+
+  return <FileText size={size} aria-hidden="true" />;
+}
+
+function getSavedAttachmentDownloadName(attachment, index = 0) {
+  return (
+    attachment?.file_name ||
+    attachment?.original_file_name ||
+    attachment?.name ||
+    `saved-attachment-${index + 1}`
+  );
+}
+
+async function createSavedAttachmentObjectUrl(attachment) {
+  if (isSavedEncryptedAttachment(attachment)) {
+    const blob =
+      getSavedAttachmentMessageKind(attachment) === "group"
+        ? await decryptGroupEncryptedAttachmentBlob(attachment)
+        : await decryptEncryptedAttachmentBlob(attachment);
+    return {
+      url: URL.createObjectURL(blob),
+      revoke: true,
+    };
+  }
+
+  return {
+    url: getSavedAttachmentSourceUrl(attachment),
+    revoke: false,
+  };
+}
+
+function useSavedAttachmentPreviewUrl(attachment, enabled = true) {
+  const attachmentKey = getSavedAttachmentKey(attachment);
+  const [previewState, setPreviewState] = useState({
+    status: "idle",
+    url: "",
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    let objectUrl = "";
+
+    if (!attachment || !enabled) {
+      setPreviewState({ status: "idle", url: "" });
+      return undefined;
+    }
+
+    const sourceUrl = getSavedAttachmentSourceUrl(attachment);
+    const previewUrl = getSavedAttachmentPreviewUrl(attachment);
+    if (!sourceUrl) {
+      setPreviewState({ status: "empty", url: "" });
+      return undefined;
+    }
+
+    if (!isSavedEncryptedAttachment(attachment)) {
+      setPreviewState({
+        status: "ready",
+        url: previewUrl || sourceUrl,
+      });
+      return undefined;
+    }
+
+    setPreviewState({ status: "loading", url: "" });
+    createSavedAttachmentObjectUrl(attachment)
+      .then((result) => {
+        objectUrl = result.revoke ? result.url : "";
+        if (isMounted) {
+          setPreviewState({ status: "ready", url: result.url });
+        } else if (result.revoke) {
+          URL.revokeObjectURL(result.url);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setPreviewState({ status: "error", url: "" });
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [attachment, attachmentKey, enabled]);
+
+  return previewState;
+}
+
+function SavedAttachmentTile({ attachment, index, overflowCount, onOpen }) {
+  const kind = getSavedAttachmentKind(attachment);
+  const label = getSavedAttachmentLabel(attachment, index);
+  const shouldLoadPreview = kind === "image" || kind === "video";
+  const previewState = useSavedAttachmentPreviewUrl(
+    attachment,
+    shouldLoadPreview,
+  );
+  const hasPreview = previewState.status === "ready" && previewState.url;
+
+  return (
+    <button
+      className={`parent-layout-page__my-save-attachment-tile is-${kind}`}
+      type="button"
+      onClick={() => onOpen(attachment)}
+      aria-label={`Open ${label}`}
+      title={label}
+    >
+      {kind === "image" && hasPreview ? (
+        <img src={previewState.url} alt={label} />
+      ) : null}
+      {kind === "video" && hasPreview ? (
+        <video src={previewState.url} muted playsInline preload="metadata" />
+      ) : null}
+      {!hasPreview ? (
+        <span className="parent-layout-page__my-save-attachment-fallback">
+          {getSavedAttachmentIcon(kind, 26)}
+        </span>
+      ) : null}
+      <span className="parent-layout-page__my-save-attachment-shade" />
+      {index === 3 && overflowCount > 0 ? (
+        <span className="parent-layout-page__my-save-attachment-more">
+          +{overflowCount}
+        </span>
+      ) : null}
+      <span className="parent-layout-page__my-save-attachment-type">
+        {getSavedAttachmentKindLabel(kind)}
+      </span>
+    </button>
+  );
+}
+
+function SavedAttachmentPreviewGrid({ attachments, onOpen }) {
+  const safeAttachments = Array.isArray(attachments) ? attachments : [];
+  const visibleAttachments = safeAttachments.slice(0, 4);
+  const visibleCount = visibleAttachments.length;
+
+  if (visibleCount === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`parent-layout-page__my-save-attachment-grid is-count-${visibleCount}`}
+      aria-label="Saved message attachments"
+    >
+      {visibleAttachments.map((attachment, index) => (
+        <SavedAttachmentTile
+          attachment={attachment}
+          index={index}
+          key={getSavedAttachmentKey(attachment, index)}
+          overflowCount={safeAttachments.length - visibleAttachments.length}
+          onOpen={(selectedAttachment) =>
+            onOpen(safeAttachments, selectedAttachment)
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+function SavedAttachmentViewerContent({ attachment }) {
+  const kind = getSavedAttachmentKind(attachment);
+  const label = getSavedAttachmentLabel(attachment, 0);
+  const canPreview = ["image", "video", "audio", "pdf"].includes(kind);
+  const previewState = useSavedAttachmentPreviewUrl(attachment, canPreview);
+  const hasPreview = previewState.status === "ready" && previewState.url;
+
+  if (kind === "image" && hasPreview) {
+    return (
+      <img
+        className="parent-layout-page__my-save-viewer-media"
+        src={previewState.url}
+        alt={label}
+      />
+    );
+  }
+
+  if (kind === "video" && hasPreview) {
+    return (
+      <video
+        className="parent-layout-page__my-save-viewer-media"
+        src={previewState.url}
+        controls
+      />
+    );
+  }
+
+  if (kind === "audio" && hasPreview) {
+    return (
+      <div className="parent-layout-page__my-save-viewer-file">
+        {getSavedAttachmentIcon(kind, 38)}
+        <strong>{label}</strong>
+        <audio src={previewState.url} controls />
+      </div>
+    );
+  }
+
+  if (kind === "pdf" && hasPreview) {
+    return (
+      <iframe
+        className="parent-layout-page__my-save-viewer-frame"
+        src={previewState.url}
+        title={label}
+      />
+    );
+  }
+
+  return (
+    <div className="parent-layout-page__my-save-viewer-file">
+      {previewState.status === "loading" ? (
+        <LoaderCircle className="app-button-spinner" aria-hidden="true" />
+      ) : (
+        getSavedAttachmentIcon(kind, 42)
+      )}
+      <strong>{label}</strong>
+      <span>
+        {previewState.status === "error"
+          ? "Preview unavailable"
+          : getSavedAttachmentKindLabel(kind)}
+      </span>
+    </div>
+  );
+}
+
+function SavedAttachmentViewerModal({
+  attachments,
+  selectedAttachmentId,
+  onClose,
+  onDownload,
+  onNavigate,
+  onOpen,
+}) {
+  const safeAttachments = Array.isArray(attachments) ? attachments : [];
+  const selectedIndex = Math.max(
+    safeAttachments.findIndex(
+      (attachment, index) =>
+        getSavedAttachmentKey(attachment, index) === selectedAttachmentId,
+    ),
+    0,
+  );
+  const selectedAttachment =
+    safeAttachments[selectedIndex] || safeAttachments[0] || null;
+  const hasManyAttachments = safeAttachments.length > 1;
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose();
+      } else if (hasManyAttachments && event.key === "ArrowLeft") {
+        onNavigate(-1);
+      } else if (hasManyAttachments && event.key === "ArrowRight") {
+        onNavigate(1);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [hasManyAttachments, onClose, onNavigate]);
+
+  if (!selectedAttachment) {
+    return null;
+  }
+
+  const selectedLabel = getSavedAttachmentLabel(selectedAttachment, selectedIndex);
+  const selectedKind = getSavedAttachmentKind(selectedAttachment);
+
+  return createPortal(
+    <div
+      className="parent-layout-page__attachment-viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Saved attachments"
+    >
+      <button
+        className="parent-layout-page__attachment-viewer-backdrop"
+        type="button"
+        onClick={onClose}
+        aria-label="Close attachments"
+      />
+      <div className="parent-layout-page__attachment-viewer-surface is-minimal">
+        <button
+          className="parent-layout-page__attachment-viewer-close"
+          type="button"
+          onClick={onClose}
+          aria-label="Close attachments"
+          title="Close"
+        >
+          <X size={20} aria-hidden="true" />
+        </button>
+
+        <div className="parent-layout-page__attachment-viewer-content">
+          {hasManyAttachments ? (
+            <button
+              className="parent-layout-page__attachment-viewer-nav is-prev"
+              type="button"
+              onClick={() => onNavigate(-1)}
+              aria-label="Previous attachment"
+              title="Previous"
+            >
+              <ChevronLeft size={24} aria-hidden="true" />
+            </button>
+          ) : null}
+
+          <SavedAttachmentViewerContent attachment={selectedAttachment} />
+
+          {hasManyAttachments ? (
+            <button
+              className="parent-layout-page__attachment-viewer-nav is-next"
+              type="button"
+              onClick={() => onNavigate(1)}
+              aria-label="Next attachment"
+              title="Next"
+            >
+              <ChevronRight size={24} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+
+        <footer className="parent-layout-page__attachment-viewer-footer">
+          <div className="parent-layout-page__attachment-viewer-file">
+            <span>{getSavedAttachmentIcon(selectedKind, 17)}</span>
+            <strong>{selectedLabel}</strong>
+          </div>
+          <div className="parent-layout-page__attachment-viewer-count">
+            {selectedIndex + 1}/{safeAttachments.length} files
+          </div>
+          <div className="parent-layout-page__attachment-viewer-actions">
+            <button
+              type="button"
+              onClick={() => onOpen(selectedAttachment)}
+              aria-label={`Open ${selectedLabel} in a new tab`}
+              title="Open in new tab"
+            >
+              <ExternalLink size={16} aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDownload(selectedAttachment, selectedIndex)}
+              aria-label={`Download ${selectedLabel}`}
+              title="Download"
+            >
+              <Download size={16} aria-hidden="true" />
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -537,6 +1050,11 @@ function Header({
   const [isLogoutPending, setIsLogoutPending] = useState(false);
   const [mySaves, setMySaves] = useState([]);
   const [mySavesActionId, setMySavesActionId] = useState("");
+  const [activeMySaveMetaId, setActiveMySaveMetaId] = useState(null);
+  const [savedAttachmentViewer, setSavedAttachmentViewer] = useState({
+    attachments: [],
+    selectedAttachmentId: "",
+  });
   const [revokingDeviceId, setRevokingDeviceId] = useState("");
   const [defaultingDeviceId, setDefaultingDeviceId] = useState("");
   const [isStoredRecoveryKeyVisible, setIsStoredRecoveryKeyVisible] =
@@ -929,6 +1447,113 @@ function Header({
     [onToast],
   );
 
+  const handleOpenSavedAttachmentViewer = useCallback(
+    (attachments, attachment) => {
+      const safeAttachments = Array.isArray(attachments) ? attachments : [];
+      const selectedIndex = Math.max(safeAttachments.indexOf(attachment), 0);
+
+      setActiveMySaveMetaId(null);
+      setSavedAttachmentViewer({
+        attachments: safeAttachments,
+        selectedAttachmentId: getSavedAttachmentKey(
+          safeAttachments[selectedIndex] || attachment,
+          selectedIndex,
+        ),
+      });
+    },
+    [],
+  );
+
+  const handleCloseSavedAttachmentViewer = useCallback(() => {
+    setSavedAttachmentViewer({
+      attachments: [],
+      selectedAttachmentId: "",
+    });
+  }, []);
+
+  const handleNavigateSavedAttachment = useCallback((direction) => {
+    setSavedAttachmentViewer((currentViewer) => {
+      const attachments = Array.isArray(currentViewer.attachments)
+        ? currentViewer.attachments
+        : [];
+
+      if (attachments.length <= 1) {
+        return currentViewer;
+      }
+
+      const currentIndex = Math.max(
+        attachments.findIndex(
+          (attachment, index) =>
+            getSavedAttachmentKey(attachment, index) ===
+            currentViewer.selectedAttachmentId,
+        ),
+        0,
+      );
+      const nextIndex =
+        (currentIndex + direction + attachments.length) % attachments.length;
+
+      return {
+        ...currentViewer,
+        selectedAttachmentId: getSavedAttachmentKey(
+          attachments[nextIndex],
+          nextIndex,
+        ),
+      };
+    });
+  }, []);
+
+  const handleOpenSavedAttachment = useCallback(async (attachment) => {
+    try {
+      const result = await createSavedAttachmentObjectUrl(attachment);
+
+      if (!result.url) {
+        return;
+      }
+
+      globalThis.open?.(result.url, "_blank", "noopener,noreferrer");
+      if (result.revoke) {
+        globalThis.setTimeout(() => URL.revokeObjectURL(result.url), 60000);
+      }
+    } catch (error) {
+      setMySavesMessage({
+        type: "error",
+        text: "Unable to open this attachment.",
+      });
+    }
+  }, []);
+
+  const handleDownloadSavedAttachment = useCallback(
+    async (attachment, index = 0) => {
+      try {
+        const result = await createSavedAttachmentObjectUrl(attachment);
+
+        if (!result.url) {
+          return;
+        }
+
+        const downloadLink = document.createElement("a");
+        downloadLink.href = result.url;
+        downloadLink.download = getSavedAttachmentDownloadName(
+          attachment,
+          index,
+        );
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+
+        if (result.revoke) {
+          globalThis.setTimeout(() => URL.revokeObjectURL(result.url), 1000);
+        }
+      } catch (error) {
+        setMySavesMessage({
+          type: "error",
+          text: "Unable to download this attachment.",
+        });
+      }
+    },
+    [],
+  );
+
   const openBlockManagementModal = () => {
     pushLoggedInHistoryView({ modal: "blockManagement" });
     setIsProfileModalOpen(false);
@@ -1061,6 +1686,11 @@ function Header({
     setIsMySavesModalOpen(false);
     setMySavesMessage(null);
     setMySavesActionId("");
+    setActiveMySaveMetaId(null);
+    setSavedAttachmentViewer({
+      attachments: [],
+      selectedAttachmentId: "",
+    });
     setIsMySavesLoading(false);
   }, []);
 
@@ -1238,7 +1868,11 @@ function Header({
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape" && !mySavesActionId) {
-        closeMySavesModal();
+        if (activeMySaveMetaId) {
+          setActiveMySaveMetaId(null);
+        } else {
+          closeMySavesModal();
+        }
       }
     };
 
@@ -1247,7 +1881,32 @@ function Header({
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [closeMySavesModal, isMySavesModalOpen, mySavesActionId]);
+  }, [
+    activeMySaveMetaId,
+    closeMySavesModal,
+    isMySavesModalOpen,
+    mySavesActionId,
+  ]);
+
+  useEffect(() => {
+    if (!activeMySaveMetaId) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event) => {
+      if (event.target?.closest?.("[data-my-save-menu]")) {
+        return;
+      }
+
+      setActiveMySaveMetaId(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [activeMySaveMetaId]);
 
   useEffect(() => {
     const handlePopState = (event) => {
@@ -3577,7 +4236,10 @@ function Header({
                 const message = save.message || {};
                 const isGroupSave = save.message_kind === "group";
                 const text = getSavedMessageText(save);
-                const attachments = getSavedMessageAttachments(message);
+                const attachments = getSavedMessageAttachments(
+                  message,
+                  save.message_kind,
+                );
                 const reactions = Array.isArray(message.reactions)
                   ? message.reactions
                   : [];
@@ -3617,42 +4279,75 @@ function Header({
                         </span>
                       </div>
 
-                      <button
-                        className="parent-layout-page__my-save-remove"
-                        type="button"
-                        onClick={() => handleRemoveSavedMessage(save)}
-                        disabled={Boolean(mySavesActionId)}
-                        aria-busy={isRemoving}
-                        aria-label="Remove saved message"
-                        title="Remove from My Saves"
+                      <div
+                        className="parent-layout-page__my-save-menu-wrap"
+                        data-my-save-menu
                       >
-                        {isRemoving ? (
-                          <LoaderCircle
-                            className="app-button-spinner"
-                            aria-hidden="true"
-                          />
-                        ) : (
-                          <Trash2 size={16} aria-hidden="true" />
-                        )}
-                      </button>
+                        <button
+                          className="parent-layout-page__my-save-menu-button"
+                          type="button"
+                          onClick={() =>
+                            setActiveMySaveMetaId((currentId) =>
+                              currentId === save.id ? null : save.id,
+                            )
+                          }
+                          aria-expanded={activeMySaveMetaId === save.id}
+                          aria-label="Saved message details"
+                          title="Details"
+                          disabled={Boolean(mySavesActionId)}
+                        >
+                          <MoreVertical size={18} aria-hidden="true" />
+                        </button>
+
+                        {activeMySaveMetaId === save.id ? (
+                          <div className="parent-layout-page__my-save-menu">
+                            <dl className="parent-layout-page__my-save-meta">
+                              <div>
+                                <dt>{receivedLabel}</dt>
+                                <dd>{formatSavedDateTime(save.received_at)}</dd>
+                              </div>
+                              <div>
+                                <dt>Saved</dt>
+                                <dd>{formatSavedDateTime(save.saved_at)}</dd>
+                              </div>
+                              {isGroupSave && groupOwnerLabel ? (
+                                <div>
+                                  <dt>Owner</dt>
+                                  <dd>{groupOwnerLabel}</dd>
+                                </div>
+                              ) : null}
+                            </dl>
+
+                            <button
+                              className="parent-layout-page__my-save-remove"
+                              type="button"
+                              onClick={() => handleRemoveSavedMessage(save)}
+                              disabled={Boolean(mySavesActionId)}
+                              aria-busy={isRemoving}
+                            >
+                              {isRemoving ? (
+                                <LoaderCircle
+                                  className="app-button-spinner"
+                                  aria-hidden="true"
+                                />
+                              ) : (
+                                <Trash2 size={15} aria-hidden="true" />
+                              )}
+                              <span>
+                                {isRemoving ? "Removing..." : "Remove save"}
+                              </span>
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </header>
 
-                    <dl className="parent-layout-page__my-save-meta">
-                      <div>
-                        <dt>{receivedLabel}</dt>
-                        <dd>{formatSavedDateTime(save.received_at)}</dd>
-                      </div>
-                      <div>
-                        <dt>Saved</dt>
-                        <dd>{formatSavedDateTime(save.saved_at)}</dd>
-                      </div>
-                      {isGroupSave && groupOwnerLabel ? (
-                        <div>
-                          <dt>Owner</dt>
-                          <dd>{groupOwnerLabel}</dd>
-                        </div>
-                      ) : null}
-                    </dl>
+                    {attachments.length > 0 ? (
+                      <SavedAttachmentPreviewGrid
+                        attachments={attachments}
+                        onOpen={handleOpenSavedAttachmentViewer}
+                      />
+                    ) : null}
 
                     {text ? (
                       <p className="parent-layout-page__my-save-text">{text}</p>
@@ -3665,39 +4360,6 @@ function Header({
                       <p className="parent-layout-page__my-save-text is-muted">
                         No text content.
                       </p>
-                    ) : null}
-
-                    {attachments.length > 0 ? (
-                      <div
-                        className="parent-layout-page__my-save-attachments"
-                        aria-label="Saved message attachments"
-                      >
-                        {attachments.map((attachment, index) => {
-                          const attachmentUrl = getSavedAttachmentUrl(attachment);
-                          const attachmentLabel = getSavedAttachmentLabel(
-                            attachment,
-                            index,
-                          );
-
-                          return attachmentUrl ? (
-                            <a
-                              href={attachmentUrl}
-                              key={`${attachmentUrl}-${index}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              <FileText size={15} aria-hidden="true" />
-                              <span>{attachmentLabel}</span>
-                              <ExternalLink size={13} aria-hidden="true" />
-                            </a>
-                          ) : (
-                            <span key={`${attachmentLabel}-${index}`}>
-                              <FileText size={15} aria-hidden="true" />
-                              <span>{attachmentLabel}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
                     ) : null}
 
                     {visibleReactions.length > 0 ? (
@@ -4276,6 +4938,16 @@ function Header({
         ? createPortal(ghostManagementModal, document.body)
         : null}
       {mySavesModal ? createPortal(mySavesModal, document.body) : null}
+      {savedAttachmentViewer.attachments.length > 0 ? (
+        <SavedAttachmentViewerModal
+          attachments={savedAttachmentViewer.attachments}
+          selectedAttachmentId={savedAttachmentViewer.selectedAttachmentId}
+          onClose={handleCloseSavedAttachmentViewer}
+          onDownload={handleDownloadSavedAttachment}
+          onNavigate={handleNavigateSavedAttachment}
+          onOpen={handleOpenSavedAttachment}
+        />
+      ) : null}
       {linkedDevicesModal ? createPortal(linkedDevicesModal, document.body) : null}
       {defaultDevicePasswordModal
         ? createPortal(defaultDevicePasswordModal, document.body)

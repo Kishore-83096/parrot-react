@@ -554,8 +554,10 @@
 }
 
 :root[data-theme="dark"] .parent-layout-page__my-save,
-:root[data-theme="dark"] .parent-layout-page__my-save-attachments a,
-:root[data-theme="dark"] .parent-layout-page__my-save-attachments span {
+:root[data-theme="dark"] .parent-layout-page__my-save-menu,
+:root[data-theme="dark"] .parent-layout-page__my-save-menu-button,
+:root[data-theme="dark"] .parent-layout-page__my-save-attachment-grid,
+:root[data-theme="dark"] .parent-layout-page__my-save-viewer-file {
   border-color: var(--theme-control-border);
   color: #ffffff;
   background: #050505;
@@ -564,21 +566,39 @@
 
 :root[data-theme="dark"] .parent-layout-page__my-save-header strong,
 :root[data-theme="dark"] .parent-layout-page__my-save-meta dd,
-:root[data-theme="dark"] .parent-layout-page__my-save-text {
+:root[data-theme="dark"] .parent-layout-page__my-save-text,
+:root[data-theme="dark"] .parent-layout-page__my-save-menu {
   color: #ffffff;
 }
 
 :root[data-theme="dark"] .parent-layout-page__my-save-header span,
 :root[data-theme="dark"] .parent-layout-page__my-save-meta dt,
-:root[data-theme="dark"] .parent-layout-page__my-save-text.is-muted {
+:root[data-theme="dark"] .parent-layout-page__my-save-text.is-muted,
+:root[data-theme="dark"] .parent-layout-page__my-save-menu-button {
   color: rgba(255, 255, 255, 0.68);
 }
 
-:root[data-theme="dark"] .parent-layout-page__my-save-attachments a:hover,
-:root[data-theme="dark"] .parent-layout-page__my-save-attachments a:focus-visible {
+:root[data-theme="dark"] .parent-layout-page__my-save-menu-button:hover,
+:root[data-theme="dark"] .parent-layout-page__my-save-menu-button:focus-visible,
+:root[data-theme="dark"] .parent-layout-page__my-save-menu-button[aria-expanded="true"] {
   border-color: rgba(96, 165, 250, 0.48);
   color: #dbeafe;
   background: rgba(30, 64, 175, 0.36);
+}
+
+:root[data-theme="dark"] .parent-layout-page__my-save-attachment-tile {
+  background: linear-gradient(135deg, #111827, #020617);
+}
+
+:root[data-theme="dark"] .parent-layout-page__my-save-attachment-type {
+  color: #ffffff;
+  background: rgba(2, 6, 23, 0.78);
+}
+
+:root[data-theme="dark"] .parent-layout-page__my-save-remove {
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #fecaca;
+  background: rgba(69, 10, 10, 0.38);
 }
 
 :root[data-theme="dark"] .parent-layout-page__block-management-summary span,
